@@ -11,6 +11,12 @@ from agno.utils.log import log_info, log_warning
 
 from db import get_postgres_db
 
+RAW_COLLECTION_SCHEDULE_NAME = "raw-collection-hourly"
+RAW_COLLECTION_SCHEDULE_PROMPT = (
+    "采集最近48小时可能影响中国A股板块和产业链行情的最新资讯，"
+    "关注政策、供需、价格、重大订单、产能投放、技术突破和上市公司经营事件。"
+)
+
 
 def env_flag(name: str, default: bool) -> bool:
     """Read a boolean env var, accepting 1/true/yes (any casing) as true."""
@@ -28,6 +34,7 @@ def _register(
     endpoint: str,
     payload: dict[str, Any],
     description: str,
+    timezone: str = "UTC",
     enabled: bool = True,
 ) -> None:
     """Create or update a schedule; failures log a warning instead of crashing the app."""
@@ -38,6 +45,7 @@ def _register(
             endpoint=endpoint,
             payload=payload,
             description=description,
+            timezone=timezone,
             if_exists="update",
         )
         # A new schedule lands in the DB with updated_at unset; follow-on writes
@@ -59,16 +67,8 @@ def _register(
 def register_schedules() -> None:
     """Register schedules (idempotent and fail-soft).
 
-    The deployment check runs daily by default. Run-evals is registered but
-    disabled because it uses model calls. Turn it on from the AgentOS UI.
+    Raw Collection runs hourly; the deterministic deployment check runs daily by default.
     """
-    if getenv("ENABLE_SCHEDULED_EVALS") is not None:
-        log_warning(
-            "schedules: ENABLE_SCHEDULED_EVALS is no longer read — the run-evals schedule is "
-            "always registered and its enabled state is managed from the AgentOS UI or the "
-            "/schedules API."
-        )
-
     try:
         manager = ScheduleManager(get_postgres_db())
     except Exception as exc:
@@ -89,10 +89,10 @@ def register_schedules() -> None:
 
     _register(
         manager,
-        name="run-evals",
-        cron="0 14 * * *",  # 14:00 UTC daily
-        endpoint="/workflows/run-evals/runs",
-        payload={"message": "Scheduled eval run."},
-        description="Daily: run the eval suite and report regressions.",
-        enabled=False,
+        name=RAW_COLLECTION_SCHEDULE_NAME,
+        cron="0 * * * *",
+        endpoint="/workflows/raw-collection/runs",
+        payload={"message": RAW_COLLECTION_SCHEDULE_PROMPT},
+        description="Hourly: collect and publish raw market-moving information from the last 48 hours.",
+        timezone="Asia/Shanghai",
     )

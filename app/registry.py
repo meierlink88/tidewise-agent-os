@@ -1,66 +1,26 @@
-"""
-AgentOS Registry
-================
-
-The tools, functions, models, databases, and agents available to AgentOS Studio.
-"""
-
-from os import getenv
+"""Safe components available to the local AgentOS Studio registry."""
 
 from agno.registry import Registry
-from agno.tools.mcp import MCPTools
-from agno.tools.parallel import ParallelTools
-from agno.tools.reasoning import ReasoningTools
 
-from agents.chief import chief
-from agents.platform_manager import platform_manager
+from agents.tidewise_assistant import tidewise_assistant
 from app.settings import default_model
+from capabilities.raw_collection.models import CollectionRequest, PreparedArtifactSet
+from capabilities.raw_collection.tools import COLLECTION_TOOLS
 from db import get_postgres_db
-
-AGNO_DOCS_MCP_URL = "https://docs.agno.com/mcp"
-
-
-def get_agno_docs_tools() -> list[MCPTools]:
-    return [MCPTools(transport="streamable-http", url=AGNO_DOCS_MCP_URL, name="agno_docs")]
+from workflows.raw_collection import agentic_collect_step, build_artifact_step, publish_collection_step
 
 
-def get_parallel_tools() -> list[ParallelTools | MCPTools]:
-    if getenv("PARALLEL_API_KEY"):
-        return [ParallelTools()]
-    # timeout_seconds: web_fetch page extraction regularly exceeds the 10s MCP default.
-    return [
-        MCPTools(
-            url="https://search.parallel.ai/mcp", transport="streamable-http", name="parallel_tools", timeout_seconds=30
-        )
-    ]
-
-
-def route_component_type(request: str) -> str:
-    """Suggest agent, team, or workflow from a plain-language request."""
-    lower = request.lower()
-    if any(word in lower for word in ("daily", "schedule", "pipeline", "approval", "steps", "workflow")):
-        return "workflow"
-    if any(word in lower for word in ("team", "specialists", "debate", "reviewers", "coordinate")):
-        return "team"
-    return "agent"
-
-
-def score_eval_status(passed: int, total: int) -> str:
-    """Return PASS only when every selected eval case passed."""
-    if total <= 0:
-        return "FAIL"
-    return "PASS" if passed == total else "FAIL"
+def platform_identity() -> str:
+    """Return the stable product identity exposed to Studio-built components."""
+    return "Tidewise AgentOS"
 
 
 registry = Registry(
-    name="AgentOS Registry",
-    tools=[
-        *get_agno_docs_tools(),
-        *get_parallel_tools(),
-        ReasoningTools(add_instructions=True),
-    ],
+    name="Tidewise AgentOS Registry",
+    tools=COLLECTION_TOOLS,
     models=[default_model()],
     dbs=[get_postgres_db()],
-    functions=[route_component_type, score_eval_status],
-    agents=[chief, platform_manager],
+    schemas=[CollectionRequest, PreparedArtifactSet],
+    functions=[platform_identity, agentic_collect_step, build_artifact_step, publish_collection_step],
+    agents=[tidewise_assistant],
 )

@@ -14,7 +14,7 @@ from agno.workflow.step import Step, StepInput, StepOutput
 from agno.workflow.workflow import Workflow
 from sqlalchemy import create_engine, text
 
-from app.schedules import env_flag
+from app.schedules import RAW_COLLECTION_SCHEDULE_NAME, env_flag
 from db import db_url, get_postgres_db
 
 
@@ -133,23 +133,21 @@ def _check_slack_config() -> CheckResult:
     return _pass("Slack", "Slack interface is disabled; no partial credentials found.")
 
 
-def _check_reference_components() -> CheckResult:
+def _check_components() -> CheckResult:
     try:
-        from agents.agent_builder import agent_builder
-        from agents.chief import chief
-        from agents.platform_manager import platform_manager
+        from agents.tidewise_assistant import tidewise_assistant
         from app.registry import registry
-        from workflows.run_evals import run_evals
+        from workflows.local_ping import local_ping
     except Exception as exc:
-        return _fail("Components", f"Could not import reference components: {exc}")
+        return _fail("Components", f"Could not import Tidewise components: {exc}")
 
-    agent_ids = sorted([agent_id for agent_id in (chief.id, platform_manager.id, agent_builder.id) if agent_id])
-    workflow_ids = sorted([workflow_id for workflow_id in (deployment_check.id, run_evals.id) if workflow_id])
+    agent_ids = [tidewise_assistant.id] if tidewise_assistant.id else []
+    workflow_ids = [workflow_id for workflow_id in (local_ping.id, deployment_check.id) if workflow_id]
     return _pass(
         "Components",
-        "Reference components import cleanly: "
+        "Tidewise components import cleanly: "
         f"agents={', '.join(agent_ids)}; workflows={', '.join(workflow_ids)}. "
-        f"Registry has {len(registry.tools)} tools.",
+        f"Registry has {len(registry.models)} model(s).",
     )
 
 
@@ -163,17 +161,19 @@ def _check_schedules() -> CheckResult:
 
     try:
         deploy_state, _deploy_enabled = state("deployment-check")
-        evals_state, evals_enabled = state("run-evals")
+        collection_state, collection_enabled = state(RAW_COLLECTION_SCHEDULE_NAME)
     except Exception as exc:
         return _warn("Schedule", f"Could not read schedules from the database: {exc}")
 
-    detail = f"{deploy_state}; {evals_state}."
-    if evals_enabled is None:
-        return _warn("Schedule", f"{detail} If the Database check passed, restart the API to register it.")
+    detail = f"{deploy_state}; {collection_state}."
+    if collection_enabled is not True:
+        return _warn(
+            "Schedule",
+            f"{detail} Restart the API if the hourly collection schedule is missing; "
+            "enable it from the AgentOS UI if it was paused.",
+        )
     if "not registered" in deploy_state and env_flag("ENABLE_DEPLOY_CHECK", default=True):
         return _warn("Schedule", f"{detail} If the Database check passed, restart the API to register it.")
-    if evals_enabled is False:
-        return _pass("Schedule", f"{detail} Enable run-evals from the AgentOS UI for scheduled eval runs.")
     return _pass("Schedule", detail)
 
 
@@ -200,7 +200,7 @@ async def deployment_check_step(_step_input: StepInput) -> StepOutput:
         _check_agentos_url(),
         await _check_mcp(),
         _check_slack_config(),
-        _check_reference_components(),
+        _check_components(),
         _check_schedules(),
     ]
     failed = any(check.status == "FAIL" for check in checks)

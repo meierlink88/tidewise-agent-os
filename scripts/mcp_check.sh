@@ -15,7 +15,7 @@
 #
 #    Usage:
 #      ./scripts/mcp_check.sh                            # quick default probe
-#      ./scripts/mcp_check.sh "What does chief do?"      # your own question
+#      ./scripts/mcp_check.sh "你是谁？"                 # your own question
 #
 ############################################################################
 
@@ -34,10 +34,10 @@ QUESTION="${1:-$DEFAULT_QUESTION}"
 echo ""
 echo -e "${ORANGE}▸${NC} ${BOLD}MCP Check${NC}"
 echo ""
-echo -e "${DIM}> http://localhost:8000/mcp  (client runs inside agentos-api)${NC}"
+echo -e "${DIM}> http://localhost:8000/mcp  (client runs inside agentos)${NC}"
 echo ""
 
-if docker compose exec -T agentos-api python -u - "$QUESTION" <<'PY'
+if docker compose exec -T agentos python -u - "$QUESTION" <<'PY'
 import asyncio
 import sys
 import time
@@ -65,11 +65,11 @@ async def run_check(headers: dict | None, auth_note: str) -> None:
             start = time.perf_counter()
             result = await session.call_tool(
                 "run_agent",
-                {"agent_id": "platform-manager", "message": sys.argv[1]},
+                {"agent_id": "tidewise-assistant", "message": sys.argv[1]},
                 read_timeout_seconds=None,
             )
             elapsed = time.perf_counter() - start
-            step(f"run_agent — platform-manager answered in {elapsed:.1f}s")
+            step(f"run_agent — tidewise-assistant answered in {elapsed:.1f}s")
             # run_agent returns a trimmed ToolResult: content[0].text is the plain
             # answer, and structuredContent carries {run_id, session_id, status}.
             print(flush=True)
@@ -135,7 +135,7 @@ then
     echo ""
 else
     echo ""
-    echo -e "${RED}${BOLD}Failed.${NC} ${DIM}Check the container: docker compose logs agentos-api${NC}"
+    echo -e "${RED}${BOLD}Failed.${NC} ${DIM}Check the container: docker compose logs agentos${NC}"
     echo ""
     exit 1
 fi

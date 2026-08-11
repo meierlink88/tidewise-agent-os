@@ -10,14 +10,14 @@ from pathlib import Path
 from agno.os import AgentOS
 from agno.utils.log import log_info
 
-from agents.agent_builder import agent_builder
-from agents.chief import chief
-from agents.platform_manager import platform_manager
+from agents.raw_collector import ensure_collector_agent
+from agents.tidewise_assistant import tidewise_assistant
 from app.registry import registry
 from app.schedules import register_schedules
 from db import get_postgres_db
 from workflows.deployment_check import deployment_check
-from workflows.run_evals import run_evals
+from workflows.local_ping import local_ping
+from workflows.raw_collection import ensure_raw_collection_workflow
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -28,7 +28,7 @@ agentos_url = getenv("AGENTOS_URL", "http://127.0.0.1:8000")
 
 # ---------------------------------------------------------------------------
 # Interfaces
-# - Chief becomes available on Slack when both env vars are set
+# - Tidewise Assistant becomes available on Slack when both env vars are set
 # ---------------------------------------------------------------------------
 SLACK_BOT_TOKEN = getenv("SLACK_BOT_TOKEN", "")
 SLACK_SIGNING_SECRET = getenv("SLACK_SIGNING_SECRET", "")
@@ -39,12 +39,12 @@ if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
 
     interfaces.append(
         Slack(
-            agent=chief,
+            agent=tidewise_assistant,
             streaming=True,
             token=SLACK_BOT_TOKEN,
             signing_secret=SLACK_SIGNING_SECRET,
             resolve_user_identity=True,
-            loading_text="Barbequeing...",
+            loading_text="处理中...",
         )
     )
 
@@ -75,6 +75,8 @@ if MCP_CONNECT_SECRET:
 @asynccontextmanager
 async def lifespan(app):  # type: ignore[no-untyped-def]
     log_info("AgentOS lifespan: startup")
+    ensure_collector_agent(registry)
+    ensure_raw_collection_workflow(registry)
     # Register schedules on startup. Idempotent and fail-soft.
     register_schedules()
     try:
@@ -87,7 +89,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
 # Create AgentOS
 # ---------------------------------------------------------------------------
 agent_os = AgentOS(
-    name="AgentOS",
+    name="Tidewise AgentOS",
     tracing=True,
     scheduler=True,
     scheduler_base_url=agentos_url,
@@ -96,8 +98,8 @@ agent_os = AgentOS(
     mcp_auth=mcp_auth,
     lifespan=lifespan,
     db=get_postgres_db(),
-    agents=[chief, agent_builder, platform_manager],
-    workflows=[deployment_check, run_evals],
+    agents=[tidewise_assistant],
+    workflows=[local_ping, deployment_check],
     interfaces=interfaces,
     registry=registry,
     config=str(Path(__file__).parent / "config.yaml"),

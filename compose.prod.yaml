@@ -1,33 +1,13 @@
-# Production override — same platform, JWT auth on, no dev conveniences.
-#
-#   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
-#
-# Switches RUNTIME_ENV to prd (JWT auth on — the app refuses to serve without
-# JWT_VERIFICATION_KEY or JWT_JWKS_FILE; see "Run in production" in README.md),
-# drops the dev bind mount and hot reload so the container runs the code baked
-# into the image, and reads AGENTOS_URL from .env so the scheduler reaches the
-# platform over its public URL. MCP_CONNECT_SECRET passes through the same way
-# — set it in .env and /mcp serves its own OAuth for chat-app connectors.
-#
-# The `!reset` tag (Docker Compose v2.24+) removes the dev bind mount instead
-# of merging with it; `!override` (v2.24.4+) replaces the ports list below so
-# Postgres rebinds to 127.0.0.1 instead of gaining a second mapping.
+# Production override for a host where the shared `tidewise-local` network and
+# PostgreSQL service already exist. Production deployment topology should be
+# reviewed before use; this file deliberately does not provision PostgreSQL.
 services:
-  agentos-api:
+  agentos:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
-    volumes: !reset []
+    volumes: !override
+      - ${COLLECTOR_DATA_DIR:-./data}:/app/data
     environment:
       RUNTIME_ENV: prd
       AGNO_DEBUG: "False"
-      AGENTOS_URL: ${AGENTOS_URL:-http://127.0.0.1:8000}
+      AGENTOS_URL: ${AGENTOS_URL:?Set AGENTOS_URL for production}
       MCP_CONNECT_SECRET: ${MCP_CONNECT_SECRET:-}
-
-  # In dev, Postgres is published on all interfaces for GUI/psql convenience.
-  # In production that would expose the database to the internet (Docker's
-  # iptables rules bypass ufw-style host firewalls), so bind it to loopback:
-  # containers still reach it over the compose network, and host-side tools
-  # (psql, python -m evals) still connect via localhost. Set a strong DB_PASS
-  # in .env — the dev default is ai/ai.
-  agentos-db:
-    ports: !override
-      - "127.0.0.1:5432:5432"
