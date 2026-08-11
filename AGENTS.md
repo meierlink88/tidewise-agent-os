@@ -24,7 +24,7 @@ AgentOS (app/main.py)
 - `db/session.py`：复用共享 PostgreSQL 实例中的独立 `agent_os` 数据库。
 - `app/schedules.py`：幂等注册确定性部署检查。
 - `app/config.yaml`：组件描述和快捷提示。
-- `capabilities/raw_collection/`：Agent 与 Workflow 共用的采集合同、工具、缓冲和 Artifact 实现。
+- `capabilities/raw_collection/`：Agent 与 Workflow 共用的采集合同、工具、Function、缓冲和 Artifact 实现。
 - `data/collector/`：本地原始采集 Artifact；目录受 Git 忽略。
 
 ## 本地 Docker 约束
@@ -44,6 +44,10 @@ AgentOS (app/main.py)
 ### Workflow
 
 固定采集、校验、去重、持久化、发布、补偿等工序使用 Workflow。Step 可以调用 Agent，但状态转移、幂等键、重试和副作用必须由确定性代码掌控。
+
+### Capability
+
+每项业务能力使用 `capabilities/<capability>/` 作为实现边界：`tools/` 只放供 Agent 自主调用的 Tool，`functions/` 只放供 Workflow 确定性调用的 Function，模型、合同和两者共享的内部实现放在能力根目录。`agents/` 只定义 Agent，`workflows/` 只定义 Workflow 编排、生命周期和 Studio seed；不得把业务 Function 实现直接写入 Workflow 文件。
 
 ### Team
 

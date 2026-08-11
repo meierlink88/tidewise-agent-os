@@ -48,8 +48,9 @@ query and when to stop. Workflow steps define the reliable delivery process.
 - `agents/raw_collector.seed.md` seeds Agent published version 1 only when the component does
   not exist. Subsequent prompt edits belong to Agno Studio versions in PostgreSQL;
   the seed never overwrites operator changes.
-- `workflows/raw_collection.py` registers the three Python Function executors and
-  seeds Workflow published version 1 only when the component does not exist.
+- `capabilities/raw_collection/functions/` owns the three Python Function executors;
+  `workflows/raw_collection.py` only composes them and seeds Workflow published
+  version 1 when the component does not exist.
   Subsequent graph edits belong to Agno Studio versions in PostgreSQL.
 - The Workflow loads the component's current published version from PostgreSQL at
   the start of every run. Publishing or rolling back a Studio version therefore

@@ -17,6 +17,8 @@ from pydantic import ValidationError
 
 from capabilities.raw_collection.artifacts import build_artifact_set, publish_artifact_set
 from capabilities.raw_collection.buffer import artifact_root, read_tool_batches, write_tool_batch
+from capabilities.raw_collection.functions import agentic_collect_step, build_artifact_step, publish_collection_step
+from capabilities.raw_collection.functions.collection import request_from_input
 from capabilities.raw_collection.models import Candidate, CollectionRequest, ToolBatchReceipt
 from capabilities.raw_collection.tools.bocha import search_bocha_news
 from capabilities.raw_collection.tools.eastmoney import search_eastmoney_stock_news
@@ -28,7 +30,7 @@ from capabilities.raw_collection.tools.professional import (
 )
 from capabilities.raw_collection.tools.tavily import search_tavily_news
 from capabilities.raw_collection.tools.time_window import resolve_time_window
-from workflows.raw_collection import _request_from_input, _seed_workflow
+from workflows.raw_collection import _seed_workflow
 
 
 class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
@@ -79,7 +81,7 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
 
     def test_workflow_rejects_second_time_constraint(self) -> None:
         with self.assertRaises(ValidationError):
-            _request_from_input('{"objective":"采集最近6小时A股政策","time_window_hours":6}')
+            request_from_input('{"objective":"采集最近6小时A股政策","time_window_hours":6}')
 
     async def test_eastmoney_tool_persists_complete_batch_and_returns_receipt(self) -> None:
         payload = """callback({
@@ -295,8 +297,6 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual((receipt.connector, receipt.result_count), (connector, 1))
 
     def test_network_tools_and_workflow_executors_are_async(self) -> None:
-        from workflows.raw_collection import agentic_collect_step, build_artifact_step, publish_collection_step
-
         network_tools = [
             search_parallel_news,
             search_tavily_news,
