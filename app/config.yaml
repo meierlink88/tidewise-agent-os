@@ -13,6 +13,13 @@ manifest:
       - "采集上市公司重大订单和产能投放的最新消息"
       - "采集产业链供需与价格变化的最新资讯"
 
+  evidence-extractor:
+    description: "将一篇 Raw Document 语义拆分为 Raw Evidence 元数据和原子 Evidence；生产处理请运行 Evidence Extraction Workflow。"
+    quick_prompts:
+      - "提取这篇材料中的原子 Evidence"
+      - "按 SINGLE/DOUBLE 两层 5W1H 拆分这篇材料"
+      - "提炼这篇材料的关键词和可核验证据"
+
   local-ping:
     description: "不调用模型的本地运行时健康检查。"
     quick_prompts:
@@ -22,6 +29,11 @@ manifest:
     description: "运行采集 Agent，并确定性生成和发布原始信息 Artifact。"
     quick_prompts:
       - "采集最近48小时可能影响中国A股板块和产业链行情的最新资讯，关注政策、供需、价格、重大订单、产能投放、技术突破和上市公司经营事件。"
+
+  evidence-extraction:
+    description: "增量读取 Raw Collection Manifest 索引，提取并向 Data Service 发布 Raw Evidence 和 Evidence。"
+    quick_prompts:
+      - "处理所有尚未提取的 Raw Document"
 
   deployment-check:
     description: "检查 Tidewise AgentOS 的数据库、MCP、组件和调度配置。"
