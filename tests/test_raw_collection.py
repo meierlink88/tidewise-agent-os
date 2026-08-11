@@ -363,6 +363,12 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         repeated = publish_artifact_set(prepared)
         self.assertEqual(result.collection_id, repeated.collection_id)
         self.assertTrue(manifest.is_file())
+        manifest_index = root / "indexes/manifest-index.jsonl"
+        index_entries = [json.loads(line) for line in manifest_index.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(index_entries), 1)
+        self.assertEqual(index_entries[0]["collection_id"], "run-artifact")
+        self.assertEqual(index_entries[0]["manifest_path"], "runs/run-artifact/manifest.json")
+        self.assertEqual(index_entries[0]["accepted_documents"], 1)
         document = root / prepared.accepted_documents[0].relative_path
         self.assertTrue(document.is_file())
         manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))

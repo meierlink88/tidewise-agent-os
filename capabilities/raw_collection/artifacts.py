@@ -6,9 +6,13 @@ import os
 import re
 import shutil
 from collections import Counter
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
+from fcntl import LOCK_EX, LOCK_UN, flock
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import TextIO
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from capabilities.raw_collection.buffer import (
@@ -30,6 +34,7 @@ _TRACKING_PARAMETERS = {"fbclid", "gclid", "spm", "from", "source"}
 _WORD = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 _CJK = re.compile(r"[\u3400-\u9fff]")
 _INDEX_HEADER = "url_sha256\tcontent_sha256\tsimhash64\tdocument_path"
+_MANIFEST_INDEX_SCHEMA = "raw_collection_manifest_index.v1"
 
 
 def _sha256(value: str | bytes) -> str:
@@ -312,6 +317,63 @@ def _file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+@contextmanager
+def _locked_manifest_index(root: Path) -> Iterator[TextIO]:
+    path = root / "indexes" / "manifest-index.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = path.open("a+", encoding="utf-8")
+    try:
+        flock(handle.fileno(), LOCK_EX)
+        yield handle
+    finally:
+        flock(handle.fileno(), LOCK_UN)
+        handle.close()
+
+
+def _append_manifest_index(root: Path, manifest_path: Path, manifest: dict[str, object]) -> None:
+    """Append one completed run pointer idempotently after its manifest exists."""
+    collection_id = manifest.get("collection_id")
+    completed_at = manifest.get("completed_at")
+    accepted_documents = manifest.get("accepted_documents")
+    if not isinstance(collection_id, str) or not collection_id:
+        raise ValueError("published manifest has no collection identity")
+    if not isinstance(completed_at, str) or not completed_at:
+        raise ValueError("published manifest has no completion time")
+    if not isinstance(accepted_documents, list):
+        raise ValueError("published manifest accepted_documents is invalid")
+
+    relative_manifest = manifest_path.relative_to(root).as_posix()
+    entry = {
+        "schema": _MANIFEST_INDEX_SCHEMA,
+        "collection_id": collection_id,
+        "manifest_path": relative_manifest,
+        "manifest_sha256": _file_sha256(manifest_path),
+        "completed_at": completed_at,
+        "outcome": manifest.get("outcome"),
+        "accepted_documents": len(accepted_documents),
+    }
+    encoded = json.dumps(entry, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    with _locked_manifest_index(root) as handle:
+        handle.seek(0)
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                existing = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError("manifest index contains invalid JSON") from exc
+            if existing.get("collection_id") != collection_id:
+                continue
+            if existing != entry:
+                raise ValueError("manifest index identity conflict")
+            return
+        handle.seek(0, os.SEEK_END)
+        handle.write(encoded + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
 def _publish_file(source: Path, target: Path, *, replace: bool) -> None:
     if not source.is_file():
         raise ValueError(f"prepared Artifact is missing: {source.name}")
@@ -344,6 +406,7 @@ def publish_artifact_set(prepared: PreparedArtifactSet) -> CollectionResult:
         manifest = json.loads(manifest_target.read_text(encoding="utf-8"))
         if manifest.get("collection_id") != prepared.collection_id or manifest.get("outcome") != prepared.outcome:
             raise ValueError("published manifest identity conflict")
+        _append_manifest_index(root, manifest_target, manifest)
         completed_at = datetime.fromisoformat(str(manifest["completed_at"]))
         return CollectionResult(
             collection_id=prepared.collection_id,
@@ -365,6 +428,8 @@ def publish_artifact_set(prepared: PreparedArtifactSet) -> CollectionResult:
 
     manifest_source = staging / manifest_relative
     _publish_file(manifest_source, manifest_target, replace=False)
+    manifest = json.loads(manifest_target.read_text(encoding="utf-8"))
+    _append_manifest_index(root, manifest_target, manifest)
     completed_at = datetime.now(UTC)
     shutil.rmtree(staging, ignore_errors=True)
     return CollectionResult(

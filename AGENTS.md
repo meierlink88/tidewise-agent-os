@@ -12,9 +12,11 @@
 AgentOS (app/main.py)
 ├── Tidewise Assistant (agents/tidewise_assistant.py)
 ├── Raw Collector       (Agno Studio/PostgreSQL component; seeded by agents/raw_collector.py)
+├── Evidence Extractor  (Agno Studio/PostgreSQL component; seeded by agents/evidence_extractor.py)
 ├── Local Ping         (workflows/local_ping.py)
 ├── Deployment Check   (workflows/deployment_check.py)
-└── Raw Collection     (Agno Studio/PostgreSQL component; seeded by workflows/raw_collection.py)
+├── Raw Collection     (Agno Studio/PostgreSQL component; seeded by workflows/raw_collection.py)
+└── Evidence Extraction (Agno Studio/PostgreSQL component; seeded by workflows/evidence_extraction.py)
 ```
 
 共享能力：
@@ -25,6 +27,7 @@ AgentOS (app/main.py)
 - `app/schedules.py`：幂等注册确定性部署检查。
 - `app/config.yaml`：组件描述和快捷提示。
 - `capabilities/raw_collection/`：Agent 与 Workflow 共用的采集合同、工具、Function、缓冲和 Artifact 实现。
+- `capabilities/evidence_extraction/`：Evidence Agent 输出合同、Workflow Function、checkpoint、Artifact 和 Data Service client。
 - `data/collector/`：本地原始采集 Artifact；目录受 Git 忽略。
 
 ## 本地 Docker 约束

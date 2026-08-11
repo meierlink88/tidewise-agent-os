@@ -1,0 +1,88 @@
+"""Lifecycle and orchestration for the Studio-managed Evidence Extraction Workflow."""
+
+from agno.agent import Agent
+from agno.db.base import ComponentType
+from agno.registry import Registry
+from agno.workflow import Loop, Step, Workflow
+
+from agents.evidence_extractor import load_evidence_extractor_agent
+from capabilities.evidence_extraction.functions import (
+    prepare_raw_document,
+    publish_evidences,
+    validate_evidence_draft,
+)
+from db import get_postgres_db
+
+EVIDENCE_EXTRACTION_WORKFLOW_ID = "evidence-extraction"
+EVIDENCE_EXTRACTION_CONTRACT_VERSION = 1
+
+
+def _seed_workflow(agent: Agent) -> Workflow:
+    """Return the code-reviewed initial Workflow graph saved to Studio once."""
+    return Workflow(
+        id=EVIDENCE_EXTRACTION_WORKFLOW_ID,
+        name="Evidence Extraction",
+        description="Incrementally extracts and publishes Raw Evidence and atomic Evidence.",
+        db=get_postgres_db(),
+        metadata={"evidence_extraction_contract_version": EVIDENCE_EXTRACTION_CONTRACT_VERSION},
+        steps=[
+            Loop(
+                name="process-unpublished-raw-documents",
+                description="Process indexed Raw documents until no work remains or the safety cap is reached.",
+                max_iterations=100,
+                steps=[
+                    Step(
+                        name="prepare-raw-document",
+                        executor=prepare_raw_document,
+                        max_retries=0,
+                        on_error="fail",
+                    ),
+                    Step(
+                        name="extract-evidences",
+                        agent=agent,
+                        max_retries=0,
+                        on_error="fail",
+                        strict_input_validation=True,
+                    ),
+                    Step(
+                        name="validate-evidence-draft",
+                        executor=validate_evidence_draft,
+                        max_retries=0,
+                        on_error="fail",
+                        strict_input_validation=True,
+                    ),
+                    Step(
+                        name="publish-evidences",
+                        executor=publish_evidences,
+                        max_retries=0,
+                        on_error="fail",
+                        strict_input_validation=True,
+                    ),
+                ],
+            )
+        ],
+    )
+
+
+def ensure_evidence_extraction_workflow(registry: Registry) -> int:
+    """Create the initial published Workflow once; never overwrite Studio versions."""
+    db = get_postgres_db()
+    component = db.get_component(EVIDENCE_EXTRACTION_WORKFLOW_ID, component_type=ComponentType.WORKFLOW)
+    if component is not None:
+        version = component.get("current_version")
+        if not isinstance(version, int):
+            raise ValueError("Evidence Extraction has no published Studio version")
+        current = Workflow.load(EVIDENCE_EXTRACTION_WORKFLOW_ID, db=db, registry=registry, version=version)
+        if current is None or not isinstance(current.steps, list) or not current.steps:
+            raise ValueError("Evidence Extraction published Studio version could not be rehydrated")
+        return version
+
+    agent = load_evidence_extractor_agent(registry)
+    version = _seed_workflow(agent).save(
+        db=db,
+        stage="published",
+        notes="Initial code-reviewed Evidence Extraction Workflow seed",
+    )
+    if not isinstance(version, int):
+        raise ValueError("Evidence Extraction Workflow seed did not produce a published version")
+    return version

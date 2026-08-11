@@ -106,6 +106,9 @@ run-scoped Collection Buffer and never depend on the model reproducing them.
 - `results_pending` is zero before publication.
 - Accepted documents, candidate ledger, summary, and index publish before the manifest.
 - `manifest.json` is the completed Artifact marker and is published last.
+- After the completed manifest exists, publication appends one idempotent pointer to
+  `indexes/manifest-index.jsonl`; downstream Workflows consume this log by byte offset
+  and never scan historical document bodies.
 - Keys, authorization headers, and raw provider errors never enter Artifacts.
 - Every Tool Batch and manifest identify the exact Collector component version
   and instruction hash used for the run.
