@@ -16,6 +16,8 @@ RAW_COLLECTION_SCHEDULE_PROMPT = (
     "采集最近48小时可能影响中国A股板块和产业链行情的最新资讯，"
     "关注政策、供需、价格、重大订单、产能投放、技术突破和上市公司经营事件。"
 )
+EVIDENCE_EXTRACTION_SCHEDULE_NAME = "evidence-extraction-every-10-minutes"
+EVIDENCE_EXTRACTION_SCHEDULE_PROMPT = "处理所有尚未提取的 Raw Document"
 
 
 def env_flag(name: str, default: bool) -> bool:
@@ -67,7 +69,8 @@ def _register(
 def register_schedules() -> None:
     """Register schedules (idempotent and fail-soft).
 
-    Raw Collection runs hourly; the deterministic deployment check runs daily by default.
+    Raw Collection runs hourly, Evidence Extraction every ten minutes, and the
+    deterministic deployment check runs daily by default.
     """
     try:
         manager = ScheduleManager(get_postgres_db())
@@ -94,5 +97,15 @@ def register_schedules() -> None:
         endpoint="/workflows/raw-collection/runs",
         payload={"message": RAW_COLLECTION_SCHEDULE_PROMPT},
         description="Hourly: collect and publish raw market-moving information from the last 48 hours.",
+        timezone="Asia/Shanghai",
+    )
+
+    _register(
+        manager,
+        name=EVIDENCE_EXTRACTION_SCHEDULE_NAME,
+        cron="*/10 * * * *",
+        endpoint="/workflows/evidence-extraction/runs",
+        payload={"message": EVIDENCE_EXTRACTION_SCHEDULE_PROMPT},
+        description="Every 10 minutes: extract and publish all indexed, unprocessed Evidence.",
         timezone="Asia/Shanghai",
     )
