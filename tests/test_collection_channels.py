@@ -359,6 +359,8 @@ class CollectionChannelPostgresIntegrationTest(unittest.TestCase):
             "default_source_level": "L3_MEDIA",
         }
         invalid_cases: dict[str, dict[str, object]] = {
+            "ownership-enum": {"ownership_type": "INVALID"},
+            "channel-enum": {"channel_type": "INVALID"},
             "dynamic-protocol": {"ownership_type": "dynamic"},
             "adapter-type": {"adapter_key": "bocha"},
             "priority": {"priority": 0},
@@ -378,10 +380,39 @@ class CollectionChannelPostgresIntegrationTest(unittest.TestCase):
                 with self.engine.begin() as connection:
                     connection.execute(statement, {**base, **changes, "code": f"invalid-{code}"})
 
+        with self.assertRaises(IntegrityError):
+            with self.engine.begin() as connection:
+                connection.execute(statement, {**base, "code": "bocha"})
+
     def test_03_postgres_allows_only_one_enabled_web_search(self) -> None:
         repository = ChannelRepository(self.engine)
         with self.assertRaisesRegex(ValueError, "only one web_search"):
             repository.update_channel("tavily", enabled=True)
+
+    def test_04_postgres_dynamic_rss_lifecycle(self) -> None:
+        repository = ChannelRepository(self.engine)
+        now = datetime.now(UTC)
+        dynamic = CollectionChannel(
+            code="postgres-dynamic-rss",
+            name="PostgreSQL Dynamic RSS",
+            ownership_type=OwnershipType.DYNAMIC,
+            channel_type=ChannelType.RSS,
+            adapter_key="generic_rss",
+            enabled=True,
+            endpoint="https://example.com/feed.xml",
+            config={},
+            priority=1,
+            timeout_seconds=30,
+            max_results=10,
+            default_source_level=SourceLevel.L3_MEDIA,
+            created_at=now,
+            updated_at=now,
+        )
+
+        repository.create_dynamic(dynamic)
+        self.assertIn(dynamic.code, [item.code for item in repository.list_enabled(ChannelType.RSS)])
+        repository.delete_channel(dynamic.code)
+        self.assertNotIn(dynamic.code, [item.code for item in repository.list_enabled(ChannelType.RSS)])
 
 
 class CollectionAdapterContractTest(unittest.IsolatedAsyncioTestCase):
