@@ -106,6 +106,6 @@ source .venv/bin/activate
 
 AgentOS 通过独立 GitHub Action 发布到与 Tidewise AI 共用的华为云 ECS。发布复用 SWR、RDS
 Instance 和外部 `tidewise-uat` Docker 网络，但使用独立的 `agent_os_uat` 数据库、Compose
-项目、持久化目录和回滚状态。UAT 服务端口在 Compose 中固定为 `9081`；部署只允许从
-`main` 手工触发，并使用镜像 digest。完整操作见
+项目、持久化目录和回滚状态。UAT 应用端口在 Compose 中固定为仅回环可见的 `9081`，
+公网通过 `https://tideai.tripwise.cn/agentos` 访问；部署只允许从 `main` 手工触发，并使用镜像 digest。完整操作见
 [infra/uat/README.md](infra/uat/README.md)。

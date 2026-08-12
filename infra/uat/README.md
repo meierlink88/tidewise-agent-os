@@ -8,16 +8,19 @@ Docker network, while keeping its database, role, Compose project, data, runner 
 
 ```text
 Huawei ECS
+├── Nginx :443                     # https://tideai.tripwise.cn/agentos/
 ├── tidewise-uat                    # Tidewise AI Compose; data is internal at data:9011
-└── tidewise-agentos-uat            # this repository; AgentOS is fixed at 9081
+└── tidewise-agentos-uat            # AgentOS is loopback-only at 127.0.0.1:9081
 
 Huawei RDS PostgreSQL (private VPC endpoint only)
 └── agent_os_uat / agent_os_uat_runtime
 ```
 
-The UAT port contract lives only in `docker-compose.yaml`: Uvicorn listens on `9081`, the host publishes
-`9081`, and the healthcheck uses `9081`. `AGENTOS_EXTERNAL_URL` is the operator/Control Plane address;
-`AGENTOS_INTERNAL_URL` is fixed to `http://127.0.0.1:9081` for Scheduler callbacks.
+The UAT port contract lives in `docker-compose.yaml`: Uvicorn listens on `9081`, Docker binds it only to
+`127.0.0.1:9081`, and the healthcheck uses that port. Shared Nginx terminates TLS and exposes
+`https://tideai.tripwise.cn/agentos`; `AGENTOS_INTERNAL_URL` remains `http://127.0.0.1:9081` for Scheduler callbacks.
+The same Nginx snippet also routes the RFC 9728 protected-resource and RFC 8414 authorization-server discovery URLs
+derived from the `/agentos/mcp` resource and `/agentos` issuer.
 
 ## Security boundary
 
@@ -25,7 +28,8 @@ The UAT port contract lives only in `docker-compose.yaml`: Uvicorn listens on `9
 - The AgentOS role owns only `agent_os_uat`; `DB_SSLMODE=require` is mandatory.
 - Data Service has no host port. AgentOS calls `http://data:9011` through `tidewise-uat` using a service token.
 - AgentOS runs as UID/GID `10002:10002`, read-only root filesystem, dropped Linux capabilities, and `no-new-privileges`.
-- ECS security group permits public `9081` only from approved operator source addresses. JWT authorization remains mandatory.
+- Docker does not publish `9081` on a public interface. Existing Nginx `443` is the only public AgentOS ingress.
+- JWT authorization remains mandatory. MCP OAuth is enabled only with an HTTPS issuer.
 - Runtime credentials are GitHub `uat` Secrets, written only to a mode `0600` temporary env file. They are never baked into images.
 - The JWKS is supplied as a base64 secret, decoded to `/opt/tidewise/agentos-uat/jwt-jwks.json` mode `0640` for the dedicated runtime group, and mounted read-only.
 
@@ -63,6 +67,26 @@ The runner label is `tidewise-agentos-uat-ecs`; daily deployment does not requir
 Bootstrap registers it with GitHub's supported `--disableupdate` mode because large downloads from GitHub are slow on
 this ECS. Upgrade the runner archive explicitly during a maintenance window before its version falls out of support.
 
+Install the versioned AgentOS location into the existing `tideai.tripwise.cn` HTTPS server before the first release:
+
+```bash
+sudo install -m 0644 infra/uat/nginx-agentos-location.conf \
+  /etc/nginx/snippets/tidewise-agentos-uat.conf
+```
+
+Add the following line inside the existing `listen 443 ssl` server block, then validate and reload Nginx:
+
+```nginx
+include /etc/nginx/snippets/tidewise-agentos-uat.conf;
+```
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+curl -sS -D - -o /dev/null https://tideai.tripwise.cn/agentos/health \
+  | grep -i '^X-Tidewise-Upstream: agentos-uat'
+```
+
 ## GitHub `uat` configuration
 
 Environment or repository Variables:
@@ -70,7 +94,7 @@ Environment or repository Variables:
 - `SWR_REGISTRY`, `SWR_NAMESPACE`
 - `SWR_AGENTOS_REPOSITORY`, `SWR_AGENTOS_DEPLOY_REPOSITORY`
 - `UAT_AGENTOS_RUNNER_NAME`
-- `AGENTOS_EXTERNAL_URL` — currently `http://<ECS-public-IP>:9081`
+- `AGENTOS_EXTERNAL_URL` — `https://tideai.tripwise.cn/agentos`
 - `RDS_HOST` — Huawei RDS private hostname
 
 Secrets:
@@ -99,4 +123,5 @@ GitHub concurrency prevents two AgentOS deploy jobs. The ECS script also locks b
 After deployment it verifies external health/auth, Agents, Workflows, Schedules, `local-ping`, MCP, and restart recovery.
 
 If verification fails, the previous successful image/runtime/Compose snapshot is restored automatically. Database
-state is not rolled back. The last two successful release identities remain under `/opt/tidewise/agentos-uat/state/`.
+state is not rolled back. Candidate logs are sanitized and captured before rollback removes the container. The last
+two successful release identities remain under `/opt/tidewise/agentos-uat/state/`.

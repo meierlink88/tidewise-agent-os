@@ -21,7 +21,7 @@ services:
     cap_drop:
       - ALL
     ports:
-      - "9081:9081"
+      - "127.0.0.1:9081:9081"
     volumes:
       - ${AGENTOS_DATA_DIR:-/opt/tidewise/agentos-uat/data}:/app/data
       - ${AGENTOS_JWKS_FILE:-/opt/tidewise/agentos-uat/jwt-jwks.json}:/run/secrets/agentos-jwks.json:ro

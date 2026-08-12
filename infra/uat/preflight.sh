@@ -59,12 +59,20 @@ from urllib.parse import urlparse
 with socket.create_connection((os.environ["DB_HOST"], int(os.environ.get("DB_PORT", "5432"))), timeout=10):
     pass
 external = urlparse(os.environ["AGENTOS_EXTERNAL_URL"])
-if external.scheme not in {"http", "https"} or not external.hostname:
-    raise SystemExit("FAIL external-url: absolute HTTP(S) URL required")
-if external.port != 9081 or external.path not in {"", "/"} or external.query or external.fragment:
-    raise SystemExit("FAIL external-url: current UAT contract requires an origin URL on fixed port 9081")
+if external.scheme != "https" or not external.hostname:
+    raise SystemExit("FAIL external-url: absolute HTTPS URL required for MCP OAuth")
+if external.port not in {None, 443} or external.path.rstrip("/") != "/agentos":
+    raise SystemExit("FAIL external-url: expected the shared TLS ingress path /agentos on port 443")
+if external.query or external.fragment:
+    raise SystemExit("FAIL external-url: query and fragment are not allowed")
 PY
 pass rds-private-tcp-and-external-url
+
+ingress_headers="$(curl --silent --show-error --connect-timeout 5 --max-time 15 \
+  --dump-header - --output /dev/null "${AGENTOS_EXTERNAL_URL%/}/health" || true)"
+grep -Eiq '^X-Tidewise-Upstream:[[:space:]]*agentos-uat' <<< "$ingress_headers" \
+  || fail https-ingress "shared Nginx /agentos route is not installed"
+pass https-ingress
 
 docker run --rm --network tidewise-uat --entrypoint curl "$agentos_image" \
   -fsS --connect-timeout 5 --max-time 15 http://data:9011/readyz >/dev/null \
@@ -80,4 +88,4 @@ done <<< "$container_ids"
 if [ -z "$container_ids" ] && [ -n "$(ss -H -ltn 'sport = :9081')" ]; then
   fail port-9081 "occupied by a non-Docker listener"
 fi
-pass port-9081
+pass loopback-port-9081
