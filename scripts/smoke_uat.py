@@ -8,11 +8,21 @@ import uuid
 
 import httpx
 from agno.db.schemas.service_accounts import ServiceAccount
-from agno.os.service_accounts import DEFAULT_SERVICE_ACCOUNT_SCOPES, generate_token
+from agno.os.service_accounts import generate_token
 
 from db import get_postgres_db
 
 BASE_URL = "http://127.0.0.1:9081"
+
+# Least-privilege scopes for the deployment probe. Agno's default service-account
+# scopes allow runs but intentionally do not allow component or schedule listing.
+UAT_SMOKE_SERVICE_ACCOUNT_SCOPES = [
+    "agents:read",
+    "workflows:read",
+    "workflows:run",
+    "schedules:read",
+    "config:read",
+]
 
 
 async def _probe(token: str) -> None:
@@ -68,7 +78,7 @@ async def main() -> None:
         name=f"uat-deploy-smoke-{now}",
         token_hash=token_hash,
         token_prefix=token_prefix,
-        scopes=list(DEFAULT_SERVICE_ACCOUNT_SCOPES),
+        scopes=list(UAT_SMOKE_SERVICE_ACCOUNT_SCOPES),
         created_at=now,
         expires_at=now + 300,
         created_by="uat-deploy",

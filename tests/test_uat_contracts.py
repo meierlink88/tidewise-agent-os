@@ -2,12 +2,32 @@ from pathlib import Path
 from unittest import TestCase
 
 from agno.os import AgentOSBuiltinAuth
+from agno.os.scopes import has_required_scopes
 from fastmcp import FastMCP
+
+from scripts.smoke_uat import UAT_SMOKE_SERVICE_ACCOUNT_SCOPES
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class UatIngressContractTest(TestCase):
+    def test_deployment_probe_has_its_required_scopes(self) -> None:
+        required_scopes = [
+            "agents:read",
+            "workflows:read",
+            "workflows:run",
+            "schedules:read",
+            "config:read",
+        ]
+
+        self.assertTrue(
+            has_required_scopes(
+                UAT_SMOKE_SERVICE_ACCOUNT_SCOPES,
+                required_scopes,
+            )
+        )
+        self.assertNotIn("agent_os:admin", UAT_SMOKE_SERVICE_ACCOUNT_SCOPES)
+
     def test_agentos_is_loopback_only_behind_shared_https_ingress(self) -> None:
         compose = (REPOSITORY_ROOT / "infra/uat/docker-compose.yaml").read_text()
         example_env = (REPOSITORY_ROOT / "infra/uat/.env.example").read_text()
