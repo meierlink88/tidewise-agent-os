@@ -8,7 +8,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import ClassVar, cast
+from typing import Any, ClassVar, cast
 from unittest.mock import AsyncMock, patch
 
 from agno.run import RunContext
@@ -99,6 +99,10 @@ def _channel(
         created_at=datetime(2026, 8, 12, tzinfo=UTC),
         updated_at=datetime(2026, 8, 12, tzinfo=UTC),
     )
+
+
+def _constraint_name(error: IntegrityError) -> str | None:
+    return cast(Any, error.orig).diag.constraint_name
 
 
 class CollectionChannelToolTest(unittest.IsolatedAsyncioTestCase):
@@ -359,8 +363,6 @@ class CollectionChannelPostgresIntegrationTest(unittest.TestCase):
             "default_source_level": "L3_MEDIA",
         }
         invalid_cases: dict[str, dict[str, object]] = {
-            "ownership-enum": {"ownership_type": "INVALID"},
-            "channel-enum": {"channel_type": "INVALID"},
             "dynamic-protocol": {"ownership_type": "dynamic"},
             "adapter-type": {"adapter_key": "bocha"},
             "priority": {"priority": 0},
@@ -379,6 +381,33 @@ class CollectionChannelPostgresIntegrationTest(unittest.TestCase):
             with self.subTest(code=code), self.assertRaises(IntegrityError):
                 with self.engine.begin() as connection:
                     connection.execute(statement, {**base, **changes, "code": f"invalid-{code}"})
+
+        ownership_values = {
+            **base,
+            "code": "invalid-ownership-enum",
+            "ownership_type": "INVALID",
+            "channel_type": "rss",
+            "adapter_key": "generic_rss",
+        }
+        with self.assertRaises(IntegrityError) as ownership_error:
+            with self.engine.begin() as connection:
+                connection.execute(statement, ownership_values)
+        self.assertEqual(_constraint_name(ownership_error.exception), "ck_collection_channels_ownership")
+
+        with self.engine.connect() as connection:
+            transaction = connection.begin()
+            try:
+                connection.exec_driver_sql(
+                    "ALTER TABLE collection_channels DROP CONSTRAINT ck_collection_channels_adapter_type"
+                )
+                with self.assertRaises(IntegrityError) as channel_error:
+                    connection.execute(
+                        statement,
+                        {**base, "code": "invalid-channel-enum", "channel_type": "INVALID"},
+                    )
+                self.assertEqual(_constraint_name(channel_error.exception), "ck_collection_channels_type")
+            finally:
+                transaction.rollback()
 
         with self.assertRaises(IntegrityError):
             with self.engine.begin() as connection:
