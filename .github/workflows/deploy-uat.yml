@@ -280,6 +280,7 @@ jobs:
           RUNTIME_ENV: ${{ steps.runtime.outputs.runtime_env }}
           CANDIDATE_IMAGES: ${{ steps.runtime.outputs.images_env }}
           COMPOSE_FILE: ${{ steps.bundle.outputs.compose }}
+          DIAGNOSTICS_FILE: ${{ runner.temp }}/agentos-uat-diagnostics-${{ github.run_id }}.log
         run: ${{ steps.bundle.outputs.root }}/deploy.sh
 
       - name: Collect sanitized failure diagnostics
@@ -292,7 +293,9 @@ jobs:
           COMPOSE_FILE: ${{ steps.bundle.outputs.compose }}
         run: |
           output="${RUNNER_TEMP}/agentos-uat-diagnostics-${GITHUB_RUN_ID}.log"
-          "${{ steps.bundle.outputs.root }}/collect-diagnostics.sh" > "$output"
+          if [ ! -s "$output" ]; then
+            "${{ steps.bundle.outputs.root }}/collect-diagnostics.sh" > "$output"
+          fi
           echo "file=$output" >> "$GITHUB_OUTPUT"
 
       - name: Upload failure diagnostics

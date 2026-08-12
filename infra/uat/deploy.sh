@@ -18,6 +18,7 @@ previous_images="${state_dir}/previous.images.env"
 previous_compose="${state_dir}/previous.compose.yaml"
 previous_sha="${state_dir}/previous.sha"
 rollback_in_progress=false
+diagnostics_file="${DIAGNOSTICS_FILE:-}"
 
 mkdir -p "$state_dir"
 exec 8>/opt/tidewise/uat/deploy.lock
@@ -66,11 +67,20 @@ rollback() {
   fi
 }
 
+capture_candidate_diagnostics() {
+  [ -n "$diagnostics_file" ] || return 0
+  RUNTIME_ENV="$runtime_env" \
+    CANDIDATE_IMAGES="$candidate_images" \
+    COMPOSE_FILE="$candidate_compose" \
+    "$(dirname "$candidate_compose")/collect-diagnostics.sh" > "$diagnostics_file" || true
+}
+
 on_error() {
   local exit_code="$1"
   trap - ERR
   if [ "$rollback_in_progress" = false ]; then
     set +e
+    capture_candidate_diagnostics
     rollback
     rollback_code="$?"
     set -e
