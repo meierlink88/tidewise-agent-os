@@ -143,13 +143,12 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
 
     pending = root / ".pending" / raw_id
     write_json(pending / "prepared.json", publication.model_dump(mode="json"))
-    raw_receipt = await asyncio.to_thread(
+    await asyncio.to_thread(
         post_publication,
         "raw-evidence-publications",
         {"raw_evidence": publication.raw_evidence.model_dump(mode="json")},
     )
-    write_json(pending / "raw-receipt.json", raw_receipt)
-    evidence_receipt = await asyncio.to_thread(
+    await asyncio.to_thread(
         post_publication,
         "evidence-publications",
         {
@@ -157,9 +156,8 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
             "evidences": [item.model_dump(mode="json") for item in publication.evidences],
         },
     )
-    write_json(pending / "evidence-receipt.json", evidence_receipt)
 
-    for name in ("prepared.json", "raw-receipt.json", "evidence-receipt.json"):
+    for name in ("prepared.json",):
         source = pending / name
         target = final_root / name
         if target.exists():
@@ -174,11 +172,7 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
         "document_path": publication.prepared_raw.document_path,
         "document_sha256": publication.prepared_raw.document_sha256,
         "evidence_count": len(publication.evidences),
-        "artifacts": {
-            "prepared": "prepared.json",
-            "raw_receipt": "raw-receipt.json",
-            "evidence_receipt": "evidence-receipt.json",
-        },
+        "artifacts": {"prepared": "prepared.json"},
     }
     write_json(final_manifest, manifest)
     shutil.rmtree(pending, ignore_errors=True)
