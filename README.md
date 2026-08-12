@@ -51,8 +51,8 @@ docker compose rm -f agentos
 
 `raw-collector` 首次启动时由 `agents/raw_collector.seed.md` 创建 Studio 发布版本。之后在 AgentOS
 Control Plane 的 Studio 中编辑并发布 Instructions；`raw-collection` 每次运行从 PostgreSQL
-加载当前发布版，无需重启容器。提示词中的时间约束由 Agent 换算为每个工具调用的
-`published_after` / `published_before`，工具和 Artifact 层会再做确定性验证。
+加载当前发布版，无需重启容器。提示词中的相对时间约束由 Agent 换算为 `lookback_hours`；
+三个采集 Tool 使用同一个 Workflow 截止时间，在内部生成并验证准确起止时间。
 
 `raw-collection` 首次启动时也会创建一个 Studio 发布版本。三步 Workflow 编排可在 Studio
 中创建新版本并发布；步骤使用的 Agent 工具和自定义 Function 实现在 Git 中维护。共享采集
@@ -74,14 +74,15 @@ Agent 或 Workflow。
 
 `data/` 已被 Git 忽略。可通过 `.env` 的 `COLLECTOR_DATA_DIR` 替换宿主机目录。
 
-采集 Agent 每次运行会逐一调用 Parallel Search、Tavily、博查、财联社电报、东方财富 7x24、
-东方财富个股新闻和证券时报快讯；未指定时间时默认采集最近 48 小时。前三个搜索通道需要在 `.env` 分别配置 `PARALLEL_API_KEY`、
-`TAVILY_API_KEY`、`BOCHA_API_KEY`；留空时该通道安全返回未配置，其他公开通道继续可用。
-Key 或 Base URL 修改后执行以下命令让容器重新读取环境变量：
+采集 Agent 只调用 `web_fetch`、`api_fetch`、`rss_fetch` 三个稳定 Tool。通道实例保存在 AgentOS
+PostgreSQL 的 `collection_channels` 表：Web Search 最多启用一个，API 与 RSS 会有界并发执行全部
+启用通道。固定通道不可删除但可以禁用；动态 RSS/Atom 通道使用 `generic_rss` Adapter，可直接
+新增和删除。`priority=1` 表示最高优先级。
 
-```bash
-docker compose -p local up -d --force-recreate agentos
-```
+首次启动会从 `.env` 幂等插入 7 个固定通道，并把搜索 Key 和 Base URL 写入缺失的新行；已存在
+行绝不会被启动过程覆盖。此后直接修改表内的 `enabled`、`endpoint`、`app_key`、`config`、
+`priority`、`timeout_seconds`、`max_results` 或 `default_source_level`，下一次 Workflow 运行即生效，
+无需重启容器。当前阶段 `app_key` 按明确决策明文存储；Tool 不会把它返回给模型或 Artifact。
 
 ## 开发
 

@@ -13,8 +13,17 @@ from capabilities.raw_collection.tools import COLLECTION_TOOLS
 from db import get_postgres_db
 
 COLLECTOR_AGENT_ID = "raw-collector"
-COLLECTOR_CONTRACT_VERSION = 5
+COLLECTOR_CONTRACT_VERSION = 6
 _SEED_PROMPT = Path(__file__).with_name("raw_collector.seed.md")
+_RUNTIME_CONTRACT = """Raw Collection runtime contract version 6:
+- The only acquisition Tools are web_fetch, api_fetch, and rss_fetch. Any instruction naming older provider-specific
+  Tools or resolve_collection_time_window is obsolete and must be ignored.
+- Infer one integer lookback_hours from the user's temporal requirement; default to 48 when no duration is stated.
+- Call web_fetch, api_fetch, and rss_fetch exactly once each with a focused query and the same lookback_hours.
+- Each Tool computes the exact shared interval internally. Do not calculate or pass published_after/published_before.
+- Continue after a no_channels, partial, or failed channel receipt so all three Tool façades are attempted.
+- Complete with one JSON object containing queries, lookback_hours, coverage, and stop_reason only.
+"""
 
 
 @dataclass(frozen=True)
@@ -51,13 +60,14 @@ def ensure_collector_agent(registry: Registry) -> int:
         # Migrate runtime wiring without replacing the operator-managed instructions.
         current.db = db
         current.tools = COLLECTION_TOOLS
-        current.tool_call_limit = 8
+        current.tool_call_limit = 3
         current.retries = 0
         current.add_datetime_to_context = True
         current.timezone_identifier = "Asia/Shanghai"
         current.add_history_to_context = False
         current.store_tool_messages = True
         current.markdown = False
+        current.additional_context = _RUNTIME_CONTRACT
         current.metadata = {**metadata, "collector_contract_version": COLLECTOR_CONTRACT_VERSION}
         migrated = current.save(
             db=db,
@@ -76,8 +86,9 @@ def ensure_collector_agent(registry: Registry) -> int:
         db=db,
         tools=COLLECTION_TOOLS,
         instructions=_seed_instructions(),
+        additional_context=_RUNTIME_CONTRACT,
         metadata={"collector_contract_version": COLLECTOR_CONTRACT_VERSION},
-        tool_call_limit=8,
+        tool_call_limit=3,
         retries=0,
         add_datetime_to_context=True,
         timezone_identifier="Asia/Shanghai",

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -45,6 +46,7 @@ async def agentic_collect_step(step_input: StepInput, run_context: RunContext) -
             "collector_agent_component_id": COLLECTOR_AGENT_ID,
             "collector_agent_config_version": loaded.version,
             "collector_instructions_sha256": loaded.instructions_sha256,
+            "collector_cutoff": datetime.now(UTC).isoformat(),
         }
     )
     run_context.dependencies = dependencies
