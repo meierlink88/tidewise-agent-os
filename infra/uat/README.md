@@ -60,6 +60,8 @@ sudo env \
 ```
 
 The runner label is `tidewise-agentos-uat-ecs`; daily deployment does not require root or SSH access.
+Bootstrap registers it with GitHub's supported `--disableupdate` mode because large downloads from GitHub are slow on
+this ECS. Upgrade the runner archive explicitly during a maintenance window before its version falls out of support.
 
 ## GitHub `uat` configuration
 

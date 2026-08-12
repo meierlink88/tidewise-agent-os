@@ -207,7 +207,9 @@ jobs:
           bundle_root="${RUNNER_TEMP}/agentos-uat-bundle-${GITHUB_RUN_ID}"
           rm -rf "$bundle_root"
           mkdir -p "$bundle_root"
-          container="$(docker create "$DEPLOY_BUNDLE_IMAGE")"
+          # The bundle image is FROM scratch and intentionally has no default command.
+          # It is never started; the override only lets Docker create metadata for docker cp.
+          container="$(docker create "$DEPLOY_BUNDLE_IMAGE" /bin/true)"
           trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
           docker cp "${container}:/bundle/." "$bundle_root"
           docker rm -f "$container" >/dev/null
