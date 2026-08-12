@@ -28,7 +28,7 @@ terminal state, so a slow scheduled run is not claimed again concurrently; later
 - The Agent owns atomic semantic splitting, exclusions, originality/quotation judgment, SINGLE/DOUBLE, two-layer
   5W1H, keywords, and the readable expression fingerprint.
 - Functions own file parsing, trust-boundary validation, IDs, split order, fingerprint keys, API timeouts,
-  publication receipts, Artifact ordering, and checkpoint transitions.
+  Artifact ordering, and checkpoint transitions. Data publication responses are not persisted as local receipts.
 - Data Service owns the formal Raw Evidence/Evidence facts and enforces its accepted V1 API contract.
 
 ## Invariants

@@ -189,10 +189,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self._publish_raw_fixture()
         publication = self._validated(self._prepared())
         step_input = StepInput(previous_step_outputs={"validate-evidence-draft": StepOutput(content=publication)})
-        responses = [
-            {"request_id": "raw", "result": {"receipt_id": "raw-receipt"}},
-            {"request_id": "evidence", "result": {"receipt_id": "evidence-receipt"}},
-        ]
+        responses = [None, None]
         with patch(
             "capabilities.evidence_extraction.functions.extraction.post_publication",
             side_effect=responses,
@@ -201,6 +198,12 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         result = EvidencePublicationResult.model_validate(output.content)
         self.assertEqual(mocked.call_count, 2)
         self.assertTrue(Path(result.artifact_manifest_path).is_file())
+        manifest = json.loads(Path(result.artifact_manifest_path).read_text(encoding="utf-8"))
+        self.assertEqual(manifest["artifacts"], {"prepared": "prepared.json"})
+        self.assertEqual(
+            {path.name for path in Path(result.artifact_manifest_path).parent.iterdir()},
+            {"manifest.json", "prepared.json"},
+        )
         self.assertFalse((evidence_artifact_root() / ".pending" / result.raw_evidence_id).exists())
         self.assertGreater(result.checkpoint.manifest_offset, 0)
         self.assertEqual(result.checkpoint, read_checkpoint())
@@ -223,7 +226,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch(
                 "capabilities.evidence_extraction.functions.extraction.post_publication",
-                side_effect=[{"result": {"receipt_id": "raw"}}, ValueError("evidence rejected")],
+                side_effect=[None, ValueError("evidence rejected")],
             ),
             self.assertRaisesRegex(ValueError, "evidence rejected"),
         ):
