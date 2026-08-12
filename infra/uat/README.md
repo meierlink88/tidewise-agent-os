@@ -98,6 +98,7 @@ Environment or repository Variables:
 - `UAT_AGENTOS_RUNNER_NAME`
 - `AGENTOS_EXTERNAL_URL` — `https://tideai.tripwise.cn/agentos`
 - `RDS_HOST` — Huawei RDS private hostname
+- `CONTROL_PLANE_JWT_VERIFICATION_KEY` — PEM public key generated for the UAT OS connection in Agno Control Plane
 
 Secrets:
 
@@ -113,6 +114,10 @@ Create the JWKS secret without printing it:
 ```bash
 base64 < agentos-uat-jwks.json | gh secret set JWT_JWKS_BASE64 --env uat
 ```
+
+The Control Plane public key is additive: Agno validates its JWTs with `JWT_VERIFICATION_KEY` while retaining
+`JWT_JWKS_FILE` for existing identity-provider keys. Store only the public key as the UAT Environment variable;
+never store the corresponding private signing key in this repository or on the AgentOS host.
 
 ## Release and rollback
 

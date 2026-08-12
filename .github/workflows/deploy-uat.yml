@@ -189,6 +189,7 @@ jobs:
       MCP_CONNECT_SECRET: ${{ secrets.MCP_CONNECT_SECRET }}
       AGENTOS_MCP_SIGNING_KEY: ${{ secrets.AGENTOS_MCP_SIGNING_KEY }}
       JWT_JWKS_BASE64: ${{ secrets.JWT_JWKS_BASE64 }}
+      CONTROL_PLANE_JWT_VERIFICATION_KEY: ${{ vars.CONTROL_PLANE_JWT_VERIFICATION_KEY }}
     steps:
       - name: Login to SWR with pull credentials
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -226,7 +227,9 @@ jobs:
           images_env="${RUNNER_TEMP}/agentos-uat-${GITHUB_RUN_ID}.images.env"
           jwks_tmp="${RUNNER_TEMP}/agentos-uat-${GITHUB_RUN_ID}.jwks.json"
           umask 077
+          printf '%s' "$CONTROL_PLANE_JWT_VERIFICATION_KEY" | openssl pkey -pubin -noout >/dev/null
           python3 - "$runtime_env" <<'PY'
+          import json
           import os
           import pathlib
           import sys
@@ -242,6 +245,15 @@ jobs:
               if "\n" in value or "\r" in value:
                   raise SystemExit(f"{name} must not contain line breaks")
               lines.append(f"{name}={value}")
+          verification_key = os.environ.get("CONTROL_PLANE_JWT_VERIFICATION_KEY", "").strip()
+          if not (
+              verification_key.startswith("-----BEGIN PUBLIC KEY-----\n")
+              and verification_key.endswith("\n-----END PUBLIC KEY-----")
+          ):
+              raise SystemExit("CONTROL_PLANE_JWT_VERIFICATION_KEY must be a PEM public key")
+          # Compose dotenv double-quoted values decode JSON's escaped newlines back
+          # into the exact PEM expected by Agno's JWT_VERIFICATION_KEY setting.
+          lines.append(f"JWT_VERIFICATION_KEY={json.dumps(verification_key)}")
           lines.extend(("AGENTOS_DATA_DIR=/opt/tidewise/agentos-uat/data", "AGENTOS_JWKS_FILE=/opt/tidewise/agentos-uat/jwt-jwks.json"))
           pathlib.Path(sys.argv[1]).write_text("\n".join(lines) + "\n")
           PY

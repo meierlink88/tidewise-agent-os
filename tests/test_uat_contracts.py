@@ -34,6 +34,7 @@ class UatIngressContractTest(TestCase):
         nginx = (REPOSITORY_ROOT / "infra/uat/nginx-agentos-location.conf").read_text()
         preflight = (REPOSITORY_ROOT / "infra/uat/preflight.sh").read_text()
         deploy = (REPOSITORY_ROOT / "infra/uat/deploy.sh").read_text()
+        workflow = (REPOSITORY_ROOT / ".github/workflows/deploy-uat.yml").read_text()
 
         self.assertIn('"127.0.0.1:9081:9081"', compose)
         self.assertIn(
@@ -46,6 +47,16 @@ class UatIngressContractTest(TestCase):
         self.assertIn('--resolve "${external_hostname}:443:127.0.0.1"', deploy)
         self.assertNotIn("--insecure", preflight)
         self.assertNotIn("--insecure", deploy)
+        self.assertIn(
+            "JWT_VERIFICATION_KEY: ${JWT_VERIFICATION_KEY:?JWT_VERIFICATION_KEY is required}",
+            compose,
+        )
+        self.assertIn(
+            "CONTROL_PLANE_JWT_VERIFICATION_KEY: ${{ vars.CONTROL_PLANE_JWT_VERIFICATION_KEY }}",
+            workflow,
+        )
+        self.assertIn("openssl pkey -pubin -noout", workflow)
+        self.assertIn('lines.append(f"JWT_VERIFICATION_KEY={json.dumps(verification_key)}")', workflow)
 
     def test_mcp_oauth_accepts_https_path_issuer(self) -> None:
         auth = AgentOSBuiltinAuth(
