@@ -12,6 +12,8 @@ class UatIngressContractTest(TestCase):
         compose = (REPOSITORY_ROOT / "infra/uat/docker-compose.yaml").read_text()
         example_env = (REPOSITORY_ROOT / "infra/uat/.env.example").read_text()
         nginx = (REPOSITORY_ROOT / "infra/uat/nginx-agentos-location.conf").read_text()
+        preflight = (REPOSITORY_ROOT / "infra/uat/preflight.sh").read_text()
+        deploy = (REPOSITORY_ROOT / "infra/uat/deploy.sh").read_text()
 
         self.assertIn('"127.0.0.1:9081:9081"', compose)
         self.assertIn(
@@ -20,6 +22,10 @@ class UatIngressContractTest(TestCase):
         )
         self.assertIn("/.well-known/oauth-authorization-server/agentos", nginx)
         self.assertIn("/.well-known/oauth-protected-resource/agentos/mcp", nginx)
+        self.assertIn('--resolve "${external_hostname}:443:127.0.0.1"', preflight)
+        self.assertIn('--resolve "${external_hostname}:443:127.0.0.1"', deploy)
+        self.assertNotIn("--insecure", preflight)
+        self.assertNotIn("--insecure", deploy)
 
     def test_mcp_oauth_accepts_https_path_issuer(self) -> None:
         auth = AgentOSBuiltinAuth(

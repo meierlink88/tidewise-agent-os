@@ -68,7 +68,9 @@ if external.query or external.fragment:
 PY
 pass rds-private-tcp-and-external-url
 
+external_hostname="$(python3 -c 'from sys import argv; from urllib.parse import urlparse; print(urlparse(argv[1]).hostname)' "$AGENTOS_EXTERNAL_URL")"
 ingress_headers="$(curl --silent --show-error --connect-timeout 5 --max-time 15 \
+  --resolve "${external_hostname}:443:127.0.0.1" \
   --dump-header - --output /dev/null "${AGENTOS_EXTERNAL_URL%/}/health" || true)"
 grep -Eiq '^X-Tidewise-Upstream:[[:space:]]*agentos-uat' <<< "$ingress_headers" \
   || fail https-ingress "shared Nginx /agentos route is not installed"
