@@ -278,7 +278,9 @@ class ChannelRepository:
                 DO $$
                 BEGIN
                     IF NOT EXISTS (
-                        SELECT 1 FROM pg_constraint WHERE conname = 'ck_collection_channels_adapter_type'
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'ck_collection_channels_adapter_type'
+                          AND conrelid = 'collection_channels'::regclass
                     ) THEN
                         ALTER TABLE collection_channels ADD CONSTRAINT ck_collection_channels_adapter_type CHECK (
                             (channel_type = 'web_search' AND adapter_key IN ('bocha', 'tavily', 'parallel')) OR
@@ -289,7 +291,9 @@ class ChannelRepository:
                         );
                     END IF;
                     IF NOT EXISTS (
-                        SELECT 1 FROM pg_constraint WHERE conname = 'ck_collection_channels_dynamic_protocol'
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'ck_collection_channels_dynamic_protocol'
+                          AND conrelid = 'collection_channels'::regclass
                     ) THEN
                         ALTER TABLE collection_channels ADD CONSTRAINT ck_collection_channels_dynamic_protocol CHECK (
                             ownership_type = 'fixed' OR (channel_type = 'rss' AND adapter_key = 'generic_rss')
@@ -304,7 +308,9 @@ class ChannelRepository:
                 DO $$
                 BEGIN
                     IF NOT EXISTS (
-                        SELECT 1 FROM pg_trigger WHERE tgname = 'collection_channel_identity_guard'
+                        SELECT 1 FROM pg_trigger
+                        WHERE tgname = 'collection_channel_identity_guard'
+                          AND tgrelid = 'collection_channels'::regclass
                     ) THEN
                         CREATE TRIGGER collection_channel_identity_guard
                         BEFORE UPDATE OR DELETE ON collection_channels
@@ -325,6 +331,16 @@ class ChannelRepository:
             select(_CHANNELS)
             .where(_CHANNELS.c.enabled.is_(True), _CHANNELS.c.channel_type == channel_type.value)
             .order_by(_CHANNELS.c.priority, _CHANNELS.c.code)
+        )
+        with self.engine.connect() as connection:
+            return [_decode(row) for row in connection.execute(statement).mappings()]
+
+    def list_enabled_snapshot(self) -> list[CollectionChannel]:
+        """Read every enabled channel from one database statement snapshot."""
+        statement = (
+            select(_CHANNELS)
+            .where(_CHANNELS.c.enabled.is_(True))
+            .order_by(_CHANNELS.c.channel_type, _CHANNELS.c.priority, _CHANNELS.c.code)
         )
         with self.engine.connect() as connection:
             return [_decode(row) for row in connection.execute(statement).mappings()]

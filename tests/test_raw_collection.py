@@ -18,7 +18,6 @@ from pydantic import ValidationError
 from capabilities.raw_collection.artifacts import build_artifact_set, publish_artifact_set
 from capabilities.raw_collection.buffer import artifact_root, read_tool_batches, write_tool_batch
 from capabilities.raw_collection.channels.models import ChannelType, CollectionChannel, OwnershipType
-from capabilities.raw_collection.channels.snapshot import freeze_channel_snapshot
 from capabilities.raw_collection.functions import (
     agentic_collect_step,
     build_artifact_step,
@@ -126,10 +125,10 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
                 "collector_agent_config_version": 7,
                 "collector_instructions_sha256": "a" * 64,
                 "collector_cutoff": now.isoformat(),
+                "collection_channel_snapshot": tuple(channels),
                 "collection_adapter_registry": {"bocha": Adapter(), "cls": Adapter()},
             },
         )
-        freeze_channel_snapshot(context.run_id, channels)
         step_input = StepInput(
             previous_step_outputs={
                 "agentic-collect": StepOutput(content=CollectionQueryPlan(query="宏观政策", lookback_hours=48))

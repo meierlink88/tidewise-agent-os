@@ -1,19 +1,25 @@
-"""Shared acquisition implementation exposed as Tools and invoked by the deterministic Workflow Function."""
+"""Shared deterministic acquisition core used by Workflow Functions and Tool façades."""
 
 import asyncio
 import json
 import os
-from collections.abc import Mapping
+import re
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from agno.run import RunContext
 
 from capabilities.raw_collection.adapters import ChannelAdapter, FetchRequest
+from capabilities.raw_collection.buffer import write_tool_batch
 from capabilities.raw_collection.channels import AdapterKey, ChannelCatalog, ChannelType, CollectionChannel
 from capabilities.raw_collection.dispatchers import dispatch_channels
-from capabilities.raw_collection.models import ChannelFetchReceipt, FetchReceipt, ToolBatchReceipt
-from capabilities.raw_collection.tools.persistence import persist_candidates_async
+from capabilities.raw_collection.models import (
+    Candidate,
+    ChannelFetchReceipt,
+    FetchReceipt,
+    ToolBatchReceipt,
+)
 
 
 def _dependencies(run_context: RunContext) -> dict[str, object]:
@@ -35,7 +41,9 @@ def _request(query: str, lookback_hours: int, run_context: RunContext) -> FetchR
         raise ValueError("collector cutoff must include a timezone")
     before = cutoff.astimezone(UTC)
     return FetchRequest(
-        query=normalized, published_after=before - timedelta(hours=lookback_hours), published_before=before
+        query=normalized,
+        published_after=before - timedelta(hours=lookback_hours),
+        published_before=before,
     )
 
 
@@ -43,11 +51,14 @@ def _catalog(run_context: RunContext) -> ChannelCatalog:
     injected = _dependencies(run_context).get("collection_channel_catalog")
     if injected is not None:
         return cast(ChannelCatalog, injected)
-    from capabilities.raw_collection.channels.snapshot import list_snapshot_channels
+    snapshot = _dependencies(run_context).get("collection_channel_snapshot")
+    if not isinstance(snapshot, Sequence) or isinstance(snapshot, (str, bytes)):
+        raise ValueError("collection channel snapshot is missing")
+    channels = tuple(CollectionChannel.model_validate(item) for item in snapshot)
 
     class SnapshotCatalog:
         def list_enabled(self, channel_type: ChannelType) -> list[CollectionChannel]:
-            return list_snapshot_channels(run_context.run_id, channel_type)
+            return [item for item in channels if item.enabled and item.channel_type == channel_type]
 
     return SnapshotCatalog()
 
@@ -61,13 +72,67 @@ def _adapters(run_context: RunContext) -> Mapping[AdapterKey, ChannelAdapter]:
     return ADAPTERS
 
 
-async def execute_fetch_tool(
+def _persist_candidates(
+    connector: str,
+    request: FetchRequest,
+    run_context: RunContext,
+    candidates: list[Candidate],
+) -> str:
+    dependencies = run_context.dependencies or {}
+    component_id = dependencies.get("collector_agent_component_id")
+    version = dependencies.get("collector_agent_config_version")
+    instructions_sha256 = dependencies.get("collector_instructions_sha256")
+    if not isinstance(component_id, str) or not component_id:
+        raise ValueError("collector Agent component identity is missing")
+    if not isinstance(version, int) or version < 1:
+        raise ValueError("collector Agent config version is missing")
+    if not isinstance(instructions_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", instructions_sha256):
+        raise ValueError("collector Agent instructions hash is missing")
+
+    batch = write_tool_batch(
+        collection_id=run_context.run_id,
+        connector=connector,
+        query=request.query,
+        requested_after=request.published_after,
+        requested_before=request.published_before,
+        agent_component_id=component_id,
+        agent_config_version=version,
+        instructions_sha256=instructions_sha256,
+        candidates=candidates,
+    )
+    in_window = sum(
+        request.published_after <= (item.published_at or item.collected_at) <= request.published_before
+        for item in batch.candidates
+    )
+    return ToolBatchReceipt(
+        batch_id=batch.batch_id,
+        connector=batch.connector,
+        query=batch.query,
+        requested_after=batch.requested_after,
+        requested_before=batch.requested_before,
+        result_count=len(batch.candidates),
+        in_window_result_count=in_window,
+        candidate_ids=[item.candidate_id for item in batch.candidates],
+    ).model_dump_json(exclude_none=True)
+
+
+async def _persist_candidates_async(
+    connector: str,
+    request: FetchRequest,
+    run_context: RunContext,
+    candidates: list[Candidate],
+) -> str:
+    return await asyncio.to_thread(_persist_candidates, connector, request, run_context, candidates)
+
+
+async def execute_fetch(
     tool: str,
     channel_type: ChannelType,
     query: str,
     run_context: RunContext,
     lookback_hours: int,
 ) -> str:
+    """Execute one channel class against the frozen run configuration."""
     try:
         request = _request(query, lookback_hours, run_context)
         channels = await asyncio.to_thread(_catalog(run_context).list_enabled, channel_type)
@@ -98,12 +163,7 @@ async def execute_fetch_tool(
                 )
                 continue
             persisted = ToolBatchReceipt.model_validate_json(
-                await persist_candidates_async(
-                    result.channel.code,
-                    request,
-                    run_context,
-                    result.candidates,
-                )
+                await _persist_candidates_async(result.channel.code, request, run_context, result.candidates)
             )
             receipts.append(
                 ChannelFetchReceipt(

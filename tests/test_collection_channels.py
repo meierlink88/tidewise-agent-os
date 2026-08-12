@@ -288,13 +288,30 @@ class CollectionChannelPostgresIntegrationTest(unittest.TestCase):
         cls.engine = create_engine(os.environ["TEST_POSTGRES_URL"], pool_pre_ping=True)
         with cls.engine.begin() as connection:
             connection.exec_driver_sql("DROP TABLE IF EXISTS collection_channels CASCADE")
+            connection.exec_driver_sql("DROP TABLE IF EXISTS collection_channels_decoy CASCADE")
             connection.exec_driver_sql("DROP FUNCTION IF EXISTS guard_collection_channel_identity() CASCADE")
+            connection.exec_driver_sql("DROP FUNCTION IF EXISTS decoy_collection_channel_guard() CASCADE")
 
     @classmethod
     def tearDownClass(cls) -> None:
         cls.engine.dispose()
 
     def test_01_concurrent_startup_is_idempotent(self) -> None:
+        with self.engine.begin() as connection:
+            connection.exec_driver_sql(
+                "CREATE TABLE collection_channels_decoy (value integer, "
+                "CONSTRAINT ck_collection_channels_adapter_type CHECK (value > 0), "
+                "CONSTRAINT ck_collection_channels_dynamic_protocol CHECK (value > 0))"
+            )
+            connection.exec_driver_sql(
+                "CREATE FUNCTION decoy_collection_channel_guard() RETURNS trigger AS $$ "
+                "BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql"
+            )
+            connection.exec_driver_sql(
+                "CREATE TRIGGER collection_channel_identity_guard BEFORE UPDATE "
+                "ON collection_channels_decoy FOR EACH ROW EXECUTE FUNCTION decoy_collection_channel_guard()"
+            )
+
         def initialize(_: int) -> None:
             ChannelRepository(self.engine).ensure_catalog()
 
@@ -307,10 +324,19 @@ class CollectionChannelPostgresIntegrationTest(unittest.TestCase):
             trigger_count = connection.execute(
                 text(
                     "SELECT count(*) FROM pg_trigger "
-                    "WHERE tgname = 'collection_channel_identity_guard' AND NOT tgisinternal"
+                    "WHERE tgname = 'collection_channel_identity_guard' AND NOT tgisinternal "
+                    "AND tgrelid = 'collection_channels'::regclass"
+                )
+            ).scalar_one()
+            constraint_count = connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_constraint WHERE conrelid = 'collection_channels'::regclass "
+                    "AND conname IN ('ck_collection_channels_adapter_type', "
+                    "'ck_collection_channels_dynamic_protocol')"
                 )
             ).scalar_one()
         self.assertEqual(trigger_count, 1)
+        self.assertEqual(constraint_count, 2)
 
     def test_02_postgres_enforces_identity_protocol_and_ranges(self) -> None:
         with self.assertRaises(DBAPIError):
@@ -321,28 +347,36 @@ class CollectionChannelPostgresIntegrationTest(unittest.TestCase):
             with self.engine.begin() as connection:
                 connection.execute(text("UPDATE collection_channels SET code = 'renamed' WHERE code = 'bocha'"))
 
-        invalid_values = {
-            "code": "invalid-dynamic-api",
+        base: dict[str, object] = {
             "name": "Invalid",
-            "ownership_type": "dynamic",
+            "ownership_type": "fixed",
             "channel_type": "api",
             "adapter_key": "cls",
             "endpoint": "https://example.com/api",
-            "priority": 0,
-            "default_source_level": "INVALID",
+            "priority": 1,
+            "timeout_seconds": 30,
+            "max_results": 10,
+            "default_source_level": "L3_MEDIA",
         }
-        with self.assertRaises(IntegrityError):
-            with self.engine.begin() as connection:
-                connection.execute(
-                    text(
-                        "INSERT INTO collection_channels "
-                        "(code,name,ownership_type,channel_type,adapter_key,enabled,endpoint,config,priority,"
-                        "timeout_seconds,max_results,default_source_level,created_at,updated_at) VALUES "
-                        "(:code,:name,:ownership_type,:channel_type,:adapter_key,false,:endpoint,'{}',:priority,"
-                        "30,10,:default_source_level,now(),now())"
-                    ),
-                    invalid_values,
-                )
+        invalid_cases: dict[str, dict[str, object]] = {
+            "dynamic-protocol": {"ownership_type": "dynamic"},
+            "adapter-type": {"adapter_key": "bocha"},
+            "priority": {"priority": 0},
+            "timeout": {"timeout_seconds": 0},
+            "max-results": {"max_results": 0},
+            "source-level": {"default_source_level": "INVALID"},
+        }
+        statement = text(
+            "INSERT INTO collection_channels "
+            "(code,name,ownership_type,channel_type,adapter_key,enabled,endpoint,config,priority,"
+            "timeout_seconds,max_results,default_source_level,created_at,updated_at) VALUES "
+            "(:code,:name,:ownership_type,:channel_type,:adapter_key,false,:endpoint,'{}',:priority,"
+            ":timeout_seconds,:max_results,:default_source_level,now(),now())"
+        )
+        for code, changes in invalid_cases.items():
+            with self.subTest(code=code), self.assertRaises(IntegrityError):
+                with self.engine.begin() as connection:
+                    connection.execute(statement, {**base, **changes, "code": f"invalid-{code}"})
 
     def test_03_postgres_allows_only_one_enabled_web_search(self) -> None:
         repository = ChannelRepository(self.engine)
