@@ -14,7 +14,7 @@ from agno.workflow.step import Step, StepInput, StepOutput
 from agno.workflow.workflow import Workflow
 from sqlalchemy import create_engine, text
 
-from app.schedules import RAW_COLLECTION_SCHEDULE_NAME, env_flag
+from app.schedules import EVIDENCE_EXTRACTION_SCHEDULE_NAME, RAW_COLLECTION_SCHEDULE_NAME, env_flag
 from db import db_url, get_postgres_db
 
 
@@ -75,17 +75,27 @@ def _check_runtime() -> CheckResult:
     return _warn("Runtime", f"Unexpected RUNTIME_ENV={runtime_env!r}; expected 'dev' or 'prd'.")
 
 
-def _check_agentos_url() -> CheckResult:
+def _check_external_url() -> CheckResult:
     runtime_env = getenv("RUNTIME_ENV", "prd")
-    agentos_url = getenv("AGENTOS_URL", "http://127.0.0.1:8000")
+    agentos_url = getenv("AGENTOS_EXTERNAL_URL", "http://127.0.0.1:8000")
     parsed = urlparse(agentos_url)
     if not parsed.scheme or not parsed.netloc:
-        return _fail("AgentOS URL", f"AGENTOS_URL is not a valid absolute URL: {agentos_url!r}.")
+        return _fail("External URL", f"AGENTOS_EXTERNAL_URL is not a valid absolute URL: {agentos_url!r}.")
 
     localhost_names = {"127.0.0.1", "localhost", "0.0.0.0"}
     if runtime_env == "prd" and parsed.hostname in localhost_names:
-        return _fail("AgentOS URL", "Production scheduler cannot reach AgentOS at a localhost URL.")
-    return _pass("AgentOS URL", f"Scheduler base URL is {agentos_url}.")
+        return _fail("External URL", "Production AgentOS requires a non-local external URL.")
+    return _pass("External URL", f"Remote clients use {agentos_url}.")
+
+
+def _check_internal_url() -> CheckResult:
+    internal_url = getenv("AGENTOS_INTERNAL_URL", "http://127.0.0.1:8000")
+    parsed = urlparse(internal_url)
+    if not parsed.scheme or not parsed.netloc:
+        return _fail("Internal URL", f"AGENTOS_INTERNAL_URL is not a valid absolute URL: {internal_url!r}.")
+    if parsed.hostname not in {"127.0.0.1", "localhost"}:
+        return _warn("Internal URL", f"Scheduler callbacks leave the container through {internal_url}.")
+    return _pass("Internal URL", f"Scheduler callbacks stay on {internal_url}.")
 
 
 async def _check_mcp() -> CheckResult:
@@ -94,7 +104,7 @@ async def _check_mcp() -> CheckResult:
 
     Async on purpose: the workflow runs in-process, so a blocking self-request would
     deadlock the event loop that has to serve it."""
-    mcp_url = getenv("AGENTOS_URL", "http://127.0.0.1:8000").rstrip("/") + "/mcp"
+    mcp_url = getenv("AGENTOS_INTERNAL_URL", "http://127.0.0.1:8000").rstrip("/") + "/mcp"
     payload = {
         "jsonrpc": "2.0",
         "id": 1,
@@ -162,15 +172,15 @@ def _check_schedules() -> CheckResult:
     try:
         deploy_state, _deploy_enabled = state("deployment-check")
         collection_state, collection_enabled = state(RAW_COLLECTION_SCHEDULE_NAME)
+        evidence_state, evidence_enabled = state(EVIDENCE_EXTRACTION_SCHEDULE_NAME)
     except Exception as exc:
         return _warn("Schedule", f"Could not read schedules from the database: {exc}")
 
-    detail = f"{deploy_state}; {collection_state}."
-    if collection_enabled is not True:
+    detail = f"{deploy_state}; {collection_state}; {evidence_state}."
+    if collection_enabled is not True or evidence_enabled is not True:
         return _warn(
             "Schedule",
-            f"{detail} Restart the API if the hourly collection schedule is missing; "
-            "enable it from the AgentOS UI if it was paused.",
+            f"{detail} Restart the API if a business schedule is missing; enable it from the AgentOS UI if paused.",
         )
     if "not registered" in deploy_state and env_flag("ENABLE_DEPLOY_CHECK", default=True):
         return _warn("Schedule", f"{detail} If the Database check passed, restart the API to register it.")
@@ -197,7 +207,8 @@ async def deployment_check_step(_step_input: StepInput) -> StepOutput:
     checks = [
         _check_database(),
         _check_runtime(),
-        _check_agentos_url(),
+        _check_external_url(),
+        _check_internal_url(),
         await _check_mcp(),
         _check_slack_config(),
         _check_components(),

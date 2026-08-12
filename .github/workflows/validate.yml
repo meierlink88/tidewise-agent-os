@@ -40,3 +40,14 @@ jobs:
 
       - name: Validate (lint + type)
         run: uv run bash scripts/validate.sh
+
+      - name: Run unit tests
+        run: uv run python -m unittest
+
+      - name: Validate UAT deployment contracts
+        run: |
+          bash -n infra/uat/bootstrap-ecs.sh infra/uat/preflight.sh infra/uat/deploy.sh infra/uat/collect-diagnostics.sh
+          docker compose --env-file infra/uat/.env.example -f infra/uat/docker-compose.yaml config --quiet
+
+      - name: Build the immutable runtime image
+        run: docker build -t tidewise-agent-os:ci .

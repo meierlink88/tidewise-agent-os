@@ -26,7 +26,8 @@ services:
       RUNTIME_ENV: dev
       AGNO_DEBUG: "True"
       WAIT_FOR_DB: "True"
-      AGENTOS_URL: http://127.0.0.1:8000
+      AGENTOS_EXTERNAL_URL: http://127.0.0.1:8000
+      AGENTOS_INTERNAL_URL: http://127.0.0.1:8000
       DB_HOST: postgres
       DB_PORT: 5432
       DATA_SERVICE_BASE_URL: ${DATA_SERVICE_BASE_URL:-http://data:9011}

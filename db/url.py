@@ -15,8 +15,12 @@ def build_db_url() -> str:
     host = getenv("DB_HOST", "localhost")
     port = getenv("DB_PORT", "5432")
     database = getenv("DB_DATABASE", "ai")
+    sslmode = getenv("DB_SSLMODE", "").strip()
 
-    return f"{driver}://{user}:{password}@{host}:{port}/{database}"
+    url = f"{driver}://{user}:{password}@{host}:{port}/{database}"
+    if sslmode:
+        url += f"?sslmode={quote(sslmode, safe='')}"
+    return url
 
 
 db_url = build_db_url()
