@@ -21,6 +21,8 @@ The UAT port contract lives in `docker-compose.yaml`: Uvicorn listens on `9081`,
 `https://tideai.tripwise.cn/agentos`; `AGENTOS_INTERNAL_URL` remains `http://127.0.0.1:9081` for Scheduler callbacks.
 The same Nginx snippet also routes the RFC 9728 protected-resource and RFC 8414 authorization-server discovery URLs
 derived from the `/agentos/mcp` resource and `/agentos` issuer.
+Deployment checks resolve that public hostname to `127.0.0.1` on the ECS so they exercise local Nginx with normal TLS
+SNI and certificate verification without depending on unsupported public-IP NAT hairpin behavior.
 
 ## Security boundary
 

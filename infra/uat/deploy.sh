@@ -8,6 +8,7 @@ candidate_images="${CANDIDATE_IMAGES:?CANDIDATE_IMAGES is required}"
 candidate_compose="${COMPOSE_FILE:?COMPOSE_FILE is required}"
 release_sha="${RELEASE_SHA:?RELEASE_SHA is required}"
 external_url="${AGENTOS_EXTERNAL_URL:?AGENTOS_EXTERNAL_URL is required}"
+external_hostname="$(python3 -c 'from sys import argv; from urllib.parse import urlparse; print(urlparse(argv[1]).hostname)' "$external_url")"
 state_dir="${deployment_root}/state"
 current_runtime="${deployment_root}/runtime.env"
 current_images="${state_dir}/current.images.env"
@@ -41,9 +42,11 @@ verify_release() {
   compose_for "$runtime" "$images" "$compose_file" exec -T agentos \
     curl -fsS http://127.0.0.1:9081/health >/dev/null
   external_status="$(curl --silent --show-error --connect-timeout 5 --max-time 20 \
+    --resolve "${external_hostname}:443:127.0.0.1" \
     --output /dev/null --write-out '%{http_code}' "${external_url%/}/health")"
   [ "$external_status" = 200 ] || { echo "FAIL external-health: HTTP ${external_status}" >&2; return 1; }
   auth_status="$(curl --silent --show-error --connect-timeout 5 --max-time 20 \
+    --resolve "${external_hostname}:443:127.0.0.1" \
     --output /dev/null --write-out '%{http_code}' "${external_url%/}/agents")"
   case "$auth_status" in
     401|403) ;;
