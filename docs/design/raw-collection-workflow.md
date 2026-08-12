@@ -7,17 +7,18 @@ Workflow Functions build and publish immutable Artifacts:
 
 ```text
 CollectionRequest
-  -> agentic-collect
-       -> web_fetch  -> one enabled Web Search channel
-       -> api_fetch  -> all enabled API channels, bounded concurrent
-       -> rss_fetch  -> all enabled RSS/Atom channels, bounded concurrent
+  -> agentic-collect                 -> CollectionQueryPlan only
+  -> execute-collection-channels
+       -> web_fetch implementation   -> one enabled Web Search channel
+       -> api_fetch implementation   -> all enabled API channels, bounded concurrent
+       -> rss_fetch implementation   -> all enabled RSS/Atom channels, bounded concurrent
   -> build-artifact-set
   -> publish-collection
   -> CollectionResult
 ```
 
-Complete provider results go directly to the run-scoped Collection Buffer. The model receives only compact receipts
-and never reconstructs source content.
+The Workflow freezes an immutable enabled-channel snapshot before the Agent plans the query. Complete provider results
+go directly to the run-scoped Collection Buffer; the model never receives or reconstructs source content.
 
 ## Channel catalog
 
@@ -59,7 +60,8 @@ contains a matching domain; otherwise they inherit the channel default.
 ## Time contract
 
 The Agent derives one integer `lookback_hours` from the objective, defaulting to 48. The Workflow captures one UTC
-`collector_cutoff` before model execution. All three Tools internally derive:
+`collector_cutoff` before model execution. The deterministic acquisition Function invokes all three shared
+implementations with the same plan and derives:
 
 ```text
 published_before = collector_cutoff
@@ -72,7 +74,7 @@ their protocol supports it; deterministic Artifact construction always enforces 
 ## Prompt and runtime ownership
 
 - Collector business instructions remain a published Agno Studio component in PostgreSQL.
-- Code owns the Tool list, runtime contract, model wiring, Tool budget, adapters, catalog and Artifact invariants.
+- Code owns the query-plan schema, runtime contract, model wiring, adapters, catalog and Artifact invariants.
 - A runtime contract migration may publish a new component version while preserving operator-managed Instructions
   byte-for-byte. Obsolete provider-specific Tool instructions are superseded through code-owned additional context.
 - Raw Collection Workflow graph versions remain Studio-managed; Python Function executors remain Git-managed.
@@ -80,7 +82,7 @@ their protocol supports it; deterministic Artifact construction always enforces 
 ## Invariants
 
 - The Agno Workflow Run ID is the only collection identity.
-- Every Tool in one run uses the same cutoff and requested lookback.
+- Every acquisition façade in one run uses the same frozen channel snapshot, cutoff and requested lookback.
 - `web_fetch` fails closed if the catalog exposes more than one enabled Web Search row.
 - `api_fetch` and `rss_fetch` execute enabled channels in stable priority/code order with bounded concurrency.
 - One provider failure does not discard successful sibling results; raw provider errors and keys never enter receipts or
@@ -96,8 +98,8 @@ their protocol supports it; deterministic Artifact construction always enforces 
 
 - Missing provenance, cutoff, invalid query, or invalid lookback produces a stable safe Tool error and no write.
 - Missing Adapter, provider timeout, invalid response, or request failure is isolated to that channel.
-- A façade with no enabled channels returns `no_channels` so the Agent can continue the remaining façades.
-- If no Tool Batch exists after Agent execution, Artifact construction fails rather than publishing false success.
+- A façade with no enabled channels returns `no_channels`; sibling façades still execute.
+- If no Tool Batch exists after deterministic acquisition, Artifact construction fails rather than publishing false success.
 - Build failure leaves the final tree unchanged; publication is idempotent for immutable matching files.
 - Workflow steps use no hidden retries and fail on deterministic Function errors.
 

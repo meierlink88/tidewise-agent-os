@@ -1,4 +1,4 @@
-"""Agent-facing RSS/Atom Tool façade."""
+"""RSS/Atom Tool façade."""
 
 from agno.run import RunContext
 

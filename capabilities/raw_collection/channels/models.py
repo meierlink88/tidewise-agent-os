@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 from capabilities.raw_collection.models import SourceLevel
 
@@ -20,6 +20,29 @@ class ChannelType(StrEnum):
     RSS = "rss"
 
 
+class AdapterKey(StrEnum):
+    BOCHA = "bocha"
+    TAVILY = "tavily"
+    PARALLEL = "parallel"
+    CLS = "cls"
+    EASTMONEY_FAST = "eastmoney_fast"
+    EASTMONEY_STOCK = "eastmoney_stock"
+    STCN = "stcn"
+    GENERIC_RSS = "generic_rss"
+
+
+_ADAPTER_CHANNEL_TYPES = {
+    AdapterKey.BOCHA: ChannelType.WEB_SEARCH,
+    AdapterKey.TAVILY: ChannelType.WEB_SEARCH,
+    AdapterKey.PARALLEL: ChannelType.WEB_SEARCH,
+    AdapterKey.CLS: ChannelType.API,
+    AdapterKey.EASTMONEY_FAST: ChannelType.API,
+    AdapterKey.EASTMONEY_STOCK: ChannelType.API,
+    AdapterKey.STCN: ChannelType.API,
+    AdapterKey.GENERIC_RSS: ChannelType.RSS,
+}
+
+
 class CollectionChannel(BaseModel):
     """One executable channel instance loaded from PostgreSQL."""
 
@@ -29,7 +52,7 @@ class CollectionChannel(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     ownership_type: OwnershipType
     channel_type: ChannelType
-    adapter_key: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    adapter_key: AdapterKey
     enabled: bool
     endpoint: HttpUrl
     app_key: str | None = None
@@ -40,6 +63,16 @@ class CollectionChannel(BaseModel):
     default_source_level: SourceLevel
     created_at: datetime
     updated_at: datetime
+
+    @model_validator(mode="after")
+    def validate_protocol(self) -> "CollectionChannel":
+        if _ADAPTER_CHANNEL_TYPES[self.adapter_key] != self.channel_type:
+            raise ValueError("adapter_key is incompatible with channel_type")
+        if self.ownership_type == OwnershipType.DYNAMIC and (
+            self.channel_type != ChannelType.RSS or self.adapter_key != AdapterKey.GENERIC_RSS
+        ):
+            raise ValueError("dynamic channels must use the generic RSS/Atom protocol")
+        return self
 
 
 class ChannelCatalog(Protocol):

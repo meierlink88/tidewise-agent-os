@@ -39,6 +39,22 @@ class CollectionRequest(BaseModel):
         return self
 
 
+class CollectionQueryPlan(BaseModel):
+    """Strict semantic plan returned by the Collector Agent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1, max_length=512)
+    lookback_hours: int = Field(default=48, ge=1, le=8760)
+
+    @model_validator(mode="after")
+    def normalize_query(self) -> "CollectionQueryPlan":
+        self.query = self.query.strip()
+        if not self.query:
+            raise ValueError("query must not be blank")
+        return self
+
+
 class Candidate(BaseModel):
     """One direct result returned by a channel tool."""
 

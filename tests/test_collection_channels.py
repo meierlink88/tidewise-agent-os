@@ -5,13 +5,16 @@ import json
 import os
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import ClassVar, cast
 from unittest.mock import AsyncMock, patch
 
 from agno.run import RunContext
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from capabilities.raw_collection.adapters.base import FetchRequest
 from capabilities.raw_collection.adapters.registry import ADAPTERS
@@ -155,6 +158,13 @@ class CollectionChannelToolTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(json.loads(response), {"tool": "web_fetch", "error": "invalid_channel_catalog"})
 
+    async def test_fetch_returns_no_channels_without_writing_a_batch(self) -> None:
+        response = await rss_fetch("政治经济", self._context([], {}, "run-no-rss"), 48)
+
+        receipt = FetchReceipt.model_validate_json(response)
+        self.assertEqual(receipt.outcome, "no_channels")
+        self.assertEqual(receipt.channels, [])
+
     async def test_api_fetch_runs_all_channels_concurrently_and_isolates_failure(self) -> None:
         channels = [
             _channel("cls_telegraph", ChannelType.API, "cls", priority=1),
@@ -179,6 +189,25 @@ class CollectionChannelToolTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.outcome for item in receipt.channels], ["succeeded", "failed"])
         self.assertEqual(receipt.channels[1].error_code, "request_failed")
         self.assertNotIn("provider secret", response)
+
+    async def test_api_fetch_respects_the_configured_concurrency_bound(self) -> None:
+        channels = [
+            _channel("first-api", ChannelType.API, "cls"),
+            _channel("second-api", ChannelType.API, "eastmoney_fast"),
+        ]
+        context = self._context(
+            channels,
+            {"cls": _Adapter(delay=0.04), "eastmoney_fast": _Adapter(delay=0.04)},
+            "run-bound",
+        )
+
+        with patch.dict(os.environ, {"COLLECTOR_CHANNEL_CONCURRENCY": "1"}):
+            started = asyncio.get_running_loop().time()
+            response = await api_fetch("产业政策", context, 48)
+            elapsed = asyncio.get_running_loop().time() - started
+
+        self.assertEqual(FetchReceipt.model_validate_json(response).outcome, "succeeded")
+        self.assertGreaterEqual(elapsed, 0.075)
 
     async def test_rss_fetch_uses_one_generic_adapter_for_dynamic_channels(self) -> None:
         channels = [
@@ -248,6 +277,77 @@ class CollectionChannelRepositoryTest(unittest.TestCase):
     def test_only_one_web_search_channel_can_be_enabled(self) -> None:
         with self.assertRaisesRegex(ValueError, "only one web_search channel may be enabled"):
             self.repository.update_channel("tavily", enabled=True)
+
+
+@unittest.skipUnless(os.getenv("TEST_POSTGRES_URL"), "TEST_POSTGRES_URL is required for PostgreSQL integration")
+class CollectionChannelPostgresIntegrationTest(unittest.TestCase):
+    engine: ClassVar[Engine]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.engine = create_engine(os.environ["TEST_POSTGRES_URL"], pool_pre_ping=True)
+        with cls.engine.begin() as connection:
+            connection.exec_driver_sql("DROP TABLE IF EXISTS collection_channels CASCADE")
+            connection.exec_driver_sql("DROP FUNCTION IF EXISTS guard_collection_channel_identity() CASCADE")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.engine.dispose()
+
+    def test_01_concurrent_startup_is_idempotent(self) -> None:
+        def initialize(_: int) -> None:
+            ChannelRepository(self.engine).ensure_catalog()
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            list(executor.map(initialize, range(8)))
+
+        repository = ChannelRepository(self.engine)
+        self.assertEqual(len(repository.list_all()), 7)
+        with self.engine.connect() as connection:
+            trigger_count = connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_trigger "
+                    "WHERE tgname = 'collection_channel_identity_guard' AND NOT tgisinternal"
+                )
+            ).scalar_one()
+        self.assertEqual(trigger_count, 1)
+
+    def test_02_postgres_enforces_identity_protocol_and_ranges(self) -> None:
+        with self.assertRaises(DBAPIError):
+            with self.engine.begin() as connection:
+                connection.execute(text("DELETE FROM collection_channels WHERE code = 'bocha'"))
+
+        with self.assertRaises(DBAPIError):
+            with self.engine.begin() as connection:
+                connection.execute(text("UPDATE collection_channels SET code = 'renamed' WHERE code = 'bocha'"))
+
+        invalid_values = {
+            "code": "invalid-dynamic-api",
+            "name": "Invalid",
+            "ownership_type": "dynamic",
+            "channel_type": "api",
+            "adapter_key": "cls",
+            "endpoint": "https://example.com/api",
+            "priority": 0,
+            "default_source_level": "INVALID",
+        }
+        with self.assertRaises(IntegrityError):
+            with self.engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO collection_channels "
+                        "(code,name,ownership_type,channel_type,adapter_key,enabled,endpoint,config,priority,"
+                        "timeout_seconds,max_results,default_source_level,created_at,updated_at) VALUES "
+                        "(:code,:name,:ownership_type,:channel_type,:adapter_key,false,:endpoint,'{}',:priority,"
+                        "30,10,:default_source_level,now(),now())"
+                    ),
+                    invalid_values,
+                )
+
+    def test_03_postgres_allows_only_one_enabled_web_search(self) -> None:
+        repository = ChannelRepository(self.engine)
+        with self.assertRaisesRegex(ValueError, "only one web_search"):
+            repository.update_channel("tavily", enabled=True)
 
 
 class CollectionAdapterContractTest(unittest.IsolatedAsyncioTestCase):

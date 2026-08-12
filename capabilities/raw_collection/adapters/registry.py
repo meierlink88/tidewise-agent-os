@@ -9,14 +9,15 @@ from capabilities.raw_collection.adapters.api import (
 )
 from capabilities.raw_collection.adapters.rss import GenericRssAdapter
 from capabilities.raw_collection.adapters.web_search import BochaAdapter, ParallelAdapter, TavilyAdapter
+from capabilities.raw_collection.channels import AdapterKey
 
-ADAPTERS: dict[str, ChannelAdapter] = {
-    "bocha": BochaAdapter(),
-    "tavily": TavilyAdapter(),
-    "parallel": ParallelAdapter(),
-    "cls": ClsAdapter(),
-    "eastmoney_fast": EastmoneyFastAdapter(),
-    "eastmoney_stock": EastmoneyStockAdapter(),
-    "stcn": StcnAdapter(),
-    "generic_rss": GenericRssAdapter(),
+ADAPTERS: dict[AdapterKey, ChannelAdapter] = {
+    AdapterKey.BOCHA: BochaAdapter(),
+    AdapterKey.TAVILY: TavilyAdapter(),
+    AdapterKey.PARALLEL: ParallelAdapter(),
+    AdapterKey.CLS: ClsAdapter(),
+    AdapterKey.EASTMONEY_FAST: EastmoneyFastAdapter(),
+    AdapterKey.EASTMONEY_STOCK: EastmoneyStockAdapter(),
+    AdapterKey.STCN: StcnAdapter(),
+    AdapterKey.GENERIC_RSS: GenericRssAdapter(),
 }

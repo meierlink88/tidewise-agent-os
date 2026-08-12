@@ -1,4 +1,4 @@
-"""Agent-facing structured API Tool façade."""
+"""Structured API Tool façade."""
 
 from agno.run import RunContext
 

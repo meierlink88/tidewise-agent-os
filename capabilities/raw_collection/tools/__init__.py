@@ -1,4 +1,4 @@
-"""Stable Tool façades exposed to the Collector Agent."""
+"""Stable collection Tool façades exposed through the AgentOS Registry."""
 
 from typing import Any
 

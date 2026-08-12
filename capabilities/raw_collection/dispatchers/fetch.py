@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from capabilities.raw_collection.adapters import ChannelAdapter, FetchRequest
-from capabilities.raw_collection.channels.models import CollectionChannel
+from capabilities.raw_collection.channels.models import AdapterKey, CollectionChannel
 from capabilities.raw_collection.models import Candidate
 
 
@@ -19,7 +19,7 @@ class ChannelFetchResult:
 
 async def dispatch_channels(
     channels: list[CollectionChannel],
-    adapters: Mapping[str, ChannelAdapter],
+    adapters: Mapping[AdapterKey, ChannelAdapter],
     request: FetchRequest,
 ) -> list[ChannelFetchResult]:
     """Execute every channel in stable order while isolating provider failures."""

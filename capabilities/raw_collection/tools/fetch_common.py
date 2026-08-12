@@ -1,4 +1,4 @@
-"""Shared implementation behind the three Agent-facing collection Tools."""
+"""Shared acquisition implementation exposed as Tools and invoked by the deterministic Workflow Function."""
 
 import asyncio
 import json
@@ -10,7 +10,7 @@ from typing import cast
 from agno.run import RunContext
 
 from capabilities.raw_collection.adapters import ChannelAdapter, FetchRequest
-from capabilities.raw_collection.channels import ChannelCatalog, ChannelType
+from capabilities.raw_collection.channels import AdapterKey, ChannelCatalog, ChannelType, CollectionChannel
 from capabilities.raw_collection.dispatchers import dispatch_channels
 from capabilities.raw_collection.models import ChannelFetchReceipt, FetchReceipt, ToolBatchReceipt
 from capabilities.raw_collection.tools.persistence import persist_candidates_async
@@ -43,15 +43,19 @@ def _catalog(run_context: RunContext) -> ChannelCatalog:
     injected = _dependencies(run_context).get("collection_channel_catalog")
     if injected is not None:
         return cast(ChannelCatalog, injected)
-    from capabilities.raw_collection.channels.repository import get_channel_repository
+    from capabilities.raw_collection.channels.snapshot import list_snapshot_channels
 
-    return get_channel_repository()
+    class SnapshotCatalog:
+        def list_enabled(self, channel_type: ChannelType) -> list[CollectionChannel]:
+            return list_snapshot_channels(run_context.run_id, channel_type)
+
+    return SnapshotCatalog()
 
 
-def _adapters(run_context: RunContext) -> Mapping[str, ChannelAdapter]:
+def _adapters(run_context: RunContext) -> Mapping[AdapterKey, ChannelAdapter]:
     injected = _dependencies(run_context).get("collection_adapter_registry")
     if injected is not None:
-        return cast(Mapping[str, ChannelAdapter], injected)
+        return cast(Mapping[AdapterKey, ChannelAdapter], injected)
     from capabilities.raw_collection.adapters.registry import ADAPTERS
 
     return ADAPTERS

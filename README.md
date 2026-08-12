@@ -51,10 +51,10 @@ docker compose rm -f agentos
 
 `raw-collector` 首次启动时由 `agents/raw_collector.seed.md` 创建 Studio 发布版本。之后在 AgentOS
 Control Plane 的 Studio 中编辑并发布 Instructions；`raw-collection` 每次运行从 PostgreSQL
-加载当前发布版，无需重启容器。提示词中的相对时间约束由 Agent 换算为 `lookback_hours`；
-三个采集 Tool 使用同一个 Workflow 截止时间，在内部生成并验证准确起止时间。
+加载当前发布版，无需重启容器。Agent 只把提示词的语义目标规划为 `query`
+与 `lookback_hours`；Workflow 冻结本次通道快照，并使用同一截止时间确定性并行执行三类采集能力。
 
-`raw-collection` 首次启动时也会创建一个 Studio 发布版本。三步 Workflow 编排可在 Studio
+`raw-collection` 首次启动时也会创建一个 Studio 发布版本。四步 Workflow 编排可在 Studio
 中创建新版本并发布；步骤使用的 Agent 工具和自定义 Function 实现在 Git 中维护。共享采集
 实现集中在 `capabilities/raw_collection/`，不属于 Agent 或 Workflow 的私有代码。
 采集 Workflow Executor 使用 Agno 异步运行接口，所有外部通道使用异步 HTTP；Tool Batch、
@@ -74,7 +74,8 @@ Agent 或 Workflow。
 
 `data/` 已被 Git 忽略。可通过 `.env` 的 `COLLECTOR_DATA_DIR` 替换宿主机目录。
 
-采集 Agent 只调用 `web_fetch`、`api_fetch`、`rss_fetch` 三个稳定 Tool。通道实例保存在 AgentOS
+采集 Agent 不负责调用通道，只输出严格查询计划。Workflow 的确定性 Function 每次各执行一次
+`web_fetch`、`api_fetch`、`rss_fetch` 共享实现。三个 Tool 门面仍在 Registry 中可见，用于独立验证。通道实例保存在 AgentOS
 PostgreSQL 的 `collection_channels` 表：Web Search 最多启用一个，API 与 RSS 会有界并发执行全部
 启用通道。固定通道不可删除但可以禁用；动态 RSS/Atom 通道使用 `generic_rss` Adapter，可直接
 新增和删除。`priority=1` 表示最高优先级。

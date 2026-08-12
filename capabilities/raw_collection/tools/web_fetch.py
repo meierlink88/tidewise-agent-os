@@ -1,4 +1,4 @@
-"""Agent-facing Web Search Tool façade."""
+"""Web Search Tool façade."""
 
 from agno.run import RunContext
 

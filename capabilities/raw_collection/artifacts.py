@@ -146,6 +146,10 @@ def build_artifact_set(
     if not batches:
         raise ValueError("collection Agent completed without any Tool Batch")
 
+    windows = {(batch.requested_after, batch.requested_before) for batch in batches}
+    if len(windows) != 1:
+        raise ValueError("Tool Batches disagree on collection time window")
+
     provenance = {
         (batch.agent_component_id, batch.agent_config_version, batch.instructions_sha256) for batch in batches
     }

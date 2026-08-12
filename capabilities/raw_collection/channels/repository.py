@@ -23,10 +23,10 @@ from sqlalchemy import (
     select,
     update,
 )
-from sqlalchemy.engine import Engine, RowMapping
+from sqlalchemy.engine import Connection, Engine, RowMapping
 from sqlalchemy.exc import IntegrityError
 
-from capabilities.raw_collection.channels.models import ChannelType, CollectionChannel, OwnershipType
+from capabilities.raw_collection.channels.models import AdapterKey, ChannelType, CollectionChannel, OwnershipType
 from capabilities.raw_collection.models import SourceLevel
 from db.url import db_url
 
@@ -64,6 +64,16 @@ _CHANNELS = Table(
         "default_source_level IN ('L1_OFFICIAL', 'L2_WIRE', 'L3_MEDIA', 'L4_SOCIAL')",
         name="ck_collection_channels_source_level",
     ),
+    CheckConstraint(
+        "(channel_type = 'web_search' AND adapter_key IN ('bocha', 'tavily', 'parallel')) OR "
+        "(channel_type = 'api' AND adapter_key IN ('cls', 'eastmoney_fast', 'eastmoney_stock', 'stcn')) OR "
+        "(channel_type = 'rss' AND adapter_key = 'generic_rss')",
+        name="ck_collection_channels_adapter_type",
+    ),
+    CheckConstraint(
+        "ownership_type = 'fixed' OR (channel_type = 'rss' AND adapter_key = 'generic_rss')",
+        name="ck_collection_channels_dynamic_protocol",
+    ),
 )
 Index(
     "uq_collection_channels_one_enabled_web_search",
@@ -97,7 +107,7 @@ def _fixed_channel_values() -> list[dict[str, Any]]:
             "code": "bocha",
             "name": "博查",
             "channel_type": ChannelType.WEB_SEARCH.value,
-            "adapter_key": "bocha",
+            "adapter_key": AdapterKey.BOCHA.value,
             "enabled": True,
             "endpoint": _configured_endpoint("BOCHA_SEARCH_BASE_URL", "https://api.bochaai.com/v1/web-search"),
             "app_key": _configured_key("BOCHA_API_KEY"),
@@ -108,7 +118,7 @@ def _fixed_channel_values() -> list[dict[str, Any]]:
             "code": "tavily",
             "name": "Tavily",
             "channel_type": ChannelType.WEB_SEARCH.value,
-            "adapter_key": "tavily",
+            "adapter_key": AdapterKey.TAVILY.value,
             "enabled": False,
             "endpoint": _configured_endpoint("TAVILY_SEARCH_BASE_URL", "https://api.tavily.com/search"),
             "app_key": _configured_key("TAVILY_API_KEY"),
@@ -119,7 +129,7 @@ def _fixed_channel_values() -> list[dict[str, Any]]:
             "code": "parallel_search",
             "name": "Parallel Search",
             "channel_type": ChannelType.WEB_SEARCH.value,
-            "adapter_key": "parallel",
+            "adapter_key": AdapterKey.PARALLEL.value,
             "enabled": False,
             "endpoint": _configured_endpoint("PARALLEL_SEARCH_BASE_URL", "https://api.parallel.ai/v1/search"),
             "app_key": _configured_key("PARALLEL_API_KEY"),
@@ -130,7 +140,7 @@ def _fixed_channel_values() -> list[dict[str, Any]]:
             "code": "cls_telegraph",
             "name": "财联社电报",
             "channel_type": ChannelType.API.value,
-            "adapter_key": "cls",
+            "adapter_key": AdapterKey.CLS.value,
             "enabled": True,
             "endpoint": _configured_endpoint("CLS_TELEGRAPH_BASE_URL", "https://www.cls.cn/v1/roll/get_roll_list"),
             "app_key": None,
@@ -141,7 +151,7 @@ def _fixed_channel_values() -> list[dict[str, Any]]:
             "code": "eastmoney_fastnews",
             "name": "东方财富 7x24",
             "channel_type": ChannelType.API.value,
-            "adapter_key": "eastmoney_fast",
+            "adapter_key": AdapterKey.EASTMONEY_FAST.value,
             "enabled": True,
             "endpoint": _configured_endpoint(
                 "EASTMONEY_FAST_NEWS_BASE_URL",
@@ -155,7 +165,7 @@ def _fixed_channel_values() -> list[dict[str, Any]]:
             "code": "eastmoney_stock_news",
             "name": "东方财富个股新闻",
             "channel_type": ChannelType.API.value,
-            "adapter_key": "eastmoney_stock",
+            "adapter_key": AdapterKey.EASTMONEY_STOCK.value,
             "enabled": True,
             "endpoint": _configured_endpoint(
                 "EASTMONEY_STOCK_NEWS_BASE_URL",
@@ -169,7 +179,7 @@ def _fixed_channel_values() -> list[dict[str, Any]]:
             "code": "stcn_quicknews",
             "name": "证券时报快讯",
             "channel_type": ChannelType.API.value,
-            "adapter_key": "stcn",
+            "adapter_key": AdapterKey.STCN.value,
             "enabled": True,
             "endpoint": _configured_endpoint("STCN_QUICK_NEWS_BASE_URL", "https://www.stcn.com/article/list.html"),
             "app_key": None,
@@ -194,6 +204,7 @@ def _record(channel: CollectionChannel) -> dict[str, Any]:
     values["endpoint"] = str(channel.endpoint)
     values["ownership_type"] = channel.ownership_type.value
     values["channel_type"] = channel.channel_type.value
+    values["adapter_key"] = channel.adapter_key.value
     values["default_source_level"] = channel.default_source_level.value
     return values
 
@@ -205,9 +216,13 @@ class ChannelRepository:
         self.engine = engine
 
     def ensure_catalog(self) -> None:
-        _METADATA.create_all(self.engine, tables=[_CHANNELS])
-        self._install_postgres_guards()
         with self.engine.begin() as connection:
+            if self.engine.dialect.name == "postgresql":
+                connection.exec_driver_sql(
+                    "SELECT pg_advisory_xact_lock(hashtext('tidewise_collection_channels_schema'))"
+                )
+            _METADATA.create_all(connection, tables=[_CHANNELS])
+            self._install_postgres_guards(connection)
             for values in _fixed_channel_values():
                 statement: Any
                 if self.engine.dialect.name == "postgresql":
@@ -229,13 +244,11 @@ class ChannelRepository:
                     statement = insert(_CHANNELS).values(**values)
                 connection.execute(statement)
 
-    def _install_postgres_guards(self) -> None:
+    def _install_postgres_guards(self, connection: Connection) -> None:
         if self.engine.dialect.name != "postgresql":
             return
-        with self.engine.begin() as connection:
-            connection.exec_driver_sql("SELECT pg_advisory_xact_lock(hashtext('tidewise_collection_channels_schema'))")
-            connection.exec_driver_sql(
-                """
+        connection.exec_driver_sql(
+            """
                 CREATE OR REPLACE FUNCTION guard_collection_channel_identity()
                 RETURNS trigger AS $$
                 BEGIN
@@ -259,9 +272,35 @@ class ChannelRepository:
                 END;
                 $$ LANGUAGE plpgsql
                 """
-            )
-            connection.exec_driver_sql(
+        )
+        connection.exec_driver_sql(
+            """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint WHERE conname = 'ck_collection_channels_adapter_type'
+                    ) THEN
+                        ALTER TABLE collection_channels ADD CONSTRAINT ck_collection_channels_adapter_type CHECK (
+                            (channel_type = 'web_search' AND adapter_key IN ('bocha', 'tavily', 'parallel')) OR
+                            (channel_type = 'api' AND adapter_key IN (
+                                'cls', 'eastmoney_fast', 'eastmoney_stock', 'stcn'
+                            )) OR
+                            (channel_type = 'rss' AND adapter_key = 'generic_rss')
+                        );
+                    END IF;
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint WHERE conname = 'ck_collection_channels_dynamic_protocol'
+                    ) THEN
+                        ALTER TABLE collection_channels ADD CONSTRAINT ck_collection_channels_dynamic_protocol CHECK (
+                            ownership_type = 'fixed' OR (channel_type = 'rss' AND adapter_key = 'generic_rss')
+                        );
+                    END IF;
+                END
+                $$
                 """
+        )
+        connection.exec_driver_sql(
+            """
                 DO $$
                 BEGIN
                     IF NOT EXISTS (
@@ -274,7 +313,7 @@ class ChannelRepository:
                 END
                 $$
                 """
-            )
+        )
 
     def list_all(self) -> list[CollectionChannel]:
         with self.engine.connect() as connection:
