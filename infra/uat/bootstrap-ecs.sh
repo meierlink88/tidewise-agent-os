@@ -64,6 +64,7 @@ if [ ! -f "$runner_root/.runner" ]; then
       --name "$runner_name" \
       --labels tidewise-agentos-uat-ecs \
       --unattended \
+      --disableupdate \
       --replace
   )
 fi
