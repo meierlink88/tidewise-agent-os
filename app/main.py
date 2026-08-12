@@ -25,8 +25,10 @@ from workflows.raw_collection import ensure_raw_collection_workflow
 # Environment
 # ---------------------------------------------------------------------------
 runtime_env = getenv("RUNTIME_ENV", "prd")
-# Used by the scheduler and the OAuth server when MCP OAuth is enabled.
-agentos_url = getenv("AGENTOS_URL", "http://127.0.0.1:8000")
+# The external URL is advertised to remote clients and OAuth. The internal URL
+# stays on loopback so Scheduler callbacks never leave the container.
+agentos_external_url = getenv("AGENTOS_EXTERNAL_URL", "http://127.0.0.1:8000")
+agentos_internal_url = getenv("AGENTOS_INTERNAL_URL", "http://127.0.0.1:8000")
 
 # ---------------------------------------------------------------------------
 # Interfaces
@@ -62,7 +64,7 @@ if MCP_CONNECT_SECRET:
     from agno.os import AgentOSBuiltinAuth
 
     mcp_auth = AgentOSBuiltinAuth(
-        url=agentos_url,
+        url=agentos_external_url,
         secret=MCP_CONNECT_SECRET,
         signing_key_material=getenv("AGENTOS_MCP_SIGNING_KEY"),
     )
@@ -96,7 +98,7 @@ agent_os = AgentOS(
     name="Tidewise AgentOS",
     tracing=True,
     scheduler=True,
-    scheduler_base_url=agentos_url,
+    scheduler_base_url=agentos_internal_url,
     authorization=runtime_env != "dev",
     mcp_server=True,
     mcp_auth=mcp_auth,

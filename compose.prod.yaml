@@ -9,5 +9,6 @@ services:
     environment:
       RUNTIME_ENV: prd
       AGNO_DEBUG: "False"
-      AGENTOS_URL: ${AGENTOS_URL:?Set AGENTOS_URL for production}
+      AGENTOS_EXTERNAL_URL: ${AGENTOS_EXTERNAL_URL:?Set AGENTOS_EXTERNAL_URL for production}
+      AGENTOS_INTERNAL_URL: ${AGENTOS_INTERNAL_URL:-http://127.0.0.1:8000}
       MCP_CONNECT_SECRET: ${MCP_CONNECT_SECRET:-}

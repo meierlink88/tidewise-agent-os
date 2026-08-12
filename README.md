@@ -101,3 +101,11 @@ source .venv/bin/activate
 - 先验证 `local-ping`，再验证模型 Agent，最后验证 MCP。
 
 详细初始化决策见 [docs/design/tidewise-agentos-initialization.md](docs/design/tidewise-agentos-initialization.md)。
+
+## UAT
+
+AgentOS 通过独立 GitHub Action 发布到与 Tidewise AI 共用的华为云 ECS。发布复用 SWR、RDS
+Instance 和外部 `tidewise-uat` Docker 网络，但使用独立的 `agent_os_uat` 数据库、Compose
+项目、持久化目录和回滚状态。UAT 服务端口在 Compose 中固定为 `9081`；部署只允许从
+`main` 手工触发，并使用镜像 digest。完整操作见
+[infra/uat/README.md](infra/uat/README.md)。

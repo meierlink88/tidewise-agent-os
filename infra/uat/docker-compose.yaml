@@ -1,0 +1,68 @@
+name: tidewise-agentos-uat
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  agentos:
+    image: ${AGENTOS_IMAGE:?AGENTOS_IMAGE is required}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 9081
+    user: "10002:10002"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "9081:9081"
+    volumes:
+      - ${AGENTOS_DATA_DIR:-/opt/tidewise/agentos-uat/data}:/app/data
+      - ${AGENTOS_JWKS_FILE:-/opt/tidewise/agentos-uat/jwt-jwks.json}:/run/secrets/agentos-jwks.json:ro
+    environment:
+      RUNTIME_ENV: prd
+      AGNO_DEBUG: "False"
+      WAIT_FOR_DB: "True"
+      AGENTOS_EXTERNAL_URL: ${AGENTOS_EXTERNAL_URL:?AGENTOS_EXTERNAL_URL is required}
+      AGENTOS_INTERNAL_URL: http://127.0.0.1:9081
+      DB_HOST: ${DB_HOST:?DB_HOST is required}
+      DB_PORT: "5432"
+      DB_USER: agent_os_uat_runtime
+      DB_PASS: ${DB_PASS:?DB_PASS is required}
+      DB_DATABASE: agent_os_uat
+      DB_DRIVER: postgresql+psycopg
+      DB_SSLMODE: require
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY is required}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_USE_THINKING: ${DEEPSEEK_USE_THINKING:-False}
+      DATA_SERVICE_BASE_URL: http://data:9011
+      DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:?DATA_SERVICE_TOKEN is required}
+      COLLECTOR_ARTIFACT_ROOT: /app/data/collector
+      EVIDENCE_ARTIFACT_ROOT: /app/data/evidence
+      PARALLEL_API_KEY: ${PARALLEL_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      BOCHA_API_KEY: ${BOCHA_API_KEY:-}
+      JWT_JWKS_FILE: /run/secrets/agentos-jwks.json
+      MCP_CONNECT_SECRET: ${MCP_CONNECT_SECRET:-}
+      AGENTOS_MCP_SIGNING_KEY: ${AGENTOS_MCP_SIGNING_KEY:-}
+      ENABLE_DEPLOY_CHECK: "False"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9081/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+    logging: *default-logging
+    networks: [tidewise-uat]
+
+networks:
+  tidewise-uat:
+    external: true
+    name: tidewise-uat
