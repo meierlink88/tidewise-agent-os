@@ -6,7 +6,7 @@ from agno.registry import Registry
 from agno.workflow import Loop, Step, Workflow
 
 from agents.evidence_extractor import load_evidence_extractor_agent
-from capabilities.evidence_extraction.functions import (
+from capabilities.evidence.functions import (
     prepare_raw_document,
     publish_evidences,
     validate_evidence_draft,

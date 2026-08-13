@@ -12,6 +12,7 @@
 AgentOS (app/main.py)
 ├── Tidewise Assistant (agents/tidewise_assistant.py)
 ├── Raw Collector       (Agno Studio/PostgreSQL component; seeded by agents/raw_collector.py)
+├── Title Curator       (Agno Studio/PostgreSQL component; seeded by agents/title_curator.py)
 ├── Evidence Extractor  (Agno Studio/PostgreSQL component; seeded by agents/evidence_extractor.py)
 ├── Local Ping         (workflows/local_ping.py)
 ├── Deployment Check   (workflows/deployment_check.py)
@@ -26,8 +27,8 @@ AgentOS (app/main.py)
 - `db/session.py`：复用共享 PostgreSQL 实例中的独立 `agent_os` 数据库。
 - `app/schedules.py`：幂等注册确定性部署检查。
 - `app/config.yaml`：组件描述和快捷提示。
-- `capabilities/raw_collection/`：Agent 与 Workflow 共用的采集合同、工具、Function、缓冲和 Artifact 实现。
-- `capabilities/evidence_extraction/`：Evidence Agent 输出合同、Workflow Function、checkpoint、Artifact 和 Data Service client。
+- `capabilities/collection/`：Collection 领域能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
+- `capabilities/evidence/`：Evidence 领域能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
 - `data/collector/`：本地原始采集 Artifact；目录受 Git 忽略。
 
 ## 本地 Docker 约束
@@ -50,7 +51,7 @@ AgentOS (app/main.py)
 
 ### Capability
 
-每项业务能力使用 `capabilities/<capability>/` 作为实现边界：`tools/` 只放供 Agent 自主调用的 Tool，`functions/` 只放供 Workflow 确定性调用的 Function，模型、合同和两者共享的内部实现放在能力根目录。`agents/` 只定义 Agent，`workflows/` 只定义 Workflow 编排、生命周期和 Studio seed；不得把业务 Function 实现直接写入 Workflow 文件。
+每项业务能力使用 `capabilities/<domain>/` 作为领域边界，且只有三类实现目录：`tools/` 只放供 Agent 自主调用的 Tool，`functions/` 只放供 Workflow 确定性调用的 Function，`internal/` 放合同、模型、Adapter、仓库、存储及 Tool/Function 共享实现。领域根 `__init__.py` 可显式导出稳定合同；其他领域、Agent、Workflow 和应用组装不得直接导入 `internal/`。`agents/` 只定义 Agent，`workflows/` 只定义 Workflow 编排、生命周期和 Studio seed；不得把业务 Function 实现直接写入 Workflow 文件。
 
 ### Team
 

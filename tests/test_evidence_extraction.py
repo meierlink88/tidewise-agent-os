@@ -15,12 +15,22 @@ from agno.workflow import Loop, Step, StepInput, StepOutput, Workflow
 from pydantic import ValidationError
 
 from agents.evidence_extractor import build_evidence_extractor_agent
-from capabilities.evidence_extraction.functions import (
+from capabilities.collection.internal.artifacts import build_artifact_set, publish_artifact_set
+from capabilities.collection.internal.buffer import write_title_curation, write_tool_batch
+from capabilities.collection.internal.models import (
+    Candidate,
+    CollectionRequest,
+    SourceLevel,
+    TitleCurationDecision,
+    TitleCurationDraft,
+    TitleRelevance,
+)
+from capabilities.evidence.functions import (
     prepare_raw_document,
     publish_evidences,
     validate_evidence_draft,
 )
-from capabilities.evidence_extraction.models import (
+from capabilities.evidence.internal.models import (
     AtomicEvidenceDraft,
     EvidenceExtractionDraft,
     EvidenceExtractionIdle,
@@ -29,10 +39,7 @@ from capabilities.evidence_extraction.models import (
     PreparedRawDocument,
     RawEvidenceEnrichment,
 )
-from capabilities.evidence_extraction.storage import checkpoint_path, evidence_artifact_root, read_checkpoint
-from capabilities.raw_collection.artifacts import build_artifact_set, publish_artifact_set
-from capabilities.raw_collection.buffer import write_tool_batch
-from capabilities.raw_collection.models import Candidate, CollectionRequest, SourceLevel
+from capabilities.evidence.internal.storage import checkpoint_path, evidence_artifact_root, read_checkpoint
 from workflows.evidence_extraction import _seed_workflow
 
 
@@ -77,6 +84,18 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             agent_config_version=1,
             instructions_sha256="a" * 64,
             candidates=[candidate],
+        )
+        write_title_curation(
+            "collection-evidence",
+            TitleCurationDraft(
+                decisions=[
+                    TitleCurationDecision(
+                        candidate_id=candidate.candidate_id,
+                        relevance=TitleRelevance.RELEVANT,
+                        reason_code="company_operation",
+                    )
+                ]
+            ),
         )
         prepared = build_artifact_set(
             "collection-evidence",
@@ -192,7 +211,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         step_input = StepInput(previous_step_outputs={"validate-evidence-draft": StepOutput(content=publication)})
         responses = [None, None]
         with patch(
-            "capabilities.evidence_extraction.functions.extraction.post_publication",
+            "capabilities.evidence.functions.extraction.post_publication",
             side_effect=responses,
         ) as mocked:
             output = await publish_evidences(step_input)
@@ -213,7 +232,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(idle.stop)
         self.assertIsInstance(idle.content, EvidenceExtractionIdle)
 
-        with patch("capabilities.evidence_extraction.functions.extraction.post_publication") as repeated:
+        with patch("capabilities.evidence.functions.extraction.post_publication") as repeated:
             repeated_output = await publish_evidences(step_input)
         self.assertEqual(repeated.call_count, 0)
         self.assertEqual(
@@ -226,7 +245,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         step_input = StepInput(previous_step_outputs={"validate-evidence-draft": StepOutput(content=publication)})
         with (
             patch(
-                "capabilities.evidence_extraction.functions.extraction.post_publication",
+                "capabilities.evidence.functions.extraction.post_publication",
                 side_effect=[None, ValueError("evidence rejected")],
             ),
             self.assertRaisesRegex(ValueError, "evidence rejected"),

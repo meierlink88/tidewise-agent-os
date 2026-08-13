@@ -9,13 +9,13 @@ from agno.db.base import ComponentType
 from agno.registry import Registry
 
 from app.settings import default_model
-from capabilities.raw_collection.models import CollectionQueryPlan
+from capabilities.collection import CollectionQueryPlan
 from db import get_postgres_db
 
 COLLECTOR_AGENT_ID = "raw-collector"
-COLLECTOR_CONTRACT_VERSION = 7
+COLLECTOR_CONTRACT_VERSION = 8
 _SEED_PROMPT = Path(__file__).with_name("raw_collector.seed.md")
-_RUNTIME_CONTRACT = """Raw Collection runtime contract version 7:
+_RUNTIME_CONTRACT = """Raw Collection runtime contract version 8:
 - You are a semantic query planner and must not call acquisition Tools.
 - Return exactly one CollectionQueryPlan with a focused Chinese query and integer lookback_hours.
 - Infer lookback_hours from the user's relative temporal requirement; default to 48 when no duration is stated.
@@ -66,6 +66,8 @@ def ensure_collector_agent(registry: Registry) -> int:
         current.store_tool_messages = True
         current.markdown = False
         current.additional_context = _RUNTIME_CONTRACT
+        if isinstance(current.instructions, str) and "resolve_collection_time_window" in current.instructions:
+            current.instructions = _seed_instructions()
         current.output_schema = CollectionQueryPlan
         current.structured_outputs = True
         current.metadata = {**metadata, "collector_contract_version": COLLECTOR_CONTRACT_VERSION}
