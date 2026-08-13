@@ -13,9 +13,10 @@ from agno.utils.log import log_info
 from agents.evidence_extractor import ensure_evidence_extractor_agent
 from agents.raw_collector import ensure_collector_agent
 from agents.tidewise_assistant import tidewise_assistant
+from agents.title_curator import ensure_title_curator_agent
 from app.registry import registry
 from app.schedules import register_schedules
-from capabilities.raw_collection.channels.repository import ensure_channel_catalog
+from capabilities.collection import ensure_channel_catalog
 from db import get_postgres_db
 from workflows.deployment_check import deployment_check
 from workflows.evidence_extraction import ensure_evidence_extraction_workflow
@@ -82,6 +83,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     log_info("AgentOS lifespan: startup")
     ensure_channel_catalog()
     ensure_collector_agent(registry)
+    ensure_title_curator_agent(registry)
     ensure_evidence_extractor_agent(registry)
     ensure_raw_collection_workflow(registry)
     ensure_evidence_extraction_workflow(registry)

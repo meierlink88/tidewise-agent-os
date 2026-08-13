@@ -4,6 +4,7 @@ import hashlib
 import inspect
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -11,22 +12,39 @@ from pathlib import Path
 from typing import cast
 from unittest.mock import patch
 
+from agno.agent import Agent
 from agno.run import RunContext
 from agno.workflow import Step, StepInput, StepOutput
 from pydantic import ValidationError
 
-from capabilities.raw_collection.artifacts import build_artifact_set, publish_artifact_set
-from capabilities.raw_collection.buffer import artifact_root, read_tool_batches, write_tool_batch
-from capabilities.raw_collection.channels.models import ChannelType, CollectionChannel, OwnershipType
-from capabilities.raw_collection.functions import (
-    agentic_collect_step,
+from capabilities.collection.functions import (
     build_artifact_step,
     execute_collection_channels_step,
+    prepare_collection_context,
+    prepare_title_curation,
     publish_collection_step,
+    validate_title_curation,
 )
-from capabilities.raw_collection.functions.collection import request_from_input
-from capabilities.raw_collection.models import Candidate, CollectionQueryPlan, CollectionRequest, SourceLevel
-from capabilities.raw_collection.tools import COLLECTION_TOOLS
+from capabilities.collection.functions.collection import request_from_input
+from capabilities.collection.internal.artifacts import build_artifact_set, publish_artifact_set
+from capabilities.collection.internal.buffer import (
+    artifact_root,
+    read_tool_batches,
+    write_title_curation,
+    write_tool_batch,
+)
+from capabilities.collection.internal.channels.models import ChannelType, CollectionChannel, OwnershipType
+from capabilities.collection.internal.models import (
+    Candidate,
+    CollectionQueryPlan,
+    CollectionRequest,
+    SourceLevel,
+    TitleCurationDecision,
+    TitleCurationDraft,
+    TitleCurationRequest,
+    TitleRelevance,
+)
+from capabilities.collection.tools import COLLECTION_TOOLS
 from workflows.raw_collection import _seed_workflow
 
 
@@ -53,8 +71,10 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
 
     def test_network_tools_and_workflow_executors_are_async(self) -> None:
         workflow_executors = [
-            agentic_collect_step,
+            prepare_collection_context,
             execute_collection_channels_step,
+            prepare_title_curation,
+            validate_title_curation,
             build_artifact_step,
             publish_collection_step,
         ]
@@ -131,7 +151,7 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         )
         step_input = StepInput(
             previous_step_outputs={
-                "agentic-collect": StepOutput(content=CollectionQueryPlan(query="宏观政策", lookback_hours=48))
+                "plan-collection-query": StepOutput(content=CollectionQueryPlan(query="宏观政策", lookback_hours=48))
             }
         )
 
@@ -183,6 +203,19 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             agent_config_version=3,
             instructions_sha256="b" * 64,
             candidates=[first, duplicate, outside],
+        )
+        write_title_curation(
+            "run-artifact",
+            TitleCurationDraft(
+                decisions=[
+                    TitleCurationDecision(
+                        candidate_id=item.candidate_id,
+                        relevance=TitleRelevance.RELEVANT,
+                        reason_code="industry_signal",
+                    )
+                    for item in [first, duplicate, outside]
+                ]
+            ),
         )
 
         prepared = build_artifact_set(
@@ -249,24 +282,304 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "time window"):
             build_artifact_set("run-mixed-window", CollectionRequest(objective="采集政策"), completed_at=now)
 
-    def test_studio_workflow_seed_round_trips_registered_functions(self) -> None:
-        from app.registry import registry
+    def test_title_curation_and_normalized_title_dedup_control_artifacts(self) -> None:
+        now = datetime(2026, 8, 13, 2, tzinfo=UTC)
+        candidates = [
+            Candidate(
+                candidate_id="policy-first",
+                connector="bocha",
+                query="A股政策",
+                title="　人工智能 产业政策！",
+                url="https://example.com/policy-first",
+                content="正文A，应当保存。",
+                source_name="测试媒体",
+                published_at=now,
+                collected_at=now,
+            ),
+            Candidate(
+                candidate_id="policy-duplicate",
+                connector="tavily",
+                query="A股政策",
+                title="人工智能产业政策!",
+                url="https://example.com/policy-duplicate",
+                content="完全不同的正文B，不得影响标题去重。",
+                source_name="另一媒体",
+                published_at=now,
+                collected_at=now,
+            ),
+            Candidate(
+                candidate_id="sports-noise",
+                connector="rss",
+                query="A股政策",
+                title="世界杯决赛球队首发阵容公布",
+                url="https://example.com/sports",
+                content="体育新闻正文。",
+                source_name="体育媒体",
+                published_at=now,
+                collected_at=now,
+            ),
+        ]
+        write_tool_batch(
+            collection_id="run-title-policy",
+            connector="mixed-test",
+            query="A股政策",
+            requested_after=now - timedelta(hours=1),
+            requested_before=now + timedelta(minutes=1),
+            agent_component_id="raw-collector",
+            agent_config_version=8,
+            instructions_sha256="c" * 64,
+            candidates=candidates,
+        )
+        write_title_curation(
+            "run-title-policy",
+            TitleCurationDraft(
+                decisions=[
+                    TitleCurationDecision(
+                        candidate_id="policy-first",
+                        relevance=TitleRelevance.RELEVANT,
+                        reason_code="policy_signal",
+                    ),
+                    TitleCurationDecision(
+                        candidate_id="policy-duplicate",
+                        relevance=TitleRelevance.RELEVANT,
+                        reason_code="policy_signal",
+                    ),
+                    TitleCurationDecision(
+                        candidate_id="sports-noise",
+                        relevance=TitleRelevance.IRRELEVANT,
+                        reason_code="sports_noise",
+                    ),
+                ]
+            ),
+        )
 
-        restored = type(_seed_workflow()).from_dict(_seed_workflow().to_dict(), registry=registry)
-        self.assertIsInstance(restored.steps, list)
-        steps = cast(list[Step], restored.steps)
+        prepared = build_artifact_set(
+            "run-title-policy",
+            CollectionRequest(objective="采集A股政策"),
+            completed_at=now,
+        )
+
+        self.assertEqual(prepared.candidate_counts["accepted"], 1)
+        self.assertEqual(prepared.candidate_counts["exact_duplicate"], 1)
+        self.assertEqual(prepared.candidate_counts["irrelevant"], 1)
+        ledger_path = Path(prepared.staging_root) / "runs/run-title-policy/candidates.jsonl"
+        ledger = [json.loads(line) for line in ledger_path.read_text(encoding="utf-8").splitlines()]
+        by_id = {item["candidate_id"]: item for item in ledger}
+        duplicate_rows = [item for item in ledger if item["disposition"] == "exact_duplicate"]
+        self.assertEqual([item["reason"] for item in duplicate_rows], ["normalized_title_sha256_already_indexed"])
+        self.assertEqual(by_id["sports-noise"]["reason"], "sports_noise")
+        self.assertEqual(by_id["sports-noise"]["title_relevance"], "irrelevant")
+        self.assertIsNone(by_id["sports-noise"]["document_path"])
+
+    def test_title_dedup_keeps_legacy_index_immutable_and_uses_its_urls(self) -> None:
+        now = datetime(2026, 8, 13, 2, tzinfo=UTC)
+        legacy_url = "https://example.com/legacy"
+        canonical_hash = hashlib.sha256(legacy_url.encode()).hexdigest()
+        legacy = artifact_root() / "indexes/dedup-index.tsv"
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        legacy_payload = (
+            "url_sha256\tcontent_sha256\tsimhash64\tdocument_path\n"
+            f"{canonical_hash}\t{'e' * 64}\t0000000000000000\tdocuments/legacy.md\n"
+        )
+        legacy.write_text(legacy_payload, encoding="utf-8")
+        candidate = Candidate(
+            candidate_id="legacy-url",
+            connector="bocha",
+            query="政策",
+            title="新政策标题",
+            url=legacy_url,
+            content="新正文",
+            source_name="媒体",
+            published_at=now,
+            collected_at=now,
+        )
+        write_tool_batch(
+            collection_id="run-legacy-index",
+            connector="bocha",
+            query="政策",
+            requested_after=now - timedelta(hours=1),
+            requested_before=now + timedelta(minutes=1),
+            agent_component_id="raw-collector",
+            agent_config_version=8,
+            instructions_sha256="f" * 64,
+            candidates=[candidate],
+        )
+        write_title_curation(
+            "run-legacy-index",
+            TitleCurationDraft(
+                decisions=[
+                    TitleCurationDecision(
+                        candidate_id="legacy-url",
+                        relevance=TitleRelevance.RELEVANT,
+                        reason_code="policy_signal",
+                    )
+                ]
+            ),
+        )
+        prepared = build_artifact_set(
+            "run-legacy-index",
+            CollectionRequest(objective="采集政策"),
+            completed_at=now,
+        )
+        publish_artifact_set(prepared)
+
+        self.assertEqual(prepared.candidate_counts["known_url"], 1)
+        self.assertEqual(legacy.read_text(encoding="utf-8"), legacy_payload)
+        self.assertTrue((artifact_root() / "indexes/title-dedup-index.tsv").is_file())
+
+    async def test_title_curation_input_is_title_only_and_requires_exact_id_coverage(self) -> None:
+        now = datetime(2026, 8, 13, 3, tzinfo=UTC)
+        write_tool_batch(
+            collection_id="run-curation-validation",
+            connector="bocha",
+            query="政策",
+            requested_after=now - timedelta(hours=1),
+            requested_before=now + timedelta(minutes=1),
+            agent_component_id="raw-collector",
+            agent_config_version=8,
+            instructions_sha256="d" * 64,
+            candidates=[
+                Candidate(
+                    candidate_id="candidate-a",
+                    connector="bocha",
+                    query="政策",
+                    title="政策A",
+                    url="https://example.com/a",
+                    content="SECRET_BODY_A",
+                    source_name="媒体",
+                    published_at=now,
+                    collected_at=now,
+                ),
+                Candidate(
+                    candidate_id="candidate-b",
+                    connector="bocha",
+                    query="政策",
+                    title="政策B",
+                    url="https://example.com/b",
+                    content="SECRET_BODY_B",
+                    source_name="媒体",
+                    published_at=now,
+                    collected_at=now,
+                ),
+            ],
+        )
+        context = RunContext(run_id="run-curation-validation", session_id="session")
+        prepared = await prepare_title_curation(StepInput(input="ignored"), context)
+        encoded = cast(TitleCurationRequest, prepared.content).model_dump_json()
+        self.assertNotIn("SECRET_BODY", encoded)
+        self.assertNotIn("content", encoded)
+
+        malformed = TitleCurationDraft(
+            decisions=[
+                TitleCurationDecision(
+                    candidate_id="candidate-a",
+                    relevance=TitleRelevance.RELEVANT,
+                    reason_code="policy_signal",
+                ),
+                TitleCurationDecision(
+                    candidate_id="candidate-unknown",
+                    relevance=TitleRelevance.UNCERTAIN,
+                    reason_code="insufficient_title_context",
+                ),
+            ]
+        )
+        validation_input = StepInput(
+            previous_step_outputs={
+                "prepare-title-curation": prepared,
+                "curate-collection-titles": StepOutput(content=malformed),
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "coverage mismatch"):
+            await validate_title_curation(validation_input, context)
+
+        duplicate = TitleCurationDraft(
+            decisions=[
+                TitleCurationDecision(
+                    candidate_id="candidate-a",
+                    relevance=TitleRelevance.RELEVANT,
+                    reason_code="policy_signal",
+                ),
+                TitleCurationDecision(
+                    candidate_id="candidate-a",
+                    relevance=TitleRelevance.UNCERTAIN,
+                    reason_code="insufficient_title_context",
+                ),
+            ]
+        )
+        duplicate_input = StepInput(
+            previous_step_outputs={
+                "prepare-title-curation": prepared,
+                "curate-collection-titles": StepOutput(content=duplicate),
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "duplicate Candidate IDs"):
+            await validate_title_curation(duplicate_input, context)
+
+    def test_studio_workflow_seed_round_trips_registered_functions(self) -> None:
+        collector = Agent(id="raw-collector", name="Collection Query Planner")
+        curator = Agent(id="title-curator", name="Collection Title Curator")
+        seeded = _seed_workflow(collector, curator)
+        serialized_steps = cast(list[dict[str, object]], seeded.to_dict()["steps"])
+        self.assertEqual(
+            [item.get("agent_id") for item in serialized_steps if item.get("agent_id") is not None],
+            ["raw-collector", "title-curator"],
+        )
+        self.assertEqual(
+            [step.agent.name for step in cast(list[Step], seeded.steps) if step.agent is not None],
+            ["Collection Query Planner", "Collection Title Curator"],
+        )
+        self.assertIsInstance(seeded.steps, list)
+        steps = cast(list[Step], seeded.steps)
         self.assertTrue(all(isinstance(step, Step) for step in steps))
         self.assertEqual(
-            [getattr(step.executor, "__name__", None) for step in steps],
+            [step.agent.id if step.agent is not None else getattr(step.executor, "__name__", None) for step in steps],
             [
-                "agentic_collect_step",
+                "prepare_collection_context",
+                "raw-collector",
                 "execute_collection_channels_step",
+                "prepare_title_curation",
+                "title-curator",
+                "validate_title_curation",
                 "build_artifact_step",
                 "publish_collection_step",
             ],
         )
         self.assertTrue(all(step.max_retries == 0 for step in steps))
         self.assertTrue(all(str(step.on_error) == "fail" for step in steps))
+
+    def test_live_non_streaming_workflow_result_has_visible_agent_steps(self) -> None:
+        """Optional REST seam: set RUN_LIVE_AGENTOS_TESTS=1 after starting local AgentOS."""
+        if os.getenv("RUN_LIVE_AGENTOS_TESTS") != "1":
+            self.skipTest("RUN_LIVE_AGENTOS_TESTS=1 is required for the local REST acceptance seam")
+        response = subprocess.run(
+            [
+                "curl",
+                "-fsS",
+                "--max-time",
+                "900",
+                "-X",
+                "POST",
+                "http://localhost:8000/workflows/raw-collection/runs",
+                "-H",
+                "Content-Type: application/x-www-form-urlencoded",
+                "--data-urlencode",
+                "message=采集最近48小时影响中国A股的重要政策与上市公司经营事件。",
+                "--data",
+                "stream=false",
+                "--data",
+                "background=false",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(response.stdout)
+        result = payload[0] if isinstance(payload, list) else payload
+        self.assertEqual(result["status"], "COMPLETED")
+        self.assertEqual(result["content"]["candidate_counts"]["results_pending"], 0)
+        steps = {item["step_name"]: item for item in result["step_results"]}
+        self.assertEqual(steps["plan-collection-query"]["executor_type"], "agent")
+        self.assertEqual(steps["curate-collection-titles"]["executor_type"], "agent")
 
 
 if __name__ == "__main__":

@@ -56,7 +56,7 @@ Control Plane 的 Studio 中编辑并发布 Instructions；`raw-collection` 每�
 
 `raw-collection` 首次启动时也会创建一个 Studio 发布版本。四步 Workflow 编排可在 Studio
 中创建新版本并发布；步骤使用的 Agent 工具和自定义 Function 实现在 Git 中维护。共享采集
-实现集中在 `capabilities/raw_collection/`，不属于 Agent 或 Workflow 的私有代码。
+采集实现集中在 `capabilities/collection/`，Evidence 实现集中在 `capabilities/evidence/`；每个领域只以 `tools/`、`functions/`、`internal/` 组织，不属于某个 Agent 或 Workflow 私有。
 采集 Workflow Executor 使用 Agno 异步运行接口，所有外部通道使用异步 HTTP；Tool Batch、
 Artifact 构建和发布的文件操作会卸载到工作线程，因此单 Worker 运行采集时不会阻塞其他业务
 Agent 或 Workflow。
@@ -70,7 +70,7 @@ Agent 或 Workflow。
 
 - `documents/`：接受的原始资讯 Markdown。
 - `runs/<run_id>/`：候选账本、汇总和 manifest。
-- `indexes/dedup-index.tsv`：跨运行去重索引。
+- `indexes/title-dedup-index.tsv`：新版标题跨运行去重索引；历史 `dedup-index.tsv` 仅保留为只读 URL 兼容索引。
 
 `data/` 已被 Git 忽略。可通过 `.env` 的 `COLLECTOR_DATA_DIR` 替换宿主机目录。
 

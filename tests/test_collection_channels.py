@@ -16,18 +16,18 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
-from capabilities.raw_collection.adapters.base import FetchRequest
-from capabilities.raw_collection.adapters.registry import ADAPTERS
-from capabilities.raw_collection.adapters.rss import GenericRssAdapter
-from capabilities.raw_collection.adapters.web_search import BochaAdapter
-from capabilities.raw_collection.channels.models import (
+from capabilities.collection.internal.adapters.base import FetchRequest
+from capabilities.collection.internal.adapters.registry import ADAPTERS
+from capabilities.collection.internal.adapters.rss import GenericRssAdapter
+from capabilities.collection.internal.adapters.web_search import BochaAdapter
+from capabilities.collection.internal.channels.models import (
     ChannelType,
     CollectionChannel,
     OwnershipType,
 )
-from capabilities.raw_collection.channels.repository import ChannelRepository
-from capabilities.raw_collection.models import Candidate, FetchReceipt, SourceLevel
-from capabilities.raw_collection.tools import api_fetch, rss_fetch, web_fetch
+from capabilities.collection.internal.channels.repository import ChannelRepository
+from capabilities.collection.internal.models import Candidate, FetchReceipt, SourceLevel
+from capabilities.collection.tools import api_fetch, rss_fetch, web_fetch
 
 
 class _Catalog:
@@ -474,7 +474,7 @@ class CollectionAdapterContractTest(unittest.IsolatedAsyncioTestCase):
             }
         }
         with patch(
-            "capabilities.raw_collection.adapters.web_search.post_json",
+            "capabilities.collection.internal.adapters.web_search.post_json",
             new=AsyncMock(return_value=payload),
         ) as request_mock:
             candidates = await BochaAdapter().fetch(channel, request)
@@ -502,7 +502,7 @@ class CollectionAdapterContractTest(unittest.IsolatedAsyncioTestCase):
         </entry></feed>"""
         adapter = GenericRssAdapter()
         with patch(
-            "capabilities.raw_collection.adapters.rss.get_text",
+            "capabilities.collection.internal.adapters.rss.get_text",
             new=AsyncMock(side_effect=[rss, atom]),
         ):
             rss_candidates = await adapter.fetch(

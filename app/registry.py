@@ -4,24 +4,32 @@ from agno.registry import Registry
 
 from agents.tidewise_assistant import tidewise_assistant
 from app.settings import default_model
-from capabilities.evidence_extraction.functions import (
-    prepare_raw_document,
-    publish_evidences,
-    validate_evidence_draft,
+from capabilities.collection import (
+    CollectionQueryPlan,
+    CollectionRequest,
+    PreparedArtifactSet,
+    TitleCurationDraft,
+    TitleCurationRequest,
 )
-from capabilities.evidence_extraction.models import (
+from capabilities.collection.functions import (
+    build_artifact_step,
+    execute_collection_channels_step,
+    prepare_collection_context,
+    prepare_title_curation,
+    publish_collection_step,
+    validate_title_curation,
+)
+from capabilities.collection.tools import COLLECTION_TOOLS
+from capabilities.evidence import (
     EvidenceExtractionDraft,
     PreparedEvidencePublication,
     PreparedRawDocument,
 )
-from capabilities.raw_collection.functions import (
-    agentic_collect_step,
-    build_artifact_step,
-    execute_collection_channels_step,
-    publish_collection_step,
+from capabilities.evidence.functions import (
+    prepare_raw_document,
+    publish_evidences,
+    validate_evidence_draft,
 )
-from capabilities.raw_collection.models import CollectionQueryPlan, CollectionRequest, PreparedArtifactSet
-from capabilities.raw_collection.tools import COLLECTION_TOOLS
 from db import get_postgres_db
 
 
@@ -38,6 +46,8 @@ registry = Registry(
     schemas=[
         CollectionRequest,
         CollectionQueryPlan,
+        TitleCurationRequest,
+        TitleCurationDraft,
         PreparedArtifactSet,
         PreparedRawDocument,
         EvidenceExtractionDraft,
@@ -45,8 +55,10 @@ registry = Registry(
     ],
     functions=[
         platform_identity,
-        agentic_collect_step,
+        prepare_collection_context,
         execute_collection_channels_step,
+        prepare_title_curation,
+        validate_title_curation,
         build_artifact_step,
         publish_collection_step,
         prepare_raw_document,

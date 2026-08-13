@@ -7,7 +7,7 @@ from agno.db.base import ComponentType
 from agno.registry import Registry
 
 from app.settings import default_model
-from capabilities.evidence_extraction.models import EvidenceExtractionDraft
+from capabilities.evidence import EvidenceExtractionDraft
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTOR_AGENT_ID = "evidence-extractor"
