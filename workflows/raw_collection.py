@@ -7,12 +7,13 @@ from agno.workflow import Step, Workflow
 from capabilities.raw_collection.functions import (
     agentic_collect_step,
     build_artifact_step,
+    execute_collection_channels_step,
     publish_collection_step,
 )
 from db import get_postgres_db
 
 RAW_COLLECTION_WORKFLOW_ID = "raw-collection"
-RAW_COLLECTION_CONTRACT_VERSION = 1
+RAW_COLLECTION_CONTRACT_VERSION = 3
 
 
 def _seed_workflow() -> Workflow:
@@ -20,7 +21,7 @@ def _seed_workflow() -> Workflow:
     return Workflow(
         id=RAW_COLLECTION_WORKFLOW_ID,
         name="Raw Collection",
-        description="Agentic channel selection followed by deterministic raw-document publication.",
+        description="Agentic query planning followed by deterministic channel acquisition and publication.",
         db=get_postgres_db(),
         metadata={"raw_collection_contract_version": RAW_COLLECTION_CONTRACT_VERSION},
         steps=[
@@ -29,6 +30,13 @@ def _seed_workflow() -> Workflow:
                 executor=agentic_collect_step,  # type: ignore[arg-type]  # Agno injects RunContext by name.
                 max_retries=0,
                 on_error="fail",
+            ),
+            Step(
+                name="execute-collection-channels",
+                executor=execute_collection_channels_step,  # type: ignore[arg-type]  # Agno injects RunContext.
+                max_retries=0,
+                on_error="fail",
+                strict_input_validation=True,
             ),
             Step(
                 name="build-artifact-set",
@@ -59,7 +67,22 @@ def ensure_raw_collection_workflow(registry: Registry) -> int:
         current = Workflow.load(RAW_COLLECTION_WORKFLOW_ID, db=db, registry=registry, version=version)
         if current is None or not isinstance(current.steps, list) or not current.steps:
             raise ValueError("Raw Collection published Studio version could not be rehydrated")
-        return version
+        metadata = dict(current.metadata or {})
+        if metadata.get("raw_collection_contract_version") == RAW_COLLECTION_CONTRACT_VERSION:
+            return version
+        migrated = _seed_workflow()
+        migrated.id = current.id
+        migrated.name = current.name
+        migrated.description = current.description
+        migrated.metadata = {**metadata, "raw_collection_contract_version": RAW_COLLECTION_CONTRACT_VERSION}
+        published = migrated.save(
+            db=db,
+            stage="published",
+            notes=f"Raw Collection runtime contract migration {RAW_COLLECTION_CONTRACT_VERSION}",
+        )
+        if not isinstance(published, int):
+            raise ValueError("Raw Collection runtime contract migration failed")
+        return published
 
     version = _seed_workflow().save(
         db=db,

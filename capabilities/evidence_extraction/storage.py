@@ -193,6 +193,7 @@ def read_next_raw_document(checkpoint: EvidenceCheckpoint) -> tuple[PreparedRawD
             source_name = metadata.get("source_name")
             source_url = metadata.get("url")
             collected_at = metadata.get("collected_at")
+            source_level = metadata.get("source_level")
             if not isinstance(connector, str) or not connector.strip():
                 raise ValueError("Raw Collection document connector is missing")
             if not isinstance(source_name, str) or not source_name.strip():
@@ -214,7 +215,9 @@ def read_next_raw_document(checkpoint: EvidenceCheckpoint) -> tuple[PreparedRawD
                 raw_evidence_id=_raw_evidence_id(source_url, content_sha256),
                 source_id=_source_id(connector),
                 source_name=source_name,
-                source_level=_SOURCE_LEVELS.get(connector, "L3_MEDIA"),
+                source_level=source_level
+                if isinstance(source_level, str)
+                else _SOURCE_LEVELS.get(connector, "L3_MEDIA"),
                 source_url=source_url,
                 title=metadata.get("title"),
                 raw_text=raw_text,

@@ -1,9 +1,19 @@
 """Typed contracts for the raw information collection capability."""
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+
+
+class SourceLevel(StrEnum):
+    """Trust level assigned to the original publishing source."""
+
+    L1_OFFICIAL = "L1_OFFICIAL"
+    L2_WIRE = "L2_WIRE"
+    L3_MEDIA = "L3_MEDIA"
+    L4_SOCIAL = "L4_SOCIAL"
 
 
 class CollectionRequest(BaseModel):
@@ -29,6 +39,22 @@ class CollectionRequest(BaseModel):
         return self
 
 
+class CollectionQueryPlan(BaseModel):
+    """Strict semantic plan returned by the Collector Agent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1, max_length=512)
+    lookback_hours: int = Field(default=48, ge=1, le=8760)
+
+    @model_validator(mode="after")
+    def normalize_query(self) -> "CollectionQueryPlan":
+        self.query = self.query.strip()
+        if not self.query:
+            raise ValueError("query must not be blank")
+        return self
+
+
 class Candidate(BaseModel):
     """One direct result returned by a channel tool."""
 
@@ -39,6 +65,7 @@ class Candidate(BaseModel):
     url: HttpUrl
     content: str
     source_name: str
+    source_level: SourceLevel = SourceLevel.L3_MEDIA
     source_external_id: str | None = None
     published_at: datetime | None = None
     collected_at: datetime
@@ -82,6 +109,28 @@ class ToolBatchReceipt(BaseModel):
     result_count: int
     in_window_result_count: int
     candidate_ids: list[str]
+
+
+class ChannelFetchReceipt(BaseModel):
+    """One channel outcome returned inside a Tool façade receipt."""
+
+    channel_code: str
+    outcome: Literal["succeeded", "failed"]
+    batch_id: str | None = None
+    result_count: int = Field(ge=0)
+    in_window_result_count: int = Field(ge=0)
+    error_code: str | None = None
+
+
+class FetchReceipt(BaseModel):
+    """Compact aggregate receipt returned by a database-driven Tool façade."""
+
+    tool: Literal["web_fetch", "api_fetch", "rss_fetch"]
+    outcome: Literal["succeeded", "partial", "failed", "no_channels"]
+    query: str
+    requested_after: datetime
+    requested_before: datetime
+    channels: list[ChannelFetchReceipt]
 
 
 class AcceptedDocument(BaseModel):

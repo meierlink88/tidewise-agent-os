@@ -9,12 +9,19 @@ from agno.db.base import ComponentType
 from agno.registry import Registry
 
 from app.settings import default_model
-from capabilities.raw_collection.tools import COLLECTION_TOOLS
+from capabilities.raw_collection.models import CollectionQueryPlan
 from db import get_postgres_db
 
 COLLECTOR_AGENT_ID = "raw-collector"
-COLLECTOR_CONTRACT_VERSION = 5
+COLLECTOR_CONTRACT_VERSION = 7
 _SEED_PROMPT = Path(__file__).with_name("raw_collector.seed.md")
+_RUNTIME_CONTRACT = """Raw Collection runtime contract version 7:
+- You are a semantic query planner and must not call acquisition Tools.
+- Return exactly one CollectionQueryPlan with a focused Chinese query and integer lookback_hours.
+- Infer lookback_hours from the user's relative temporal requirement; default to 48 when no duration is stated.
+- Do not calculate absolute published_after or published_before timestamps.
+- The deterministic Workflow owns channel snapshots, all three acquisition façades, failure handling and publication.
+"""
 
 
 @dataclass(frozen=True)
@@ -50,14 +57,17 @@ def ensure_collector_agent(registry: Registry) -> int:
 
         # Migrate runtime wiring without replacing the operator-managed instructions.
         current.db = db
-        current.tools = COLLECTION_TOOLS
-        current.tool_call_limit = 8
+        current.tools = []
+        current.tool_call_limit = None
         current.retries = 0
         current.add_datetime_to_context = True
         current.timezone_identifier = "Asia/Shanghai"
         current.add_history_to_context = False
         current.store_tool_messages = True
         current.markdown = False
+        current.additional_context = _RUNTIME_CONTRACT
+        current.output_schema = CollectionQueryPlan
+        current.structured_outputs = True
         current.metadata = {**metadata, "collector_contract_version": COLLECTOR_CONTRACT_VERSION}
         migrated = current.save(
             db=db,
@@ -74,10 +84,12 @@ def ensure_collector_agent(registry: Registry) -> int:
         description="Agentic raw-information collector used by the Raw Collection Workflow.",
         model=default_model(),
         db=db,
-        tools=COLLECTION_TOOLS,
+        tools=[],
         instructions=_seed_instructions(),
+        additional_context=_RUNTIME_CONTRACT,
         metadata={"collector_contract_version": COLLECTOR_CONTRACT_VERSION},
-        tool_call_limit=8,
+        output_schema=CollectionQueryPlan,
+        structured_outputs=True,
         retries=0,
         add_datetime_to_context=True,
         timezone_identifier="Asia/Shanghai",

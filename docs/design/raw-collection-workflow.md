@@ -1,140 +1,116 @@
-# Raw Collection Workflow — first vertical slice
+# Raw Collection Workflow
 
 ## Outcome
 
-Deliver one real, inspectable collection run through AgentOS:
-
-1. a Collector Agent interprets a collection objective and calls a channel tool;
-2. the tool writes the complete direct response candidates into a run-scoped buffer;
-3. deterministic code builds an Artifact set;
-4. publication writes the manifest last;
-5. the Agno Workflow Run completes only after publication succeeds.
-
-The first slice uses Eastmoney stock-news search. The other six channels and the
-Scheduler are deliberately deferred until this seam is proven over REST and MCP.
-
-## Non-goals
-
-- Recreate AgentRun definitions, versions, executions, invocations, or HTTP API.
-- Let the model rewrite source content into the canonical Artifact.
-- Add a Team, conversational memory, knowledge, or autonomous long-term state.
-- Enable a recurring schedule before tool budgets and cross-run deduplication are proven.
-
-## Runtime shape
+Raw Collection uses an Agent for query planning and three stable Tool façades for acquisition, then deterministic
+Workflow Functions build and publish immutable Artifacts:
 
 ```text
 CollectionRequest
-  -> agentic-collect       (Collector Agent + channel tools)
-  -> build-artifact-set    (deterministic Python)
-  -> publish-collection    (deterministic, manifest last)
+  -> agentic-collect                 -> CollectionQueryPlan only
+  -> execute-collection-channels
+       -> web_fetch implementation   -> one enabled Web Search channel
+       -> api_fetch implementation   -> all enabled API channels, bounded concurrent
+       -> rss_fetch implementation   -> all enabled RSS/Atom channels, bounded concurrent
+  -> build-artifact-set
+  -> publish-collection
   -> CollectionResult
 ```
 
-The seven channels are Agent tools, not Workflow steps. The Agent decides how to
-query and when to stop. Workflow steps define the reliable delivery process.
+The Workflow freezes an immutable enabled-channel snapshot before the Agent plans the query. Complete provider results
+go directly to the run-scoped Collection Buffer; the model never receives or reconstructs source content.
 
-## Interfaces
+## Channel catalog
 
-### CollectionRequest
+`collection_channels` lives in the existing AgentOS PostgreSQL database. Every row contains:
 
-- `objective`: non-empty natural-language collection objective.
-- Temporal requirements live inside `objective`; there is no second, potentially
-  conflicting Workflow time field.
+- immutable `code` for channel identity;
+- editable `name` for operators;
+- `ownership_type`: `fixed` or `dynamic`;
+- `channel_type`: `web_search`, `api`, or `rss`;
+- `adapter_key` selecting code-owned protocol behavior;
+- `enabled`, `endpoint`, plaintext `app_key`, and provider `config`;
+- `priority`, `timeout_seconds`, and `max_results`;
+- `default_source_level`: `L1_OFFICIAL`, `L2_WIRE`, `L3_MEDIA`, or `L4_SOCIAL`;
+- creation and update timestamps.
 
-### Prompt configuration
+Priority 1 is highest. A database constraint allows at most one enabled Web Search row. Fixed rows cannot be deleted,
+but they may be disabled or reconfigured. Dynamic rows may be added and deleted. Standard RSS and Atom rows all use
+the `generic_rss` Adapter.
 
-- The Collector and the Raw Collection Workflow are Agno Studio components stored
-  in the AgentOS database, not code-registered runtime components.
-- `agents/raw_collector.seed.md` seeds Agent published version 1 only when the component does
-  not exist. Subsequent prompt edits belong to Agno Studio versions in PostgreSQL;
-  the seed never overwrites operator changes.
-- `capabilities/raw_collection/functions/` owns the three Python Function executors;
-  `workflows/raw_collection.py` only composes them and seeds Workflow published
-  version 1 when the component does not exist.
-  Subsequent graph edits belong to Agno Studio versions in PostgreSQL.
-- The Workflow loads the component's current published version from PostgreSQL at
-  the start of every run. Publishing or rolling back a Studio version therefore
-  affects the next collection run without a process or container restart.
-- The code Registry owns the allowed model, database, and channel tools required
-  to rehydrate the Studio component.
-- A missing, draft-only, or un-rehydratable Collector component fails before a
-  model or Tool call.
-- Code-owned runtime contract migrations may publish a new component version,
-  but must preserve the current operator-managed instructions byte-for-byte.
+Startup creates the table and inserts only missing fixed rows. Search Key and endpoint environment variables provide
+first-seed values; startup never overwrites an existing row. Database edits therefore affect the next Workflow run
+without a restart.
 
-### Channel tool receipt
+## Adapter seam
 
-Tools return a small receipt to the model. Complete candidates are written to the
-run-scoped Collection Buffer and never depend on the model reproducing them.
+The database owns channel instances and operational settings. Python owns incompatible provider protocols. An Adapter
+accepts one validated channel plus one common fetch request and returns normalized `Candidate` values.
 
-- `batch_id`
-- `connector`
-- `query`
-- `requested_after`
-- `requested_before`
-- `result_count`
-- `in_window_result_count`
-- `candidate_ids`
+Initial Adapter keys are:
 
-### PreparedArtifactSet
+- Web Search: `bocha`, `tavily`, `parallel`;
+- structured API: `cls`, `eastmoney_fast`, `eastmoney_stock`, `stcn`;
+- dynamic feed: `generic_rss`.
 
-- workflow run identity;
-- pending publication directory;
-- candidate terminal counts;
-- accepted document paths and hashes;
-- publication outcome: `changed` or `no_change`.
+Adding another instance of a supported protocol is a database operation. Adding an incompatible protocol still needs a
+reviewed Adapter. Web Search candidates resolve source trust from the actual result host when `config.source_levels`
+contains a matching domain; otherwise they inherit the channel default.
 
-### CollectionResult
+## Time contract
 
-- Agno Workflow Run identity;
-- outcome;
-- accepted count;
-- final manifest path.
+The Agent derives one integer `lookback_hours` from the objective, defaulting to 48. The Workflow captures one UTC
+`collector_cutoff` before model execution. The deterministic acquisition Function invokes all three shared
+implementations with the same plan and derives:
+
+```text
+published_before = collector_cutoff
+published_after  = collector_cutoff - lookback_hours
+```
+
+There is no time-window Tool and the Agent never supplies absolute interval strings. Providers receive the interval when
+their protocol supports it; deterministic Artifact construction always enforces it.
+
+## Prompt and runtime ownership
+
+- Collector business instructions remain a published Agno Studio component in PostgreSQL.
+- Code owns the query-plan schema, runtime contract, model wiring, adapters, catalog and Artifact invariants.
+- A runtime contract migration may publish a new component version while preserving operator-managed Instructions
+  byte-for-byte. Obsolete provider-specific Tool instructions are superseded through code-owned additional context.
+- Raw Collection Workflow graph versions remain Studio-managed; Python Function executors remain Git-managed.
 
 ## Invariants
 
-- The Agno Workflow Run ID is the only run identity.
-- Every Tool candidate preserves connector, query, URL, source, collection time,
-  publication-time hint, title, and direct content.
-- The Agent may choose queries but cannot mutate the complete buffered candidates.
-- The Agent must translate the objective's temporal language into an explicit,
-  timezone-aware `published_after` / `published_before` interval on every Tool call.
-- Every Tool validates its requested interval and persists it with the complete
-  direct-response batch. A connector should push the interval upstream when its
-  provider supports that capability; otherwise Artifact construction enforces it.
-- Every candidate reaches exactly one terminal disposition before publication.
-- `results_pending` is zero before publication.
-- Accepted documents, candidate ledger, summary, and index publish before the manifest.
-- `manifest.json` is the completed Artifact marker and is published last.
-- After the completed manifest exists, publication appends one idempotent pointer to
-  `indexes/manifest-index.jsonl`; downstream Workflows consume this log by byte offset
-  and never scan historical document bodies.
-- Keys, authorization headers, and raw provider errors never enter Artifacts.
-- Every Tool Batch and manifest identify the exact Collector component version
-  and instruction hash used for the run.
-- Published Artifacts live under the Git-ignored project directory
-  `data/collector/` by default; Compose binds it to `/app/data/collector`.
+- The Agno Workflow Run ID is the only collection identity.
+- Every acquisition façade in one run uses the same frozen channel snapshot, cutoff and requested lookback.
+- `web_fetch` fails closed if the catalog exposes more than one enabled Web Search row.
+- `api_fetch` and `rss_fetch` execute enabled channels in stable priority/code order with bounded concurrency.
+- One provider failure does not discard successful sibling results; raw provider errors and keys never enter receipts or
+  Artifacts.
+- Every Candidate preserves channel code, query, URL, original publisher, effective source level, direct content,
+  publication-time hint and collection time.
+- Every successful channel call writes a complete Tool Batch before returning its receipt.
+- Every Candidate reaches exactly one deterministic terminal disposition before publication.
+- Manifest publication is last; downstream Workflows consume `indexes/manifest-index.jsonl` by byte offset.
+- Published files remain under the Git-ignored `data/collector/` root.
 
 ## Failure semantics
 
-- Input validation is the first operation inside `agentic-collect` and occurs before any model or Tool call.
-- A missing or invalid published Studio Agent fails closed before model execution.
-- A missing, naive, reversed, excessive, or implausibly future Tool interval returns
-  a safe validation error and writes no batch.
-- An individual channel tool returns a safe error to the Agent and may be followed by
-  another tool call.
-- No buffered candidates makes Artifact construction fail.
-- Build failure leaves the final Artifact tree unchanged.
-- Publish is idempotent for already-published immutable files with matching hashes.
-- All Workflow steps explicitly use `max_retries=0` and `on_error="fail"`.
+- Missing provenance, cutoff, invalid query, or invalid lookback produces a stable safe Tool error and no write.
+- Missing Adapter, provider timeout, invalid response, or request failure is isolated to that channel.
+- A façade with no enabled channels returns `no_channels`; sibling façades still execute.
+- If no Tool Batch exists after deterministic acquisition, Artifact construction fails rather than publishing false success.
+- Build failure leaves the final tree unchanged; publication is idempotent for immutable matching files.
+- Workflow steps use no hidden retries and fail on deterministic Function errors.
 
 ## Acceptance seam
 
-The first slice is accepted when a real AgentOS Workflow REST run:
+Acceptance is observed at the three Tool interfaces and the complete Workflow:
 
-- produces a DeepSeek tool call to Eastmoney;
-- writes a run-scoped Tool Batch;
-- publishes at least the candidate ledger, summary, dedup index, and manifest;
-- returns a non-empty `CollectionResult`;
-- exposes the Agent, Workflow, and Tool activity in AgentOS;
-- leaves the MCP check green.
+- catalog state selects the expected channels;
+- Adapter payloads normalize to Candidate contracts;
+- concurrent fan-out isolates partial failure;
+- all Tool Batches share one exact interval;
+- Artifact metadata carries channel and source level;
+- Registry exposes only `web_fetch`, `api_fetch`, and `rss_fetch`;
+- REST, MCP, health and the full validation suite remain green.

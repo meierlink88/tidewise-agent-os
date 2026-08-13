@@ -32,7 +32,7 @@ from capabilities.evidence_extraction.models import (
 from capabilities.evidence_extraction.storage import checkpoint_path, evidence_artifact_root, read_checkpoint
 from capabilities.raw_collection.artifacts import build_artifact_set, publish_artifact_set
 from capabilities.raw_collection.buffer import write_tool_batch
-from capabilities.raw_collection.models import Candidate, CollectionRequest
+from capabilities.raw_collection.models import Candidate, CollectionRequest, SourceLevel
 from workflows.evidence_extraction import _seed_workflow
 
 
@@ -63,6 +63,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             url="https://example.test/evidence-source",
             content="示例公司公告签署10亿元服务器订单，合同期限为三年。",
             source_name="财联社",
+            source_level=SourceLevel.L2_WIRE,
             published_at=now,
             collected_at=now + timedelta(minutes=1),
         )

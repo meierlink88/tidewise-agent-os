@@ -118,6 +118,7 @@ def _document_markdown(candidate: Candidate, canonical_url: str, content_sha256:
         "title": item.title,
         "url": canonical_url,
         "source_name": item.source_name,
+        "source_level": item.source_level.value,
         "source_external_id": item.source_external_id,
         "published_at": item.published_at.isoformat() if item.published_at else None,
         "collected_at": item.collected_at.isoformat(),
@@ -144,6 +145,10 @@ def build_artifact_set(
     batches = read_tool_batches(collection_id)
     if not batches:
         raise ValueError("collection Agent completed without any Tool Batch")
+
+    windows = {(batch.requested_after, batch.requested_before) for batch in batches}
+    if len(windows) != 1:
+        raise ValueError("Tool Batches disagree on collection time window")
 
     provenance = {
         (batch.agent_component_id, batch.agent_config_version, batch.instructions_sha256) for batch in batches
@@ -225,6 +230,7 @@ def build_artifact_set(
                 "url": str(candidate.url),
                 "canonical_url": canonical_url or None,
                 "source_name": candidate.source_name,
+                "source_level": candidate.source_level.value,
                 "published_at": candidate.published_at.isoformat() if candidate.published_at else None,
                 "collected_at": candidate.collected_at.isoformat(),
                 "disposition": disposition,
