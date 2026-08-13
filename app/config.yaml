@@ -7,14 +7,14 @@ manifest:
       - "给我一个新增采集 Workflow 的实施顺序"
 
   raw-collector:
-    description: "原始信息采集查询规划 Agent：仅组装查询和回看时长，通道执行由 Raw Collection Workflow 确定性控制。"
+    description: "Collection Query Planner：仅组装采集查询和回看时长，通道执行由 Raw Collection Workflow 确定性控制。"
     quick_prompts:
       - "采集可能影响中国A股板块行情的最新政策资讯"
       - "采集上市公司重大订单和产能投放的最新消息"
       - "采集产业链供需与价格变化的最新资讯"
 
   title-curator:
-    description: "仅根据标题判断政治经济及股票市场投研相关性；生产请运行 Raw Collection Workflow。"
+    description: "Collection Title Curator：仅根据标题判断政治经济及股票市场投研相关性；生产请运行 Raw Collection Workflow。"
     quick_prompts:
       - "判断这批标题是否具有A股投研价值"
       - "识别并标记政策、产业和上市公司信号"

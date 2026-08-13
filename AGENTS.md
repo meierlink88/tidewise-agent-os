@@ -11,8 +11,8 @@
 ```text
 AgentOS (app/main.py)
 ├── Tidewise Assistant (agents/tidewise_assistant.py)
-├── Raw Collector       (Agno Studio/PostgreSQL component; seeded by agents/raw_collector.py)
-├── Title Curator       (Agno Studio/PostgreSQL component; seeded by agents/title_curator.py)
+├── Collection Query Planner (Agno Studio/PostgreSQL component; seeded by agents/raw_collector.py)
+├── Collection Title Curator (Agno Studio/PostgreSQL component; seeded by agents/title_curator.py)
 ├── Evidence Extractor  (Agno Studio/PostgreSQL component; seeded by agents/evidence_extractor.py)
 ├── Local Ping         (workflows/local_ping.py)
 ├── Deployment Check   (workflows/deployment_check.py)

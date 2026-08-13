@@ -18,7 +18,7 @@ from capabilities.collection.functions import (
 from db import get_postgres_db
 
 RAW_COLLECTION_WORKFLOW_ID = "raw-collection"
-RAW_COLLECTION_CONTRACT_VERSION = 6
+RAW_COLLECTION_CONTRACT_VERSION = 7
 
 
 def _workflow_dependencies(

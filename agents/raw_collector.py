@@ -13,9 +13,10 @@ from capabilities.collection import CollectionQueryPlan
 from db import get_postgres_db
 
 COLLECTOR_AGENT_ID = "raw-collector"
-COLLECTOR_CONTRACT_VERSION = 8
+COLLECTOR_CONTRACT_VERSION = 9
+COLLECTOR_AGENT_NAME = "Collection Query Planner"
 _SEED_PROMPT = Path(__file__).with_name("raw_collector.seed.md")
-_RUNTIME_CONTRACT = """Raw Collection runtime contract version 8:
+_RUNTIME_CONTRACT = """Raw Collection runtime contract version 9:
 - You are a semantic query planner and must not call acquisition Tools.
 - Return exactly one CollectionQueryPlan with a focused Chinese query and integer lookback_hours.
 - Infer lookback_hours from the user's relative temporal requirement; default to 48 when no duration is stated.
@@ -57,6 +58,8 @@ def ensure_collector_agent(registry: Registry) -> int:
 
         # Migrate runtime wiring without replacing the operator-managed instructions.
         current.db = db
+        current.name = COLLECTOR_AGENT_NAME
+        current.description = "Plans one semantic query for the Raw Collection Workflow."
         current.tools = []
         current.tool_call_limit = None
         current.retries = 0
@@ -82,8 +85,8 @@ def ensure_collector_agent(registry: Registry) -> int:
 
     seed = Agent(
         id=COLLECTOR_AGENT_ID,
-        name="Raw Collector",
-        description="Agentic raw-information collector used by the Raw Collection Workflow.",
+        name=COLLECTOR_AGENT_NAME,
+        description="Plans one semantic query for the Raw Collection Workflow.",
         model=default_model(),
         db=db,
         tools=[],

@@ -516,13 +516,17 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             await validate_title_curation(duplicate_input, context)
 
     def test_studio_workflow_seed_round_trips_registered_functions(self) -> None:
-        collector = Agent(id="raw-collector", name="Raw Collector")
-        curator = Agent(id="title-curator", name="Title Curator")
+        collector = Agent(id="raw-collector", name="Collection Query Planner")
+        curator = Agent(id="title-curator", name="Collection Title Curator")
         seeded = _seed_workflow(collector, curator)
         serialized_steps = cast(list[dict[str, object]], seeded.to_dict()["steps"])
         self.assertEqual(
             [item.get("agent_id") for item in serialized_steps if item.get("agent_id") is not None],
             ["raw-collector", "title-curator"],
+        )
+        self.assertEqual(
+            [step.agent.name for step in cast(list[Step], seeded.steps) if step.agent is not None],
+            ["Collection Query Planner", "Collection Title Curator"],
         )
         self.assertIsInstance(seeded.steps, list)
         steps = cast(list[Step], seeded.steps)
