@@ -43,6 +43,11 @@ from capabilities.evidence.internal.storage import checkpoint_path, evidence_art
 from workflows.evidence_extraction import _seed_workflow
 
 
+class AcceptingRawDocumentStore:
+    def publish_markdown(self, *, bucket: str, object_key: str, content: bytes, sha256: str) -> None:
+        del bucket, object_key, content, sha256
+
+
 class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -102,7 +107,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             CollectionRequest(objective="采集最近2小时服务器订单"),
             completed_at=now + timedelta(minutes=2),
         )
-        publish_artifact_set(prepared)
+        publish_artifact_set(prepared, document_store=AcceptingRawDocumentStore())
 
     @staticmethod
     def _draft() -> EvidenceExtractionDraft:
@@ -171,6 +176,11 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
     def test_validation_adds_stable_id_order_and_expression_key(self) -> None:
         self._publish_raw_fixture()
         publication = self._validated(self._prepared())
+        self.assertEqual(
+            publication.raw_evidence.raw_text,
+            "/raw-evidence/documents/2026/08/11/0b737140fb4503560c8ffacfb0e578cb59e4c524e65e708306f78a74211e23c7.md",
+        )
+        self.assertNotIn("示例公司公告签署10亿元服务器订单", publication.raw_evidence.raw_text)
         self.assertEqual(len(publication.raw_evidence.raw_evidence_id), 32)
         self.assertEqual(publication.evidences[0].split_order, 0)
         self.assertEqual(len(publication.evidences[0].evidence_id), 32)
@@ -217,6 +227,13 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             output = await publish_evidences(step_input)
         result = EvidencePublicationResult.model_validate(output.content)
         self.assertEqual(mocked.call_count, 2)
+        raw_endpoint, raw_payload = mocked.call_args_list[0].args
+        self.assertEqual(raw_endpoint, "raw-evidence-publications")
+        self.assertEqual(
+            raw_payload["raw_evidence"]["raw_text"],
+            "/raw-evidence/documents/2026/08/11/0b737140fb4503560c8ffacfb0e578cb59e4c524e65e708306f78a74211e23c7.md",
+        )
+        self.assertNotIn("10亿元服务器订单", raw_payload["raw_evidence"]["raw_text"])
         self.assertTrue(Path(result.artifact_manifest_path).is_file())
         manifest = json.loads(Path(result.artifact_manifest_path).read_text(encoding="utf-8"))
         self.assertEqual(manifest["artifacts"], {"prepared": "prepared.json"})

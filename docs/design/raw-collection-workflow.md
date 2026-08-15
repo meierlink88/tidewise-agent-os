@@ -13,7 +13,7 @@ CollectionRequest
        -> api_fetch implementation   -> all enabled API channels, bounded concurrent
        -> rss_fetch implementation   -> all enabled RSS/Atom channels, bounded concurrent
   -> build-artifact-set
-  -> publish-collection
+  -> publish-collection            -> MinIO Markdown objects, then local manifest
   -> CollectionResult
 ```
 
@@ -52,6 +52,11 @@ Initial Adapter keys are:
 - Web Search: `bocha`, `tavily`, `parallel`;
 - structured API: `cls`, `eastmoney_fast`, `eastmoney_stock`, `stcn`;
 - dynamic feed: `generic_rss`.
+
+Tavily requests `include_raw_content: "text"`; AgentOS does not accept Tavily's provider-generated Markdown.
+Bocha, Parallel, the structured APIs and RSS/Atom have no equivalent Markdown-format selector in their current
+protocols and already normalize provider text, snippets or feed content before Artifact construction. AgentOS is the
+single owner of the persisted Markdown wrapper and YAML frontmatter.
 
 Adding another instance of a supported protocol is a database operation. Adding an incompatible protocol still needs a
 reviewed Adapter. Web Search candidates resolve source trust from the actual result host when `config.source_levels`
@@ -92,7 +97,10 @@ their protocol supports it; deterministic Artifact construction always enforces 
 - Every successful channel call writes a complete Tool Batch before returning its receipt.
 - Every Candidate reaches exactly one deterministic terminal disposition before publication.
 - Manifest publication is last; downstream Workflows consume `indexes/manifest-index.jsonl` by byte offset.
-- Published files remain under the Git-ignored `data/collector/` root.
+- Before a manifest becomes visible, every accepted Markdown document exists as an immutable matching object in the
+  configured MinIO `raw-evidence` bucket.
+- A document manifest records `url_path=/{bucket}/{object_key}` without a scheme, host or port.
+- Published files remain under the Git-ignored `data/collector/` root so Evidence AI input does not depend on MinIO.
 
 ## Failure semantics
 
@@ -100,7 +108,9 @@ their protocol supports it; deterministic Artifact construction always enforces 
 - Missing Adapter, provider timeout, invalid response, or request failure is isolated to that channel.
 - A façade with no enabled channels returns `no_channels`; sibling façades still execute.
 - If no Tool Batch exists after deterministic acquisition, Artifact construction fails rather than publishing false success.
-- Build failure leaves the final tree unchanged; publication is idempotent for immutable matching files.
+- Build or MinIO failure leaves the final manifest and manifest index unpublished; publication is idempotent for
+  immutable matching local files and MinIO objects.
+- A matching MinIO object size and SHA-256 metadata is a retry success; a different object under the same key fails.
 - Workflow steps use no hidden retries and fail on deterministic Function errors.
 
 ## Acceptance seam

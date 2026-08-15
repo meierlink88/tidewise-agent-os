@@ -81,6 +81,13 @@ docker run --rm --network tidewise-uat --entrypoint curl "$agentos_image" \
   || fail data-service "http://data:9011/readyz is unavailable"
 pass internal-data-service
 
+minio_health_url="${MINIO_ENDPOINT:?MINIO_ENDPOINT is required}"
+minio_health_url="${minio_health_url%/}/minio/health/live"
+docker run --rm --network tidewise-uat --entrypoint curl "$agentos_image" \
+  -fsS --connect-timeout 5 --max-time 15 "$minio_health_url" >/dev/null \
+  || fail minio "${MINIO_ENDPOINT} is unavailable from tidewise-uat"
+pass internal-minio
+
 container_ids="$(docker ps --filter 'publish=9081' --format '{{.ID}}')"
 while read -r container_id; do
   [ -z "$container_id" ] && continue

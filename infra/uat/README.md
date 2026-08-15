@@ -5,6 +5,8 @@
 AgentOS is an independently deployed release unit on the same Huawei Cloud ECS used by Tidewise AI.
 It reuses the Huawei SWR registry, the PostgreSQL RDS instance, and the external `tidewise-uat`
 Docker network, while keeping its database, role, Compose project, data, runner state, and rollback state isolated.
+Raw Evidence publication also uses a pre-provisioned MinIO endpoint reachable from `tidewise-uat`; its
+`raw-evidence` bucket must allow direct browser downloads through the environment's public MinIO Base URL.
 
 ```text
 Huawei ECS
@@ -98,6 +100,7 @@ Environment or repository Variables:
 - `UAT_AGENTOS_RUNNER_NAME`
 - `AGENTOS_EXTERNAL_URL` — `https://tideai.tripwise.cn/agentos`
 - `RDS_HOST` — Huawei RDS private hostname
+- `MINIO_ENDPOINT` — MinIO S3 API URL reachable from containers, including `http://` or `https://`
 - `CONTROL_PLANE_JWT_VERIFICATION_KEY` — PEM public key generated for the UAT OS connection in Agno Control Plane
 
 Secrets:
@@ -105,6 +108,7 @@ Secrets:
 - `SWR_USERNAME`, `SWR_PASSWORD` — push credentials
 - `SWR_PULL_USERNAME`, `SWR_PULL_PASSWORD` — ECS read-only credentials
 - `AGENTOS_DB_PASSWORD`, `DEEPSEEK_API_KEY`, `DATA_SERVICE_TOKEN`
+- `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`
 - `PARALLEL_API_KEY`, `TAVILY_API_KEY`, `BOCHA_API_KEY`
 - `JWT_JWKS_BASE64`
 - optional `MCP_CONNECT_SECRET`, `AGENTOS_MCP_SIGNING_KEY`

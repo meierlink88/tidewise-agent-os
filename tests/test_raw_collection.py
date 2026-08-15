@@ -48,6 +48,20 @@ from capabilities.collection.tools import COLLECTION_TOOLS
 from workflows.raw_collection import _seed_workflow
 
 
+class RecordingRawDocumentStore:
+    def __init__(self) -> None:
+        self.uploads: list[tuple[str, str, bytes, str]] = []
+
+    def publish_markdown(self, *, bucket: str, object_key: str, content: bytes, sha256: str) -> None:
+        self.uploads.append((bucket, object_key, content, sha256))
+
+
+class FailingRawDocumentStore:
+    def publish_markdown(self, *, bucket: str, object_key: str, content: bytes, sha256: str) -> None:
+        del bucket, object_key, content, sha256
+        raise RuntimeError("MinIO unavailable")
+
+
 class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -231,8 +245,14 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(prepared.candidate_counts["known_url"], 1)
         self.assertEqual(prepared.candidate_counts["out_of_window"], 1)
 
-        result = publish_artifact_set(prepared)
-        repeated = publish_artifact_set(prepared)
+        with self.assertRaisesRegex(RuntimeError, "MinIO unavailable"):
+            publish_artifact_set(prepared, document_store=FailingRawDocumentStore())
+        self.assertFalse(manifest.exists())
+        self.assertFalse((root / "indexes/manifest-index.jsonl").exists())
+
+        document_store = RecordingRawDocumentStore()
+        result = publish_artifact_set(prepared, document_store=document_store)
+        repeated = publish_artifact_set(prepared, document_store=document_store)
         self.assertEqual(result.collection_id, repeated.collection_id)
         self.assertTrue(manifest.is_file())
         manifest_index = root / "indexes/manifest-index.jsonl"
@@ -243,7 +263,21 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(index_entries[0]["accepted_documents"], 1)
         document = root / prepared.accepted_documents[0].relative_path
         self.assertTrue(document.is_file())
+        self.assertEqual(
+            [(bucket, key) for bucket, key, _, _ in document_store.uploads],
+            [
+                (
+                    "raw-evidence",
+                    "documents/2026/08/10/527a68f68c3e56a45e57bf594f526ca7a0a11213753f7d5c021bfe83ec0bba36.md",
+                )
+            ],
+        )
+        self.assertEqual(document_store.uploads[0][2], document.read_bytes())
         manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
+        self.assertEqual(
+            manifest_payload["accepted_documents"][0]["url_path"],
+            "/raw-evidence/documents/2026/08/10/527a68f68c3e56a45e57bf594f526ca7a0a11213753f7d5c021bfe83ec0bba36.md",
+        )
         self.assertEqual(manifest_payload["results_pending"], 0)
         self.assertEqual(manifest_payload["collector_agent"]["config_version"], 3)
         self.assertEqual(manifest_payload["tool_batches"][0]["requested_after"], "2026-08-10T14:30:00+00:00")
@@ -421,7 +455,7 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             CollectionRequest(objective="采集政策"),
             completed_at=now,
         )
-        publish_artifact_set(prepared)
+        publish_artifact_set(prepared, document_store=RecordingRawDocumentStore())
 
         self.assertEqual(prepared.candidate_counts["known_url"], 1)
         self.assertEqual(legacy.read_text(encoding="utf-8"), legacy_payload)

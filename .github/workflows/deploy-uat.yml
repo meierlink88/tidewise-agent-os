@@ -183,6 +183,10 @@ jobs:
       DB_PASS: ${{ secrets.AGENTOS_DB_PASSWORD }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       DATA_SERVICE_TOKEN: ${{ secrets.DATA_SERVICE_TOKEN }}
+      MINIO_ENDPOINT: ${{ vars.MINIO_ENDPOINT }}
+      MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+      MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+      RAW_EVIDENCE_BUCKET: raw-evidence
       PARALLEL_API_KEY: ${{ secrets.PARALLEL_API_KEY }}
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
       BOCHA_API_KEY: ${{ secrets.BOCHA_API_KEY }}
@@ -236,7 +240,8 @@ jobs:
 
           names = (
               "AGENTOS_EXTERNAL_URL", "DB_HOST", "DB_PORT", "DB_USER", "DB_PASS", "DB_DATABASE", "DB_SSLMODE",
-              "DEEPSEEK_API_KEY", "DATA_SERVICE_TOKEN", "PARALLEL_API_KEY", "TAVILY_API_KEY", "BOCHA_API_KEY",
+              "DEEPSEEK_API_KEY", "DATA_SERVICE_TOKEN", "MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY",
+              "RAW_EVIDENCE_BUCKET", "PARALLEL_API_KEY", "TAVILY_API_KEY", "BOCHA_API_KEY",
               "MCP_CONNECT_SECRET", "AGENTOS_MCP_SIGNING_KEY",
           )
           lines = []

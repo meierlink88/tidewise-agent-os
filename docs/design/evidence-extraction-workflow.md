@@ -3,8 +3,9 @@
 ## Outcome
 
 Incrementally consume completed Raw Collection manifests, extract atomic Evidence from each accepted document,
-publish Raw Evidence and Evidence through Data Service APIs, and advance a crash-safe file checkpoint only after
-both publications and the local Evidence manifest succeed.
+publish Raw Evidence metadata and Evidence through Data Service APIs, and advance a crash-safe file checkpoint only
+after both publications and the local Evidence manifest succeed. The AI reads the verified local Markdown body, while
+Data Service receives only its MinIO URL path through the existing `raw_text` field.
 
 ## Runtime shape
 
@@ -36,6 +37,9 @@ terminal state, so a slow scheduled run is not claimed again concurrently; later
 - Evidence extraction reads the append-only manifest index by byte offset; it never scans historical document bodies.
 - One Raw document is the atomic retry unit.
 - Raw Evidence is published before its complete `1..N` Evidence set.
+- Raw Evidence `raw_text` is the environment-neutral `/{bucket}/{object_key}` path recorded by Raw Collection, never
+  the article body or a Base URL.
+- Browser access is `environment MinIO Base URL + raw_text`; Data Service does not proxy the object.
 - Data Service calls have a three-second client timeout and reuse stable natural identities on retry.
 - `SINGLE` has no core fields; `DOUBLE` requires `source_what_core`.
 - Keywords contain 1 to 5 unique values, each at most 5 characters.

@@ -32,6 +32,12 @@ from capabilities.collection.internal.models import (
     PreparedArtifactSet,
     TitleRelevance,
 )
+from capabilities.collection.internal.object_storage import (
+    RawDocumentStore,
+    configured_raw_document_store,
+    raw_evidence_bucket,
+    raw_evidence_url_path,
+)
 
 _TRACKING_PARAMETERS = {"fbclid", "gclid", "spm", "from", "source"}
 _WORD = re.compile(r"[a-z0-9]+", re.IGNORECASE)
@@ -256,6 +262,7 @@ def build_artifact_set(
                 AcceptedDocument(
                     candidate_id=candidate.candidate_id,
                     relative_path=document_path,
+                    url_path=raw_evidence_url_path(document_path),
                     sha256=document_hash,
                 )
             )
@@ -446,7 +453,11 @@ def _publish_file(source: Path, target: Path, *, replace: bool) -> None:
     os.replace(temporary, target)
 
 
-def publish_artifact_set(prepared: PreparedArtifactSet) -> CollectionResult:
+def publish_artifact_set(
+    prepared: PreparedArtifactSet,
+    *,
+    document_store: RawDocumentStore | None = None,
+) -> CollectionResult:
     """Publish a prepared collection idempotently, with the manifest last."""
     if prepared.results_pending != 0:
         raise ValueError("cannot publish pending candidates")
@@ -474,6 +485,20 @@ def publish_artifact_set(prepared: PreparedArtifactSet) -> CollectionResult:
         )
     if not prepared.publication_items or prepared.publication_items[-1] != manifest_relative:
         raise ValueError("manifest must be the final publication item")
+
+    if prepared.accepted_documents:
+        store = document_store or configured_raw_document_store()
+        bucket = raw_evidence_bucket()
+        for document in prepared.accepted_documents:
+            source = staging / document.relative_path
+            if not source.is_file():
+                raise ValueError(f"prepared Artifact is missing: {source.name}")
+            store.publish_markdown(
+                bucket=bucket,
+                object_key=document.relative_path,
+                content=source.read_bytes(),
+                sha256=document.sha256,
+            )
 
     for relative in prepared.publication_items:
         if relative == manifest_relative:

@@ -9,6 +9,7 @@ authors = [{ name = "Tidewise" }]
 
 dependencies = [
   "agno[os,mcp,slack,pgvector,psycopg]==2.8.7",
+  "minio",
   "openai",
   "python-dotenv",
 ]

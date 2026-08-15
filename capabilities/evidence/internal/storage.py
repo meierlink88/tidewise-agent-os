@@ -178,8 +178,17 @@ def read_next_raw_document(checkpoint: EvidenceCheckpoint) -> tuple[PreparedRawD
             if not isinstance(item, dict):
                 raise ValueError("Raw Collection accepted document is invalid")
             relative_document = item.get("relative_path")
+            document_url_path = item.get("url_path")
             document_sha256 = item.get("sha256")
-            if not isinstance(relative_document, str) or not isinstance(document_sha256, str):
+            if (
+                not isinstance(relative_document, str)
+                or not isinstance(document_url_path, str)
+                or not document_url_path.startswith("/")
+                or document_url_path.startswith("//")
+                or not document_url_path.endswith(f"/{relative_document}")
+                or any(part in {"", ".", ".."} for part in document_url_path[1:].split("/"))
+                or not isinstance(document_sha256, str)
+            ):
                 raise ValueError("Raw Collection accepted document identity is invalid")
             document_path = _safe_relative(root, relative_document)
             document_bytes = document_path.read_bytes()
@@ -210,6 +219,7 @@ def read_next_raw_document(checkpoint: EvidenceCheckpoint) -> tuple[PreparedRawD
                 document_index=current.document_index,
                 document_count=len(accepted),
                 document_path=relative_document,
+                document_url_path=document_url_path,
                 document_sha256=document_sha256,
                 content_sha256=content_sha256,
                 raw_evidence_id=_raw_evidence_id(source_url, content_sha256),
