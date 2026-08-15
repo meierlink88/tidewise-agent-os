@@ -85,7 +85,7 @@ def validate_evidence_draft(step_input: StepInput) -> StepOutput:
         quoted_source_id=quoted_id,
         quoted_source_name=quoted_name,
         title=prepared.title,
-        raw_text=prepared.raw_text,
+        raw_text=prepared.document_url_path,
         published_at=prepared.published_at,
         collected_at=prepared.collected_at,
         keywords=draft.raw_evidence.keywords,

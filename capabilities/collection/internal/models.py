@@ -199,6 +199,7 @@ class AcceptedDocument(BaseModel):
 
     candidate_id: str
     relative_path: str
+    url_path: str
     sha256: str
 
 

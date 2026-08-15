@@ -27,6 +27,10 @@ anyio==4.14.1
     #   sse-starlette
     #   starlette
     #   watchfiles
+argon2-cffi==25.1.0
+    # via minio
+argon2-cffi-bindings==25.1.0
+    # via argon2-cffi
 attrs==26.1.0
     # via
     #   aiohttp
@@ -46,8 +50,11 @@ certifi==2026.6.17
     # via
     #   httpcore
     #   httpx
+    #   minio
 cffi==2.1.0
-    # via cryptography
+    # via
+    #   argon2-cffi-bindings
+    #   cryptography
 click==8.4.2
     # via uvicorn
 croniter==6.2.3
@@ -143,6 +150,8 @@ mcp==1.28.1
     #   fastmcp-slim
 mdurl==0.1.2
     # via markdown-it-py
+minio==7.2.20
+    # via tidewise-agent-os (pyproject.toml)
 more-itertools==11.1.0
     # via
     #   jaraco-classes
@@ -205,6 +214,8 @@ py-key-value-aio==0.4.5
     # via fastmcp-slim
 pycparser==3.0
     # via cffi
+pycryptodome==3.23.0
+    # via minio
 pydantic==2.13.4
     # via
     #   agno
@@ -301,6 +312,7 @@ typing-extensions==4.16.0
     #   fastapi
     #   fastmcp-slim
     #   mcp
+    #   minio
     #   openai
     #   openinference-instrumentation-agno
     #   opentelemetry-api
@@ -322,6 +334,8 @@ typing-inspection==0.4.2
     #   pydantic-settings
 uncalled-for==0.3.2
     # via fastmcp-slim
+urllib3==2.7.0
+    # via minio
 uvicorn==0.50.2
     # via
     #   agno

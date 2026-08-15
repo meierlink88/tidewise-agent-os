@@ -29,6 +29,7 @@ class PreparedRawDocument(BaseModel):
     document_index: int = Field(ge=0)
     document_count: int = Field(ge=1)
     document_path: str
+    document_url_path: str
     document_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     raw_evidence_id: str = Field(min_length=1, max_length=32)

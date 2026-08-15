@@ -29,7 +29,7 @@ local
 
 ```bash
 cp example.env .env
-# 填写 DEEPSEEK_API_KEY 和 DB_PASS；首次初始化还需创建 agent_os 数据库/角色。
+# 填写 DEEPSEEK_API_KEY、DB_PASS 和 MinIO 凭据；首次初始化还需创建 agent_os 数据库/角色。
 
 docker compose up -d --build agentos
 curl -sSf http://localhost:8000/health
@@ -66,13 +66,17 @@ Agent 或 Workflow。
 默认启用；之后可在 AgentOS Control Panel 的 Scheduler 页面暂停、恢复、手工触发和查看运行历史，
 启用状态不会被容器重启覆盖。
 
-采集结果默认位于项目根目录 `data/collector/`：
+采集结果默认位于项目根目录 `data/collector/`，其中接受的文章在 manifest 可见前还会以同一
+`documents/YYYY/MM/DD/<document-sha256>.md` 内容寻址对象键幂等发布到 MinIO `raw-evidence` bucket：
 
 - `documents/`：接受的原始资讯 Markdown。
 - `runs/<run_id>/`：候选账本、汇总和 manifest。
 - `indexes/title-dedup-index.tsv`：新版标题跨运行去重索引；历史 `dedup-index.tsv` 仅保留为只读 URL 兼容索引。
 
-`data/` 已被 Git 忽略。可通过 `.env` 的 `COLLECTOR_DATA_DIR` 替换宿主机目录。
+`data/` 已被 Git 忽略。可通过 `.env` 的 `COLLECTOR_DATA_DIR` 替换宿主机目录。MinIO bucket 需要预先创建并允许
+浏览器下载；`MINIO_ENDPOINT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY` 只用于对象发布。Data Service
+的 `raw_text` 保存 `/{bucket}/{object_key}`，例如 `/raw-evidence/documents/2026/08/15/<sha256>.md`，不保存环境
+Base URL。浏览器使用 MinIO 对外 Base URL 与该路径直接拼接。
 
 采集 Agent 不负责调用通道，只输出严格查询计划。Workflow 的确定性 Function 每次各执行一次
 `web_fetch`、`api_fetch`、`rss_fetch` 共享实现。三个 Tool 门面仍在 Registry 中可见，用于独立验证。通道实例保存在 AgentOS
@@ -84,6 +88,9 @@ PostgreSQL 的 `collection_channels` 表：Web Search 最多启用一个，API �
 行绝不会被启动过程覆盖。此后直接修改表内的 `enabled`、`endpoint`、`app_key`、`config`、
 `priority`、`timeout_seconds`、`max_results` 或 `default_source_level`，下一次 Workflow 运行即生效，
 无需重启容器。当前阶段 `app_key` 按明确决策明文存储；Tool 不会把它返回给模型或 Artifact。
+
+Tavily 固定请求 `include_raw_content: "text"`，避免使用供应商的 HTML→Markdown 转换；AgentOS 把各通道
+已归一的文本统一包装为带 YAML frontmatter 的 Markdown Artifact。
 
 ## 开发
 

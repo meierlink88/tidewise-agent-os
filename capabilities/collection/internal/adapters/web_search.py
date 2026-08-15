@@ -22,6 +22,10 @@ def _key(channel: CollectionChannel) -> str:
     return value
 
 
+def _optional_text(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
 def _candidate(
     channel: CollectionChannel,
     request: FetchRequest,
@@ -95,7 +99,7 @@ class TavilyAdapter:
             "chunks_per_source": 3,
             "max_results": channel.max_results,
             "include_answer": False,
-            "include_raw_content": "markdown",
+            "include_raw_content": "text",
         }
         if request.published_before - request.published_after <= timedelta(days=1):
             body["time_range"] = "day"
@@ -118,7 +122,7 @@ class TavilyAdapter:
                 request,
                 title=str(row.get("title", "")).strip(),
                 url=str(row.get("url", "")).strip(),
-                content=str(row.get("raw_content", "")).strip() or str(row.get("content", "")).strip(),
+                content=_optional_text(row.get("raw_content")) or _optional_text(row.get("content")),
                 source_name=source_host(str(row.get("url", ""))),
                 published_at=parse_provider_datetime(row.get("published_date")),
                 collected_at=collected_at,

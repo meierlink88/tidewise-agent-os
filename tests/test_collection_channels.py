@@ -19,7 +19,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from capabilities.collection.internal.adapters.base import FetchRequest
 from capabilities.collection.internal.adapters.registry import ADAPTERS
 from capabilities.collection.internal.adapters.rss import GenericRssAdapter
-from capabilities.collection.internal.adapters.web_search import BochaAdapter
+from capabilities.collection.internal.adapters.web_search import BochaAdapter, TavilyAdapter
 from capabilities.collection.internal.channels.models import (
     ChannelType,
     CollectionChannel,
@@ -445,6 +445,34 @@ class CollectionChannelPostgresIntegrationTest(unittest.TestCase):
 
 
 class CollectionAdapterContractTest(unittest.IsolatedAsyncioTestCase):
+    async def test_tavily_requests_plain_text_and_handles_null_raw_content(self) -> None:
+        channel = _channel("tavily", ChannelType.WEB_SEARCH, "tavily").model_copy(update={"app_key": "database-key"})
+        request = FetchRequest(
+            query="A股公告",
+            published_after=datetime(2026, 8, 10, 10, tzinfo=UTC),
+            published_before=datetime(2026, 8, 12, 10, tzinfo=UTC),
+        )
+        payload = {
+            "results": [
+                {
+                    "title": "公告标题",
+                    "url": "https://example.com/article",
+                    "raw_content": None,
+                    "content": "可读的纯文本正文",
+                    "published_date": "2026-08-12T09:00:00Z",
+                }
+            ]
+        }
+        with patch(
+            "capabilities.collection.internal.adapters.web_search.post_json",
+            new=AsyncMock(return_value=payload),
+        ) as request_mock:
+            candidates = await TavilyAdapter().fetch(channel, request)
+
+        assert request_mock.await_args is not None
+        self.assertEqual(request_mock.await_args.args[1]["include_raw_content"], "text")
+        self.assertEqual(candidates[0].content, "可读的纯文本正文")
+
     async def test_bocha_normalizes_results_and_resolves_source_level_by_host(self) -> None:
         channel = _channel("bocha", ChannelType.WEB_SEARCH, "bocha").model_copy(
             update={
