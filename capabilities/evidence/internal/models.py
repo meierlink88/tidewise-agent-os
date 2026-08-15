@@ -1,11 +1,15 @@
 """Typed contracts for Evidence extraction and Data Service publication."""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator, model_validator
 
 _DATETIME_ADAPTER = TypeAdapter(datetime)
+_RAW_EVIDENCE_ID_PATTERN = r"^RAW[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+_EVIDENCE_ID_PATTERN = r"^EVD[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+RawEvidenceID = Annotated[str, Field(pattern=_RAW_EVIDENCE_ID_PATTERN)]
+EvidenceID = Annotated[str, Field(pattern=_EVIDENCE_ID_PATTERN)]
 
 
 class EvidenceCheckpoint(BaseModel):
@@ -21,7 +25,7 @@ class PreparedRawDocument(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["prepared_raw_document.v1"] = "prepared_raw_document.v1"
+    schema_version: Literal["prepared_raw_document.v2"] = "prepared_raw_document.v2"
     collection_id: str
     manifest_path: str
     manifest_offset: int = Field(ge=0)
@@ -32,7 +36,7 @@ class PreparedRawDocument(BaseModel):
     document_url_path: str
     document_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    raw_evidence_id: str = Field(min_length=1, max_length=32)
+    publication_key: str = Field(min_length=1, max_length=128)
     source_id: str = Field(min_length=1, max_length=32)
     source_name: str = Field(min_length=1, max_length=100)
     source_level: Literal["L1_OFFICIAL", "L2_WIRE", "L3_MEDIA", "L4_SOCIAL"]
@@ -85,7 +89,7 @@ class RawEvidenceEnrichment(BaseModel):
 
 
 class AtomicEvidenceDraft(BaseModel):
-    """LLM-owned semantic draft; deterministic identities are added later."""
+    """LLM-owned semantic draft; deterministic publication metadata is added later."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -186,7 +190,9 @@ class EvidenceExtractionDraft(BaseModel):
 class RawEvidencePublication(BaseModel):
     """Data Service Raw Evidence request body."""
 
-    raw_evidence_id: str
+    model_config = ConfigDict(extra="forbid")
+
+    publication_key: str = Field(min_length=1, max_length=128)
     source_id: str
     source_name: str
     source_level: str
@@ -204,7 +210,8 @@ class RawEvidencePublication(BaseModel):
 class EvidencePublicationItem(BaseModel):
     """One complete Data Service Evidence publication item."""
 
-    evidence_id: str
+    model_config = ConfigDict(extra="forbid")
+
     split_order: int = Field(ge=0)
     layer_type: Literal["SINGLE", "DOUBLE"]
     source_who: str | None
@@ -229,17 +236,35 @@ class EvidencePublicationItem(BaseModel):
 class PreparedEvidencePublication(BaseModel):
     """Fully validated deterministic publication set for one Raw document."""
 
-    schema_version: Literal["prepared_evidence_publication.v1"] = "prepared_evidence_publication.v1"
+    schema_version: Literal["prepared_evidence_publication.v2"] = "prepared_evidence_publication.v2"
     prepared_raw: PreparedRawDocument
     raw_evidence: RawEvidencePublication
     evidences: list[EvidencePublicationItem] = Field(min_length=1)
 
 
+class RawEvidencePublicationResponse(BaseModel):
+    """Formal Raw Evidence identity returned by Data Service."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    raw_evidence_id: RawEvidenceID
+
+
+class EvidenceSetPublicationResponse(BaseModel):
+    """Formal Evidence identities returned by Data Service in split order."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    raw_evidence_id: RawEvidenceID
+    evidence_ids: list[EvidenceID] = Field(min_length=1)
+
+
 class EvidencePublicationResult(BaseModel):
     """Workflow-visible terminal result for one published Raw document."""
 
-    schema_version: Literal["evidence_publication_result.v1"] = "evidence_publication_result.v1"
-    raw_evidence_id: str
+    schema_version: Literal["evidence_publication_result.v2"] = "evidence_publication_result.v2"
+    raw_evidence_id: RawEvidenceID
+    evidence_ids: list[EvidenceID] = Field(min_length=1)
     evidence_count: int = Field(ge=1)
     artifact_manifest_path: str
     checkpoint: EvidenceCheckpoint

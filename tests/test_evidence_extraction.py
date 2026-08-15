@@ -4,6 +4,7 @@ import hashlib
 import inspect
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -174,7 +175,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                 expression_fingerprint="示例事实",
             )
 
-    def test_validation_adds_stable_id_order_and_expression_key(self) -> None:
+    def test_validation_adds_stable_publication_key_order_and_expression_key(self) -> None:
         self._publish_raw_fixture()
         publication = self._validated(self._prepared())
         self.assertEqual(
@@ -182,9 +183,11 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             "/raw-evidence/documents/2026/08/11/c6fe9177b96308182802eb456d47768b06d890fa96b9e08f159a0f6fd2470128.md",
         )
         self.assertNotIn("示例公司公告签署10亿元服务器订单", publication.raw_evidence.raw_text)
-        self.assertEqual(len(publication.raw_evidence.raw_evidence_id), 32)
+        self.assertTrue(publication.raw_evidence.publication_key.startswith("agentos.raw-evidence.v1:"))
+        self.assertLessEqual(len(publication.raw_evidence.publication_key), 128)
+        self.assertNotIn("raw_evidence_id", publication.raw_evidence.model_dump(mode="json"))
         self.assertEqual(publication.evidences[0].split_order, 0)
-        self.assertEqual(len(publication.evidences[0].evidence_id), 32)
+        self.assertNotIn("evidence_id", publication.evidences[0].model_dump(mode="json"))
         self.assertEqual(len(publication.evidences[0].expression_key), 64)
         self.assertEqual(publication.evidences[0].fingerprint_version, "evidence-expression.v1")
 
@@ -249,7 +252,12 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self._publish_raw_fixture()
         publication = self._validated(self._prepared())
         step_input = StepInput(previous_step_outputs={"validate-evidence-draft": StepOutput(content=publication)})
-        responses = [None, None]
+        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        responses = [
+            {"raw_evidence_id": raw_evidence_id},
+            {"raw_evidence_id": raw_evidence_id, "evidence_ids": [evidence_id]},
+        ]
         with patch(
             "capabilities.evidence.functions.extraction.post_publication",
             side_effect=responses,
@@ -259,19 +267,31 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(mocked.call_count, 2)
         raw_endpoint, raw_payload = mocked.call_args_list[0].args
         self.assertEqual(raw_endpoint, "raw-evidence-publications")
+        self.assertEqual(raw_payload["raw_evidence"]["publication_key"], publication.raw_evidence.publication_key)
+        self.assertNotIn("raw_evidence_id", raw_payload["raw_evidence"])
         self.assertEqual(
             raw_payload["raw_evidence"]["raw_text"],
             "/raw-evidence/documents/2026/08/11/c6fe9177b96308182802eb456d47768b06d890fa96b9e08f159a0f6fd2470128.md",
         )
         self.assertNotIn("10亿元服务器订单", raw_payload["raw_evidence"]["raw_text"])
+        evidence_endpoint, evidence_payload = mocked.call_args_list[1].args
+        self.assertEqual(evidence_endpoint, "evidence-publications")
+        self.assertEqual(evidence_payload["raw_evidence_id"], raw_evidence_id)
+        self.assertNotIn("evidence_id", evidence_payload["evidences"][0])
         self.assertTrue(Path(result.artifact_manifest_path).is_file())
         manifest = json.loads(Path(result.artifact_manifest_path).read_text(encoding="utf-8"))
+        self.assertEqual(manifest["schema"], "evidence_extraction_manifest.v2")
+        self.assertEqual(manifest["publication_key"], publication.raw_evidence.publication_key)
+        self.assertEqual(manifest["raw_evidence_id"], raw_evidence_id)
+        self.assertEqual(manifest["evidences"], [{"split_order": 0, "evidence_id": evidence_id}])
         self.assertEqual(manifest["artifacts"], {"prepared": "prepared.json"})
         self.assertEqual(
             {path.name for path in Path(result.artifact_manifest_path).parent.iterdir()},
             {"manifest.json", "prepared.json"},
         )
-        self.assertFalse((evidence_artifact_root() / ".pending" / result.raw_evidence_id).exists())
+        self.assertEqual(result.raw_evidence_id, raw_evidence_id)
+        self.assertEqual(result.evidence_ids, [evidence_id])
+        self.assertEqual(list((evidence_artifact_root() / ".pending").glob("*")), [])
         self.assertGreater(result.checkpoint.manifest_offset, 0)
         self.assertEqual(result.checkpoint, read_checkpoint())
 
@@ -293,16 +313,129 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch(
                 "capabilities.evidence.functions.extraction.post_publication",
-                side_effect=[None, ValueError("evidence rejected")],
+                side_effect=[
+                    {"raw_evidence_id": "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"},
+                    ValueError("evidence rejected"),
+                ],
             ),
             self.assertRaisesRegex(ValueError, "evidence rejected"),
         ):
             await publish_evidences(step_input)
         self.assertEqual(read_checkpoint().manifest_offset, 0)
-        final_manifest = (
-            evidence_artifact_root() / "documents" / publication.raw_evidence.raw_evidence_id / "manifest.json"
-        )
-        self.assertFalse(final_manifest.exists())
+        self.assertEqual(list((evidence_artifact_root() / "documents").glob("*/manifest.json")), [])
+
+    async def test_retry_reuses_frozen_payload_after_partial_publication(self) -> None:
+        self._publish_raw_fixture()
+        publication = self._validated(self._prepared())
+        step_input = StepInput(previous_step_outputs={"validate-evidence-draft": StepOutput(content=publication)})
+        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        with (
+            patch(
+                "capabilities.evidence.functions.extraction.post_publication",
+                side_effect=[{"raw_evidence_id": raw_evidence_id}, ValueError("evidence rejected")],
+            ),
+            self.assertRaisesRegex(ValueError, "evidence rejected"),
+        ):
+            await publish_evidences(step_input)
+
+        changed = publication.model_copy(deep=True)
+        changed.raw_evidence.keywords = ["变更"]
+        changed.evidences[0].source_what = "不应在重试中发布的变更事实"
+        retry_input = StepInput(previous_step_outputs={"validate-evidence-draft": StepOutput(content=changed)})
+        with patch(
+            "capabilities.evidence.functions.extraction.post_publication",
+            side_effect=[
+                {"raw_evidence_id": raw_evidence_id},
+                {"raw_evidence_id": raw_evidence_id, "evidence_ids": [evidence_id]},
+            ],
+        ) as retried:
+            output = await publish_evidences(retry_input)
+
+        raw_payload = retried.call_args_list[0].args[1]["raw_evidence"]
+        evidence_payload = retried.call_args_list[1].args[1]["evidences"][0]
+        self.assertEqual(raw_payload["keywords"], publication.raw_evidence.keywords)
+        self.assertEqual(evidence_payload["source_what"], publication.evidences[0].source_what)
+        self.assertEqual(EvidencePublicationResult.model_validate(output.content).evidence_ids, [evidence_id])
+
+    async def test_final_manifest_recovers_checkpoint_despite_new_agent_draft(self) -> None:
+        self._publish_raw_fixture()
+        publication = self._validated(self._prepared())
+        step_input = StepInput(previous_step_outputs={"validate-evidence-draft": StepOutput(content=publication)})
+        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        with (
+            patch(
+                "capabilities.evidence.functions.extraction.post_publication",
+                side_effect=[
+                    {"raw_evidence_id": raw_evidence_id},
+                    {"raw_evidence_id": raw_evidence_id, "evidence_ids": [evidence_id]},
+                ],
+            ),
+            patch(
+                "capabilities.evidence.functions.extraction.advance_checkpoint",
+                side_effect=RuntimeError("checkpoint interrupted"),
+            ),
+            self.assertRaisesRegex(RuntimeError, "checkpoint interrupted"),
+        ):
+            await publish_evidences(step_input)
+
+        changed = publication.model_copy(deep=True)
+        second = changed.evidences[0].model_copy(deep=True)
+        second.split_order = 1
+        second.source_what = "后续 Agent 输出的额外事实"
+        changed.evidences.append(second)
+        retry_input = StepInput(previous_step_outputs={"validate-evidence-draft": StepOutput(content=changed)})
+        with patch("capabilities.evidence.functions.extraction.post_publication") as repeated:
+            output = await publish_evidences(retry_input)
+
+        result = EvidencePublicationResult.model_validate(output.content)
+        self.assertEqual(repeated.call_count, 0)
+        self.assertEqual(result.evidence_count, 1)
+        self.assertEqual(result.evidence_ids, [evidence_id])
+        self.assertEqual(result.checkpoint, read_checkpoint())
+
+    async def test_invalid_data_service_id_responses_do_not_advance_checkpoint(self) -> None:
+        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        cases = [
+            ([{}, {}], "Raw Evidence publication response"),
+            (
+                [
+                    {"raw_evidence_id": raw_evidence_id},
+                    {
+                        "raw_evidence_id": "RAWec95a292-d513-5aa6-a54c-a9e3926add1a",
+                        "evidence_ids": [evidence_id],
+                    },
+                ],
+                "Raw Evidence identity mismatch",
+            ),
+            (
+                [
+                    {"raw_evidence_id": raw_evidence_id},
+                    {"raw_evidence_id": raw_evidence_id, "evidence_ids": [evidence_id, evidence_id]},
+                ],
+                "Evidence identity count mismatch",
+            ),
+        ]
+        for responses, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                shutil.rmtree(os.environ["COLLECTOR_ARTIFACT_ROOT"], ignore_errors=True)
+                shutil.rmtree(os.environ["EVIDENCE_ARTIFACT_ROOT"], ignore_errors=True)
+                self._publish_raw_fixture()
+                publication = self._validated(self._prepared())
+                step_input = StepInput(
+                    previous_step_outputs={"validate-evidence-draft": StepOutput(content=publication)}
+                )
+                with (
+                    patch(
+                        "capabilities.evidence.functions.extraction.post_publication",
+                        side_effect=responses,
+                    ),
+                    self.assertRaisesRegex(ValueError, expected_error),
+                ):
+                    await publish_evidences(step_input)
+                self.assertEqual(read_checkpoint().manifest_offset, 0)
 
     def test_workflow_round_trips_agent_and_three_functions(self) -> None:
         agent = build_evidence_extractor_agent()
