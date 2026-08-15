@@ -134,7 +134,10 @@ deploys immutable digest references on the ECS runner.
 
 GitHub concurrency prevents two AgentOS deploy jobs. The ECS script also locks both
 `/opt/tidewise/uat/deploy.lock` and `/opt/tidewise/agentos-uat/deploy.lock`, preventing overlap with Tidewise AI.
-After deployment it verifies external health/auth, Agents, Workflows, Schedules, `local-ping`, MCP, and restart recovery.
+On the first deployment only, the ECS script explicitly seeds missing Schedule defaults before verification. Later
+deployments and application restarts preserve PostgreSQL/Control Panel Schedule configuration. After deployment it
+verifies external health/auth, Agents, Workflows, unique required Schedule endpoints, `local-ping`, MCP, and restart
+recovery.
 
 If verification fails, the previous successful image/runtime/Compose snapshot is restored automatically. Database
 state is not rolled back. Candidate logs are sanitized and captured before rollback removes the container. The last

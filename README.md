@@ -32,6 +32,8 @@ cp example.env .env
 
 docker compose up -d --build agentos
 curl -sSf http://localhost:8000/health
+# 仅在新的 agent_os 数据库中执行一次：
+docker compose exec -T agentos python -m scripts.seed_schedules
 ./scripts/mcp_check.sh
 ```
 
@@ -61,10 +63,11 @@ Control Plane 的 Studio 中编辑并发布 Instructions；`raw-collection` 每�
 Artifact 构建和发布的文件操作会卸载到工作线程，因此单 Worker 运行采集时不会阻塞其他业务
 Agent 或 Workflow。
 
-本地运行时会注册 `raw-collection-hourly` Schedule：按 `Asia/Shanghai` 时区每个整点
-执行一次 `raw-collection`，采集最近 48 小时的信息并发布 Artifact。Schedule 首次创建时
-默认启用；之后可在 AgentOS Control Panel 的 Scheduler 页面暂停、恢复、手工触发和查看运行历史，
-启用状态不会被容器重启覆盖。
+新环境显式执行一次 `python -m scripts.seed_schedules` 后，会得到默认的
+`raw-collection-hourly` 和 `evidence-extraction-every-10-minutes` Schedule。默认名称只用于首次
+创建；之后名称、cron、endpoint、payload 和启停状态均由 PostgreSQL 与 AgentOS Control Panel
+管理。应用启动仅按 Workflow endpoint 做只读缺失、重复和启停检查，不创建或覆盖 Schedule，
+因此 Control Panel 中的改名和其他运行配置会跨容器重启保留。
 
 采集结果默认位于项目根目录 `data/collector/`，其中接受的文章在 manifest 可见前还会以同一
 `documents/YYYY/MM/DD/<document-sha256>.md` 内容寻址对象键幂等发布到 MinIO `raw-evidence` bucket：

@@ -10,6 +10,7 @@ import httpx
 from agno.db.schemas.service_accounts import ServiceAccount
 from agno.os.service_accounts import generate_token
 
+from app.schedules import EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT, RAW_COLLECTION_SCHEDULE_ENDPOINT
 from db import get_postgres_db
 
 BASE_URL = "http://127.0.0.1:9081"
@@ -33,16 +34,25 @@ async def _probe(token: str) -> None:
         schedules = (await client.get("/schedules", params={"limit": 100, "page": 1})).raise_for_status().json()
         agent_ids = {item["id"] for item in agents}
         workflow_ids = {item["id"] for item in workflows}
-        schedule_names = {item["name"] for item in schedules["data"]}
+        schedule_endpoints = [item["endpoint"] for item in schedules["data"]]
         required_agents = {"tidewise-assistant", "raw-collector", "evidence-extractor"}
         required_workflows = {"local-ping", "raw-collection", "evidence-extraction"}
-        required_schedules = {"raw-collection-hourly", "evidence-extraction-every-10-minutes"}
+        required_schedule_endpoints = {
+            RAW_COLLECTION_SCHEDULE_ENDPOINT,
+            EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
+        }
         if not required_agents <= agent_ids:
             raise RuntimeError(f"missing Agents: {sorted(required_agents - agent_ids)}")
         if not required_workflows <= workflow_ids:
             raise RuntimeError(f"missing Workflows: {sorted(required_workflows - workflow_ids)}")
-        if not required_schedules <= schedule_names:
-            raise RuntimeError(f"missing Schedules: {sorted(required_schedules - schedule_names)}")
+        missing_endpoints = required_schedule_endpoints - set(schedule_endpoints)
+        if missing_endpoints:
+            raise RuntimeError(f"missing Schedule endpoints: {sorted(missing_endpoints)}")
+        duplicate_endpoints = sorted(
+            endpoint for endpoint in required_schedule_endpoints if schedule_endpoints.count(endpoint) > 1
+        )
+        if duplicate_endpoints:
+            raise RuntimeError(f"duplicate Schedule endpoints: {duplicate_endpoints}")
 
         ping = await client.post(
             "/workflows/local-ping/runs",

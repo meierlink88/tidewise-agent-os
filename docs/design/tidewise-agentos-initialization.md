@@ -36,7 +36,8 @@
 - 启动命令限定为 `docker compose up -d --build agentos`。
 - 因为本服务与其他本地服务共用 Compose 项目名 `tidewise-app`，禁止在本仓库执行不带
   服务名的 `docker compose down` 或 `--remove-orphans`。
-- DB 不可用时入口等待最多 300 秒；注册调度失败只告警，不阻断 API。
+- DB 不可用时入口等待最多 300 秒；Schedule 由新环境显式 seed，应用启动只读检查失败只告警，
+  不阻断 API，也不修改 Control Panel 配置。
 - `local-ping` 不依赖模型，先用于区分平台故障与模型供应商故障。
 
 ## 验收

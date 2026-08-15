@@ -24,9 +24,11 @@ indexes/manifest-index.jsonl + data/evidence/checkpoint.json
 The four steps run inside an Agno `Loop` with a 100-document safety cap. `prepare-raw-document` returns
 `stop=True` when no indexed work remains, which ends the loop without invoking the Agent.
 
-AgentOS registers `evidence-extraction-every-10-minutes` through Agno `ScheduleManager` with cron
-`*/10 * * * *` in `Asia/Shanghai`. Agno keeps a claimed schedule locked until its Workflow run reaches a
-terminal state, so a slow scheduled run is not claimed again concurrently; later runs continue from the file checkpoint.
+The explicit new-environment seed creates `evidence-extraction-every-10-minutes` with cron `*/10 * * * *`
+in `Asia/Shanghai`. After seeding, PostgreSQL and Control Panel own the Schedule configuration; AgentOS startup
+only validates the Workflow endpoint and never recreates or overwrites the row. Agno keeps a claimed schedule locked
+until its Workflow run reaches a terminal state, so a slow scheduled run is not claimed again concurrently; later
+runs continue from the file checkpoint.
 
 ## Ownership
 
