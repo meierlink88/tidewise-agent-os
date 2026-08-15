@@ -156,9 +156,9 @@ def _source_id(connector: str) -> str:
     return "SRC_" + hashlib.sha256(connector.encode("utf-8")).hexdigest()[:28]
 
 
-def _raw_evidence_id(source_url: str, content_sha256: str) -> str:
+def _publication_key(source_url: str, content_sha256: str) -> str:
     identity = f"{source_url}\n{content_sha256}".encode()
-    return "RAW_" + hashlib.sha256(identity).hexdigest()[:28]
+    return "agentos.raw-evidence.v1:" + hashlib.sha256(identity).hexdigest()
 
 
 def read_next_raw_document(checkpoint: EvidenceCheckpoint) -> tuple[PreparedRawDocument | None, EvidenceCheckpoint]:
@@ -265,7 +265,7 @@ def read_next_raw_document(checkpoint: EvidenceCheckpoint) -> tuple[PreparedRawD
                 document_url_path=document_url_path,
                 document_sha256=document_sha256,
                 content_sha256=content_sha256,
-                raw_evidence_id=_raw_evidence_id(source_url, content_sha256),
+                publication_key=_publication_key(source_url, content_sha256),
                 source_id=_source_id(connector),
                 source_name=source_name,
                 source_level=source_level

@@ -7,8 +7,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
-def post_publication(endpoint: str, payload: dict[str, Any]) -> None:
-    """POST one strict publication request within the three-second client budget."""
+def post_publication(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """POST one strict publication request and return its result envelope member."""
     base_url = os.getenv("DATA_SERVICE_BASE_URL", "http://data:9011").rstrip("/")
     token = os.getenv("DATA_SERVICE_TOKEN", "").strip()
     if not token:
@@ -22,8 +22,17 @@ def post_publication(endpoint: str, payload: dict[str, Any]) -> None:
     try:
         with urlopen(request, timeout=3.0) as response:
             body = json.loads(response.read())
-            if response.status != 201 or not isinstance(body, dict):
+            if response.status != 201:
                 raise ValueError(f"Data Service returned unexpected status {response.status}")
+            if (
+                not isinstance(body, dict)
+                or set(body) != {"request_id", "result"}
+                or not isinstance(body.get("request_id"), str)
+                or not body["request_id"].strip()
+                or not isinstance(body.get("result"), dict)
+            ):
+                raise ValueError("Data Service returned an invalid success envelope")
+            return body["result"]
     except HTTPError as exc:
         try:
             error = json.loads(exc.read())

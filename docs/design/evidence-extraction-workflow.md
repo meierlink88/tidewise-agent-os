@@ -7,6 +7,10 @@ publish Raw Evidence metadata and Evidence through Data Service APIs, and advanc
 after both publications and the local Evidence manifest succeed. The AI reads the verified local Markdown body, while
 Data Service receives only its MinIO URL path through the existing `raw_text` field.
 
+AgentOS owns the stable `publication_key` used for retries but does not create formal Raw Evidence or Evidence IDs.
+Data Service returns `raw_evidence_id` from Raw Evidence Publication; AgentOS passes that exact value to Evidence
+Publication, then records the returned `evidence_ids` in split order.
+
 ## Runtime shape
 
 ```text
@@ -37,13 +41,20 @@ terminal state, so a slow scheduled run is not claimed again concurrently; later
 - Evidence extraction reads the append-only manifest index by byte offset; it never scans historical document bodies.
 - One Raw document is the atomic retry unit.
 - Raw Evidence is published before its complete `1..N` Evidence set.
+- Raw Evidence Publication sends `publication_key` and no `raw_evidence_id`; Evidence items send no `evidence_id`.
+- The second publication uses only the `raw_evidence_id` returned by the first response. Its response must repeat that
+  identity and return exactly one unique formal Evidence ID per submitted `split_order`.
 - Raw Evidence `raw_text` is the environment-neutral `/{bucket}/{object_key}` path recorded by Raw Collection, never
   the article body or a Base URL.
 - Browser access is `environment MinIO Base URL + raw_text`; Data Service does not proxy the object.
 - New `raw_collection_manifest.v2` entries require `url_path`. Unprocessed v1 manifests are skipped at the cutover
   without invoking AI or Data Service; each decision is recorded under `data/evidence/legacy-skips/` before the
   checkpoint advances. Historical Markdown remains local and is neither moved nor rewritten by this change.
-- Data Service calls have a three-second client timeout and reuse stable natural identities on retry.
+- Data Service calls have a three-second client timeout. Raw Evidence retries reuse the stable `publication_key`; a
+  retry after either successful remote phase repeats the same immutable payload and consumes the same formal IDs.
+- New Evidence Artifact manifests use `evidence_extraction_manifest.v2`, are keyed locally by the SHA-256 of
+  `publication_key`, and record the formal Raw Evidence ID plus the `split_order` to Evidence ID mapping. Historical
+  v1 manifests and pre-cutover `.pending/RAW_...` directories remain untouched and are not treated as formal IDs.
 - `SINGLE` has no core fields; `DOUBLE` requires `source_what_core`.
 - Keywords contain 1 to 5 unique values, each at most 5 characters.
 - Article publication time never substitutes for Evidence fact time.
