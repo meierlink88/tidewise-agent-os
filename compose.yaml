@@ -1,10 +1,11 @@
-# Join the existing Docker Desktop `local` project and shared Tidewise network.
+# Join the Docker Desktop `tidewise-app` project and shared Tidewise network.
 # Start/stop this service by name; never run an unscoped `docker compose down`
 # from this repository because other local services share the project label.
-name: local
+name: tidewise-app
 
 services:
   agentos:
+    container_name: agent-os
     build:
       context: .
       dockerfile: Dockerfile

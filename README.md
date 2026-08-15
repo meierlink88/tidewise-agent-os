@@ -13,15 +13,14 @@
 
 ## 本地拓扑
 
-本服务复用已有 `local-postgres-1:5432`，使用独立数据库 `agent_os`。Compose 项目名固定为 `local`，所以 Docker Desktop 中显示在 `local` 分组下，服务名为 `agentos-1`。
+本服务通过 `tidewise-local` 网络复用 `tidewise-infra` 中的 PostgreSQL，使用独立数据库
+`agent_os`。Compose 项目名固定为 `tidewise-app`，本仓库只启动容器 `agent-os`。
 
 ```text
-local
-├── agentos-1        # 本仓库
-├── agentrun-1
-├── data-1
-├── miniapp-1
-├── adminportal-1
+tidewise-app
+└── agent-os         # 仅在本仓库显式启动
+
+tidewise-infra
 └── postgres-1       # 共享实例，AgentOS 使用独立 agent_os 数据库
 ```
 
@@ -45,7 +44,8 @@ docker compose stop agentos
 docker compose rm -f agentos
 ```
 
-> 不要在本仓库执行不带服务名的 `docker compose down`：`local` 分组还包含其他观潮家本地服务。
+> 不要在本仓库执行不带服务名的 `docker compose down` 或 `--remove-orphans`：
+> `tidewise-app` 分组还包含其他观潮家应用服务。
 
 ## 采集提示词与数据
 
