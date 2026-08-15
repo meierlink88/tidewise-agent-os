@@ -324,6 +324,40 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(read_checkpoint().manifest_offset, 0)
         self.assertEqual(list((evidence_artifact_root() / "documents").glob("*/manifest.json")), [])
 
+    async def test_retry_reuses_frozen_payload_after_partial_publication(self) -> None:
+        self._publish_raw_fixture()
+        publication = self._validated(self._prepared())
+        step_input = StepInput(previous_step_outputs={"validate-evidence-draft": StepOutput(content=publication)})
+        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        with (
+            patch(
+                "capabilities.evidence.functions.extraction.post_publication",
+                side_effect=[{"raw_evidence_id": raw_evidence_id}, ValueError("evidence rejected")],
+            ),
+            self.assertRaisesRegex(ValueError, "evidence rejected"),
+        ):
+            await publish_evidences(step_input)
+
+        changed = publication.model_copy(deep=True)
+        changed.raw_evidence.keywords = ["变更"]
+        changed.evidences[0].source_what = "不应在重试中发布的变更事实"
+        retry_input = StepInput(previous_step_outputs={"validate-evidence-draft": StepOutput(content=changed)})
+        with patch(
+            "capabilities.evidence.functions.extraction.post_publication",
+            side_effect=[
+                {"raw_evidence_id": raw_evidence_id},
+                {"raw_evidence_id": raw_evidence_id, "evidence_ids": [evidence_id]},
+            ],
+        ) as retried:
+            output = await publish_evidences(retry_input)
+
+        raw_payload = retried.call_args_list[0].args[1]["raw_evidence"]
+        evidence_payload = retried.call_args_list[1].args[1]["evidences"][0]
+        self.assertEqual(raw_payload["keywords"], publication.raw_evidence.keywords)
+        self.assertEqual(evidence_payload["source_what"], publication.evidences[0].source_what)
+        self.assertEqual(EvidencePublicationResult.model_validate(output.content).evidence_ids, [evidence_id])
+
     async def test_invalid_data_service_id_responses_do_not_advance_checkpoint(self) -> None:
         raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
         evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"

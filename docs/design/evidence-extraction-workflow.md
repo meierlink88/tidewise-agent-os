@@ -32,8 +32,9 @@ terminal state, so a slow scheduled run is not claimed again concurrently; later
 
 - The Agent owns atomic semantic splitting, exclusions, originality/quotation judgment, SINGLE/DOUBLE, two-layer
   5W1H, keywords, and the readable expression fingerprint.
-- Functions own file parsing, trust-boundary validation, IDs, split order, fingerprint keys, API timeouts,
-  Artifact ordering, and checkpoint transitions. Data publication responses are not persisted as local receipts.
+- Functions own file parsing, trust-boundary validation, `publication_key`, split order, fingerprint keys, API
+  timeouts, response validation, Artifact ordering, and checkpoint transitions. Formal IDs are recorded in the final
+  manifest but Data publication responses do not become separate local receipts.
 - Data Service owns the formal Raw Evidence/Evidence facts and enforces its accepted V1 API contract.
 
 ## Invariants
@@ -52,11 +53,14 @@ terminal state, so a slow scheduled run is not claimed again concurrently; later
   checkpoint advances. Historical Markdown remains local and is neither moved nor rewritten by this change.
 - Data Service calls have a three-second client timeout. Raw Evidence retries reuse the stable `publication_key`; a
   retry after either successful remote phase repeats the same immutable payload and consumes the same formal IDs.
+- The first prepared publication payload is frozen under `.pending`; retries reuse it even if a later Agent run emits
+  different semantics, so an unknown remote outcome can never be retried with drifted content.
 - New Evidence Artifact manifests use `evidence_extraction_manifest.v2`, are keyed locally by the SHA-256 of
   `publication_key`, and record the formal Raw Evidence ID plus the `split_order` to Evidence ID mapping. Historical
   v1 manifests and pre-cutover `.pending/RAW_...` directories remain untouched and are not treated as formal IDs.
 - `SINGLE` has no core fields; `DOUBLE` requires `source_what_core`.
 - Keywords contain 1 to 5 unique values, each at most 5 characters.
 - Article publication time never substitutes for Evidence fact time.
-- Evidence IDs, split order, expression keys, and fingerprint version are deterministic code outputs.
+- Split order, expression keys, and fingerprint version are deterministic AgentOS outputs; formal Raw Evidence and
+  Evidence IDs are Data Service outputs.
 - The Evidence Artifact manifest is written last; checkpoint advances only after that manifest exists.

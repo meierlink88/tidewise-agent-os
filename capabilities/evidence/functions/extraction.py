@@ -76,6 +76,26 @@ def _publication_artifact_id(publication_key: str) -> str:
     return hashlib.sha256(publication_key.encode("utf-8")).hexdigest()
 
 
+def _freeze_prepared_publication(
+    path: Path,
+    candidate: PreparedEvidencePublication,
+) -> PreparedEvidencePublication:
+    """Persist the first payload and reuse it across unknown-outcome retries."""
+    if path.exists():
+        try:
+            frozen = PreparedEvidencePublication.model_validate_json(path.read_text(encoding="utf-8"))
+        except ValidationError as exc:
+            raise ValueError("pending Evidence publication payload is invalid") from exc
+        if (
+            frozen.prepared_raw != candidate.prepared_raw
+            or frozen.raw_evidence.publication_key != candidate.raw_evidence.publication_key
+        ):
+            raise ValueError("pending Evidence publication identity conflict")
+        return frozen
+    write_json(path, candidate.model_dump(mode="json"))
+    return candidate
+
+
 def validate_evidence_draft(step_input: StepInput) -> StepOutput:
     """Validate Agent semantics and add deterministic publication metadata."""
     prepared = _model_from_content(PreparedRawDocument, _step_content(step_input, "prepare-raw-document"))
@@ -166,7 +186,7 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
         return StepOutput(content=existing)
 
     pending = root / ".pending" / artifact_id
-    write_json(pending / "prepared.json", publication.model_dump(mode="json"))
+    publication = _freeze_prepared_publication(pending / "prepared.json", publication)
     raw_response_payload = await asyncio.to_thread(
         post_publication,
         "raw-evidence-publications",
