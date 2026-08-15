@@ -15,7 +15,7 @@ from agents.raw_collector import ensure_collector_agent
 from agents.tidewise_assistant import tidewise_assistant
 from agents.title_curator import ensure_title_curator_agent
 from app.registry import registry
-from app.schedules import register_schedules
+from app.schedules import validate_schedules
 from capabilities.collection import ensure_channel_catalog
 from db import get_postgres_db
 from workflows.deployment_check import deployment_check
@@ -87,8 +87,9 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     ensure_evidence_extractor_agent(registry)
     ensure_raw_collection_workflow(registry)
     ensure_evidence_extraction_workflow(registry)
-    # Register schedules on startup. Idempotent and fail-soft.
-    register_schedules()
+    # Schedule rows are runtime configuration owned by PostgreSQL/Control Panel.
+    # Startup only validates them; new environments use the explicit seed command.
+    validate_schedules()
     try:
         yield
     finally:

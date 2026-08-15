@@ -14,7 +14,7 @@ from agno.workflow.step import Step, StepInput, StepOutput
 from agno.workflow.workflow import Workflow
 from sqlalchemy import create_engine, text
 
-from app.schedules import EVIDENCE_EXTRACTION_SCHEDULE_NAME, RAW_COLLECTION_SCHEDULE_NAME, env_flag
+from app.schedules import inspect_schedules
 from db import db_url, get_postgres_db
 
 
@@ -162,28 +162,18 @@ def _check_components() -> CheckResult:
 
 
 def _check_schedules() -> CheckResult:
-    def state(name: str) -> tuple[str, bool | None]:
-        row = get_postgres_db().get_schedule_by_name(name)
-        if row is None:
-            return f"{name} not registered", None
-        enabled = bool(row["enabled"] if isinstance(row, dict) else row.enabled)
-        return f"{name} {'enabled' if enabled else 'disabled'}", enabled
-
     try:
-        deploy_state, _deploy_enabled = state("deployment-check")
-        collection_state, collection_enabled = state(RAW_COLLECTION_SCHEDULE_NAME)
-        evidence_state, evidence_enabled = state(EVIDENCE_EXTRACTION_SCHEDULE_NAME)
+        states = inspect_schedules()
     except Exception as exc:
         return _warn("Schedule", f"Could not read schedules from the database: {exc}")
 
-    detail = f"{deploy_state}; {collection_state}; {evidence_state}."
-    if collection_enabled is not True or evidence_enabled is not True:
+    detail = "; ".join(state.detail for state in states) + "."
+    if any(state.status != "enabled" for state in states):
         return _warn(
             "Schedule",
-            f"{detail} Restart the API if a business schedule is missing; enable it from the AgentOS UI if paused.",
+            f"{detail} Manage runtime configuration in Control Panel; "
+            "use the explicit seed command only for a new environment.",
         )
-    if "not registered" in deploy_state and env_flag("ENABLE_DEPLOY_CHECK", default=True):
-        return _warn("Schedule", f"{detail} If the Database check passed, restart the API to register it.")
     return _pass("Schedule", detail)
 
 

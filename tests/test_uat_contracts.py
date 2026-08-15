@@ -57,6 +57,8 @@ class UatIngressContractTest(TestCase):
         )
         self.assertIn("openssl pkey -pubin -noout", workflow)
         self.assertIn('lines.append(f"JWT_VERIFICATION_KEY={json.dumps(verification_key)}")', workflow)
+        self.assertIn('if [ ! -s "$current_sha" ]; then', deploy)
+        self.assertIn("python -m scripts.seed_schedules", deploy)
 
     def test_mcp_oauth_accepts_https_path_issuer(self) -> None:
         auth = AgentOSBuiltinAuth(

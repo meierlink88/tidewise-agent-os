@@ -97,9 +97,13 @@ trap 'on_error $?' ERR
 
 compose_for "$runtime_env" "$candidate_images" "$candidate_compose" config --quiet
 compose_for "$runtime_env" "$candidate_images" "$candidate_compose" up -d --wait --wait-timeout 180 agentos
+if [ ! -s "$current_sha" ]; then
+  compose_for "$runtime_env" "$candidate_images" "$candidate_compose" exec -T agentos \
+    python -m scripts.seed_schedules
+fi
 verify_release "$runtime_env" "$candidate_images" "$candidate_compose"
 
-# Prove Docker restart recovery and idempotent component/schedule registration.
+# Prove Docker restart recovery while preserving PostgreSQL-owned Schedule configuration.
 compose_for "$runtime_env" "$candidate_images" "$candidate_compose" restart agentos
 compose_for "$runtime_env" "$candidate_images" "$candidate_compose" up -d --wait --wait-timeout 180 agentos
 verify_release "$runtime_env" "$candidate_images" "$candidate_compose"

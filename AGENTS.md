@@ -25,7 +25,7 @@ AgentOS (app/main.py)
 - `app/settings.py`：DeepSeek V4 Flash 模型工厂。
 - `app/registry.py`：Studio 可见的安全 Registry。
 - `db/session.py`：复用共享 PostgreSQL 实例中的独立 `agent_os` 数据库。
-- `app/schedules.py`：幂等注册确定性部署检查。
+- `app/schedules.py`：显式一次性 Schedule seed 与启动只读校验。
 - `app/config.yaml`：组件描述和快捷提示。
 - `capabilities/collection/`：Collection 领域能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
 - `capabilities/evidence/`：Evidence 领域能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
@@ -58,6 +58,13 @@ AgentOS (app/main.py)
 ### Team
 
 只有在多个自治角色需要独立上下文、委派或协商时才使用 Team。不要为了表现“多 Agent”把顺序流水线改成 Team。
+
+### Schedule
+
+新环境通过 `python -m scripts.seed_schedules` 显式创建缺失的默认 Schedule。此后 PostgreSQL 与
+Control Panel 拥有名称、cron、endpoint、payload 和启停状态；应用启动只按 Workflow endpoint
+读取并告警，禁止创建、覆盖或恢复 Schedule。名称只是可编辑显示值，不是运行身份。同一必需
+Workflow endpoint 出现多条 Schedule 必须视为配置错误，避免重复执行。
 
 ### 注册
 
