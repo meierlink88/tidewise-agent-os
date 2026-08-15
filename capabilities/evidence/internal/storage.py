@@ -50,6 +50,33 @@ def write_json(path: Path, value: object) -> None:
     _atomic_write_json(resolved, value)
 
 
+def _record_legacy_manifest_skip(
+    *,
+    manifest_path: str,
+    manifest_sha256: str,
+    collection_id: object,
+    document_index: int,
+    document_count: int,
+) -> None:
+    """Record an immutable cutover decision before advancing past one v1 manifest."""
+    payload = {
+        "schema": "legacy_raw_collection_skip.v1",
+        "manifest_path": manifest_path,
+        "manifest_sha256": manifest_sha256,
+        "collection_id": collection_id,
+        "skipped_from_document_index": document_index,
+        "skipped_documents": max(document_count - document_index, 0),
+        "reason": "archived_url_path_unavailable",
+    }
+    identity = _sha256_bytes(manifest_path.encode())
+    path = evidence_artifact_root() / "legacy-skips" / f"{identity}.json"
+    if path.exists():
+        if json.loads(path.read_text(encoding="utf-8")) != payload:
+            raise ValueError("legacy Raw Collection skip identity conflict")
+        return
+    _atomic_write_json(path, payload)
+
+
 def read_checkpoint() -> EvidenceCheckpoint:
     path = checkpoint_path()
     if not path.exists():
@@ -167,9 +194,24 @@ def read_next_raw_document(checkpoint: EvidenceCheckpoint) -> tuple[PreparedRawD
             if _sha256_bytes(manifest_bytes) != entry.get("manifest_sha256"):
                 raise ValueError("Raw Collection manifest hash mismatch")
             manifest = json.loads(manifest_bytes)
+            manifest_schema = manifest.get("schema")
+            if manifest_schema not in {"raw_collection_manifest.v1", "raw_collection_manifest.v2"}:
+                raise ValueError("Raw Collection manifest schema is unsupported")
             accepted = manifest.get("accepted_documents")
             if not isinstance(accepted, list):
                 raise ValueError("Raw Collection manifest accepted_documents is invalid")
+            if manifest_schema == "raw_collection_manifest.v1":
+                manifest_sha256 = str(entry["manifest_sha256"])
+                _record_legacy_manifest_skip(
+                    manifest_path=manifest_relative,
+                    manifest_sha256=manifest_sha256,
+                    collection_id=manifest.get("collection_id"),
+                    document_index=current.document_index,
+                    document_count=len(accepted),
+                )
+                current = EvidenceCheckpoint(manifest_offset=next_offset, document_index=0)
+                write_checkpoint(current)
+                continue
             if current.document_index >= len(accepted):
                 current = EvidenceCheckpoint(manifest_offset=next_offset, document_index=0)
                 write_checkpoint(current)
@@ -180,16 +222,17 @@ def read_next_raw_document(checkpoint: EvidenceCheckpoint) -> tuple[PreparedRawD
             relative_document = item.get("relative_path")
             document_url_path = item.get("url_path")
             document_sha256 = item.get("sha256")
+            if not isinstance(relative_document, str) or not isinstance(document_sha256, str):
+                raise ValueError("Raw Collection accepted document identity is invalid")
+            if not isinstance(document_url_path, str):
+                raise ValueError("Raw Collection accepted document URL path is missing")
             if (
-                not isinstance(relative_document, str)
-                or not isinstance(document_url_path, str)
-                or not document_url_path.startswith("/")
+                not document_url_path.startswith("/")
                 or document_url_path.startswith("//")
                 or not document_url_path.endswith(f"/{relative_document}")
                 or any(part in {"", ".", ".."} for part in document_url_path[1:].split("/"))
-                or not isinstance(document_sha256, str)
             ):
-                raise ValueError("Raw Collection accepted document identity is invalid")
+                raise ValueError("Raw Collection accepted document URL path is invalid")
             document_path = _safe_relative(root, relative_document)
             document_bytes = document_path.read_bytes()
             if _sha256_bytes(document_bytes) != document_sha256:

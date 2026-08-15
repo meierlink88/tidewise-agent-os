@@ -6,7 +6,7 @@ from typing import Any, cast
 
 from minio.error import S3Error
 
-from capabilities.collection.internal.object_storage import MinioRawDocumentStore
+from capabilities.collection.internal.object_storage import MinioRawDocumentStore, bucket_from_url_path
 
 
 def _s3_error(code: str) -> S3Error:
@@ -40,6 +40,20 @@ class FakeMinioClient:
 
 
 class MinioRawDocumentStoreTest(unittest.TestCase):
+    def test_bucket_is_recovered_from_the_frozen_url_path(self) -> None:
+        self.assertEqual(
+            bucket_from_url_path(
+                "/raw-evidence/documents/2026/08/15/article.md",
+                "documents/2026/08/15/article.md",
+            ),
+            "raw-evidence",
+        )
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            bucket_from_url_path(
+                "/raw-evidence/documents/2026/08/15/other.md",
+                "documents/2026/08/15/article.md",
+            )
+
     def test_missing_object_is_uploaded_as_inline_markdown_with_hash_metadata(self) -> None:
         client = FakeMinioClient(_s3_error("NoSuchKey"))
         store = MinioRawDocumentStore(client)

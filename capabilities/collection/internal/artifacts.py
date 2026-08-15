@@ -34,8 +34,8 @@ from capabilities.collection.internal.models import (
 )
 from capabilities.collection.internal.object_storage import (
     RawDocumentStore,
+    bucket_from_url_path,
     configured_raw_document_store,
-    raw_evidence_bucket,
     raw_evidence_url_path,
 )
 
@@ -252,12 +252,12 @@ def build_artifact_set(
 
         document_path: str | None = None
         if disposition == "accepted":
-            relative_path = _relative_document_path(candidate.published_at, candidate.collected_at, url_sha256)
-            staged_document = staging / relative_path
             markdown = _document_markdown(candidate, canonical_url, content_sha256)
+            document_hash = _sha256(markdown)
+            relative_path = _relative_document_path(candidate.published_at, candidate.collected_at, document_hash)
+            staged_document = staging / relative_path
             write_text(staged_document, markdown)
             document_path = relative_path.as_posix()
-            document_hash = _sha256(markdown)
             accepted.append(
                 AcceptedDocument(
                     candidate_id=candidate.candidate_id,
@@ -329,7 +329,7 @@ def build_artifact_set(
         ]
     )
     manifest = {
-        "schema": "raw_collection_manifest.v1",
+        "schema": "raw_collection_manifest.v2",
         "collection_id": collection_id,
         "outcome": outcome,
         "objective_sha256": _sha256(request.objective),
@@ -488,13 +488,12 @@ def publish_artifact_set(
 
     if prepared.accepted_documents:
         store = document_store or configured_raw_document_store()
-        bucket = raw_evidence_bucket()
         for document in prepared.accepted_documents:
             source = staging / document.relative_path
             if not source.is_file():
                 raise ValueError(f"prepared Artifact is missing: {source.name}")
             store.publish_markdown(
-                bucket=bucket,
+                bucket=bucket_from_url_path(document.url_path, document.relative_path),
                 object_key=document.relative_path,
                 content=source.read_bytes(),
                 sha256=document.sha256,

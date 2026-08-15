@@ -14,7 +14,7 @@ from capabilities.evidence.functions import (
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTION_WORKFLOW_ID = "evidence-extraction"
-EVIDENCE_EXTRACTION_CONTRACT_VERSION = 1
+EVIDENCE_EXTRACTION_CONTRACT_VERSION = 2
 
 
 def _seed_workflow(agent: Agent) -> Workflow:
@@ -72,10 +72,33 @@ def ensure_evidence_extraction_workflow(registry: Registry) -> int:
         version = component.get("current_version")
         if not isinstance(version, int):
             raise ValueError("Evidence Extraction has no published Studio version")
-        current = Workflow.load(EVIDENCE_EXTRACTION_WORKFLOW_ID, db=db, registry=registry, version=version)
-        if current is None or not isinstance(current.steps, list) or not current.steps:
-            raise ValueError("Evidence Extraction published Studio version could not be rehydrated")
-        return version
+        saved = db.get_config(component_id=EVIDENCE_EXTRACTION_WORKFLOW_ID, version=version)
+        config = saved.get("config") if isinstance(saved, dict) else None
+        if not isinstance(config, dict):
+            raise ValueError("Evidence Extraction published Studio config is missing")
+        metadata = dict(config.get("metadata") or {})
+        if metadata.get("evidence_extraction_contract_version") == EVIDENCE_EXTRACTION_CONTRACT_VERSION:
+            current = Workflow.load(EVIDENCE_EXTRACTION_WORKFLOW_ID, db=db, registry=registry, version=version)
+            if current is None or not isinstance(current.steps, list) or not current.steps:
+                raise ValueError("Evidence Extraction published Studio version could not be rehydrated")
+            return version
+        agent = load_evidence_extractor_agent(registry)
+        migrated = _seed_workflow(agent)
+        migrated.id = str(config.get("id") or EVIDENCE_EXTRACTION_WORKFLOW_ID)
+        migrated.name = str(config.get("name") or "Evidence Extraction")
+        migrated.description = str(config.get("description") or migrated.description)
+        migrated.metadata = {
+            **metadata,
+            "evidence_extraction_contract_version": EVIDENCE_EXTRACTION_CONTRACT_VERSION,
+        }
+        published = migrated.save(
+            db=db,
+            stage="published",
+            notes=f"Evidence Extraction runtime contract migration {EVIDENCE_EXTRACTION_CONTRACT_VERSION}",
+        )
+        if not isinstance(published, int):
+            raise ValueError("Evidence Extraction runtime contract migration failed")
+        return published
 
     agent = load_evidence_extractor_agent(registry)
     version = _seed_workflow(agent).save(

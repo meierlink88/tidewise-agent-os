@@ -99,7 +99,11 @@ their protocol supports it; deterministic Artifact construction always enforces 
 - Manifest publication is last; downstream Workflows consume `indexes/manifest-index.jsonl` by byte offset.
 - Before a manifest becomes visible, every accepted Markdown document exists as an immutable matching object in the
   configured MinIO `raw-evidence` bucket.
+- Object keys are content-addressed by the complete Markdown SHA-256, so concurrent publications with different bytes
+  cannot target the same key; identical bytes converge on the same immutable object.
 - A document manifest records `url_path=/{bucket}/{object_key}` without a scheme, host or port.
+- The URL path freezes the bucket at build time; publication recovers the upload bucket from that prepared identity
+  rather than reading mutable environment configuration again.
 - Published files remain under the Git-ignored `data/collector/` root so Evidence AI input does not depend on MinIO.
 
 ## Failure semantics

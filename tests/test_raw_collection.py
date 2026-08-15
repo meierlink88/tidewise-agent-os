@@ -251,8 +251,9 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse((root / "indexes/manifest-index.jsonl").exists())
 
         document_store = RecordingRawDocumentStore()
-        result = publish_artifact_set(prepared, document_store=document_store)
-        repeated = publish_artifact_set(prepared, document_store=document_store)
+        with patch.dict(os.environ, {"RAW_EVIDENCE_BUCKET": "changed-after-build"}):
+            result = publish_artifact_set(prepared, document_store=document_store)
+            repeated = publish_artifact_set(prepared, document_store=document_store)
         self.assertEqual(result.collection_id, repeated.collection_id)
         self.assertTrue(manifest.is_file())
         manifest_index = root / "indexes/manifest-index.jsonl"
@@ -268,16 +269,18 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             [
                 (
                     "raw-evidence",
-                    "documents/2026/08/10/527a68f68c3e56a45e57bf594f526ca7a0a11213753f7d5c021bfe83ec0bba36.md",
+                    "documents/2026/08/10/42bb236684abe391ab33aa932ed2acb73fce00a378a3b250fba157d1e8995feb.md",
                 )
             ],
         )
         self.assertEqual(document_store.uploads[0][2], document.read_bytes())
+        self.assertEqual(document.stem, prepared.accepted_documents[0].sha256)
         manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
         self.assertEqual(
             manifest_payload["accepted_documents"][0]["url_path"],
-            "/raw-evidence/documents/2026/08/10/527a68f68c3e56a45e57bf594f526ca7a0a11213753f7d5c021bfe83ec0bba36.md",
+            "/raw-evidence/documents/2026/08/10/42bb236684abe391ab33aa932ed2acb73fce00a378a3b250fba157d1e8995feb.md",
         )
+        self.assertEqual(manifest_payload["schema"], "raw_collection_manifest.v2")
         self.assertEqual(manifest_payload["results_pending"], 0)
         self.assertEqual(manifest_payload["collector_agent"]["config_version"], 3)
         self.assertEqual(manifest_payload["tool_batches"][0]["requested_after"], "2026-08-10T14:30:00+00:00")

@@ -88,6 +88,48 @@ docker run --rm --network tidewise-uat --entrypoint curl "$agentos_image" \
   || fail minio "${MINIO_ENDPOINT} is unavailable from tidewise-uat"
 pass internal-minio
 
+export CANARY_KEY="_preflight/${RELEASE_SHA:?RELEASE_SHA is required}.md"
+export CANARY_BODY=$'# Raw Evidence UAT preflight\n\nBrowser-readable Markdown.\n'
+export RAW_EVIDENCE_BUCKET="${RAW_EVIDENCE_BUCKET:-raw-evidence}"
+canary_body_file="$(mktemp)"
+canary_headers_file="$(mktemp)"
+cleanup_minio_canary() {
+  docker run --rm --network tidewise-uat \
+    -e MINIO_ENDPOINT -e MINIO_ACCESS_KEY -e MINIO_SECRET_KEY -e RAW_EVIDENCE_BUCKET -e CANARY_KEY \
+    --entrypoint python "$agentos_image" -c '
+import os
+from urllib.parse import urlsplit
+from minio import Minio
+parsed = urlsplit(os.environ["MINIO_ENDPOINT"] if "://" in os.environ["MINIO_ENDPOINT"] else "http://" + os.environ["MINIO_ENDPOINT"])
+endpoint = parsed.hostname if parsed.port is None else f"{parsed.hostname}:{parsed.port}"
+Minio(endpoint, access_key=os.environ["MINIO_ACCESS_KEY"], secret_key=os.environ["MINIO_SECRET_KEY"], secure=parsed.scheme == "https").remove_object(os.environ["RAW_EVIDENCE_BUCKET"], os.environ["CANARY_KEY"])
+' >/dev/null 2>&1 || true
+  rm -f "$canary_body_file" "$canary_headers_file"
+}
+trap cleanup_minio_canary EXIT
+docker run --rm --network tidewise-uat \
+  -e MINIO_ENDPOINT -e MINIO_ACCESS_KEY -e MINIO_SECRET_KEY -e RAW_EVIDENCE_BUCKET -e CANARY_KEY -e CANARY_BODY \
+  --entrypoint python "$agentos_image" -c '
+import hashlib
+import os
+from capabilities.collection.internal.object_storage import configured_raw_document_store
+payload = os.environ["CANARY_BODY"].encode()
+configured_raw_document_store().publish_markdown(bucket=os.environ["RAW_EVIDENCE_BUCKET"], object_key=os.environ["CANARY_KEY"], content=payload, sha256=hashlib.sha256(payload).hexdigest())
+'
+public_base="${RAW_EVIDENCE_PUBLIC_BASE_URL:?RAW_EVIDENCE_PUBLIC_BASE_URL is required}"
+curl --silent --show-error --fail --connect-timeout 5 --max-time 15 \
+  --dump-header "$canary_headers_file" --output "$canary_body_file" \
+  "${public_base%/}/${RAW_EVIDENCE_BUCKET}/${CANARY_KEY}"
+printf '%s' "$CANARY_BODY" | cmp -s - "$canary_body_file" \
+  || fail minio-public-read "browser response body differs from uploaded canary"
+grep -Eiq '^content-type:[[:space:]]*text/markdown([;[:space:]]|$)' "$canary_headers_file" \
+  || fail minio-public-read "browser response is not Markdown"
+grep -Eiq '^content-disposition:[[:space:]]*inline' "$canary_headers_file" \
+  || fail minio-public-read "browser response is not inline"
+cleanup_minio_canary
+trap - EXIT
+pass minio-authenticated-write-and-public-read
+
 container_ids="$(docker ps --filter 'publish=9081' --format '{{.ID}}')"
 while read -r container_id; do
   [ -z "$container_id" ] && continue

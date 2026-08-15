@@ -67,6 +67,28 @@ def raw_evidence_bucket() -> str:
 
 def raw_evidence_url_path(object_key: str) -> str:
     key = object_key.strip().lstrip("/")
-    if not key:
+    if not key or any(part in {"", ".", ".."} for part in key.split("/")):
         raise ValueError("Raw Evidence object key must not be blank")
     return f"/{raw_evidence_bucket()}/{key}"
+
+
+def bucket_from_url_path(url_path: str, object_key: str) -> str:
+    """Recover the bucket frozen into one prepared document URL path."""
+    key = object_key.strip().lstrip("/")
+    suffix = f"/{key}"
+    parsed = urlsplit(url_path)
+    if (
+        not key
+        or parsed.scheme
+        or parsed.netloc
+        or parsed.query
+        or parsed.fragment
+        or not parsed.path.startswith("/")
+        or parsed.path.startswith("//")
+        or not parsed.path.endswith(suffix)
+    ):
+        raise ValueError("Raw Evidence URL path does not match its object key")
+    bucket = parsed.path[1 : -len(suffix)]
+    if not bucket or "/" in bucket:
+        raise ValueError("Raw Evidence URL path has an invalid bucket")
+    return bucket

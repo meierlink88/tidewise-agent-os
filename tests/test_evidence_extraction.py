@@ -1,5 +1,6 @@
 """Tests for incremental Evidence extraction and publication."""
 
+import hashlib
 import inspect
 import json
 import os
@@ -40,7 +41,7 @@ from capabilities.evidence.internal.models import (
     RawEvidenceEnrichment,
 )
 from capabilities.evidence.internal.storage import checkpoint_path, evidence_artifact_root, read_checkpoint
-from workflows.evidence_extraction import _seed_workflow
+from workflows.evidence_extraction import EVIDENCE_EXTRACTION_CONTRACT_VERSION, _seed_workflow
 
 
 class AcceptingRawDocumentStore:
@@ -178,7 +179,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         publication = self._validated(self._prepared())
         self.assertEqual(
             publication.raw_evidence.raw_text,
-            "/raw-evidence/documents/2026/08/11/0b737140fb4503560c8ffacfb0e578cb59e4c524e65e708306f78a74211e23c7.md",
+            "/raw-evidence/documents/2026/08/11/c6fe9177b96308182802eb456d47768b06d890fa96b9e08f159a0f6fd2470128.md",
         )
         self.assertNotIn("示例公司公告签署10亿元服务器订单", publication.raw_evidence.raw_text)
         self.assertEqual(len(publication.raw_evidence.raw_evidence_id), 32)
@@ -186,6 +187,35 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(publication.evidences[0].evidence_id), 32)
         self.assertEqual(len(publication.evidences[0].expression_key), 64)
         self.assertEqual(publication.evidences[0].fingerprint_version, "evidence-expression.v1")
+
+    def test_legacy_manifest_is_audited_and_skipped_without_body_publication(self) -> None:
+        self._publish_raw_fixture()
+        collector_root = Path(os.environ["COLLECTOR_ARTIFACT_ROOT"])
+        index_path = collector_root / "indexes/manifest-index.jsonl"
+        index_entry = json.loads(index_path.read_text(encoding="utf-8"))
+        manifest_path = collector_root / index_entry["manifest_path"]
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["schema"] = "raw_collection_manifest.v1"
+        manifest["accepted_documents"][0].pop("url_path")
+        manifest_bytes = (json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode()
+        manifest_path.write_bytes(manifest_bytes)
+        index_entry["manifest_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
+        index_path.write_text(
+            json.dumps(index_entry, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+
+        output = prepare_raw_document(StepInput(input="处理未提取文档"))
+
+        self.assertTrue(output.stop)
+        self.assertIsInstance(output.content, EvidenceExtractionIdle)
+        self.assertGreater(read_checkpoint().manifest_offset, 0)
+        audits = list((evidence_artifact_root() / "legacy-skips").glob("*.json"))
+        self.assertEqual(len(audits), 1)
+        audit = json.loads(audits[0].read_text(encoding="utf-8"))
+        self.assertEqual(audit["reason"], "archived_url_path_unavailable")
+        self.assertEqual(audit["skipped_documents"], 1)
+        self.assertNotIn("示例公司公告签署10亿元服务器订单", audits[0].read_text(encoding="utf-8"))
 
     def test_validation_preserves_fuzzy_fact_time_as_raw_expression(self) -> None:
         self._publish_raw_fixture()
@@ -231,7 +261,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raw_endpoint, "raw-evidence-publications")
         self.assertEqual(
             raw_payload["raw_evidence"]["raw_text"],
-            "/raw-evidence/documents/2026/08/11/0b737140fb4503560c8ffacfb0e578cb59e4c524e65e708306f78a74211e23c7.md",
+            "/raw-evidence/documents/2026/08/11/c6fe9177b96308182802eb456d47768b06d890fa96b9e08f159a0f6fd2470128.md",
         )
         self.assertNotIn("10亿元服务器订单", raw_payload["raw_evidence"]["raw_text"])
         self.assertTrue(Path(result.artifact_manifest_path).is_file())
@@ -282,6 +312,11 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             functions=[prepare_raw_document, validate_evidence_draft, publish_evidences],
         )
         workflow = _seed_workflow(agent)
+        self.assertIsNotNone(workflow.metadata)
+        assert workflow.metadata is not None
+        self.assertEqual(
+            workflow.metadata["evidence_extraction_contract_version"], EVIDENCE_EXTRACTION_CONTRACT_VERSION
+        )
         restored = Workflow.from_dict(workflow.to_dict(), registry=registry)
         restored_steps = restored.steps
         self.assertIsInstance(restored_steps, list)

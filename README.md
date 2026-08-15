@@ -67,7 +67,7 @@ Agent 或 Workflow。
 启用状态不会被容器重启覆盖。
 
 采集结果默认位于项目根目录 `data/collector/`，其中接受的文章在 manifest 可见前还会以同一
-`documents/YYYY/MM/DD/<sha256>.md` 对象键幂等发布到 MinIO `raw-evidence` bucket：
+`documents/YYYY/MM/DD/<document-sha256>.md` 内容寻址对象键幂等发布到 MinIO `raw-evidence` bucket：
 
 - `documents/`：接受的原始资讯 Markdown。
 - `runs/<run_id>/`：候选账本、汇总和 manifest。

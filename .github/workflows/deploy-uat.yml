@@ -187,6 +187,7 @@ jobs:
       MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
       MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
       RAW_EVIDENCE_BUCKET: raw-evidence
+      RAW_EVIDENCE_PUBLIC_BASE_URL: ${{ vars.RAW_EVIDENCE_PUBLIC_BASE_URL }}
       PARALLEL_API_KEY: ${{ secrets.PARALLEL_API_KEY }}
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
       BOCHA_API_KEY: ${{ secrets.BOCHA_API_KEY }}

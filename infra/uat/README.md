@@ -7,6 +7,8 @@ It reuses the Huawei SWR registry, the PostgreSQL RDS instance, and the external
 Docker network, while keeping its database, role, Compose project, data, runner state, and rollback state isolated.
 Raw Evidence publication also uses a pre-provisioned MinIO endpoint reachable from `tidewise-uat`; its
 `raw-evidence` bucket must allow direct browser downloads through the environment's public MinIO Base URL.
+Preflight writes one content-addressed canary through authenticated S3, reads it anonymously through that public Base
+URL with Markdown/inline response headers, and removes only that canary before deployment continues.
 
 ```text
 Huawei ECS
@@ -101,6 +103,7 @@ Environment or repository Variables:
 - `AGENTOS_EXTERNAL_URL` — `https://tideai.tripwise.cn/agentos`
 - `RDS_HOST` — Huawei RDS private hostname
 - `MINIO_ENDPOINT` — MinIO S3 API URL reachable from containers, including `http://` or `https://`
+- `RAW_EVIDENCE_PUBLIC_BASE_URL` — browser-facing MinIO Base URL; deployment verifies a canary through it
 - `CONTROL_PLANE_JWT_VERIFICATION_KEY` — PEM public key generated for the UAT OS connection in Agno Control Plane
 
 Secrets:
