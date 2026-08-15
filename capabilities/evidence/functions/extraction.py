@@ -138,14 +138,24 @@ def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -
     if not path.exists():
         return None
     manifest = json.loads(path.read_text(encoding="utf-8"))
+    prepared_path = path.parent / "prepared.json"
+    try:
+        frozen = PreparedEvidencePublication.model_validate_json(prepared_path.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        raise ValueError("published Evidence Artifact prepared payload is invalid") from exc
+    if (
+        frozen.prepared_raw != publication.prepared_raw
+        or frozen.raw_evidence.publication_key != publication.raw_evidence.publication_key
+    ):
+        raise ValueError("published Evidence Artifact source identity conflict")
     evidence_entries = manifest.get("evidences")
     if (
         manifest.get("schema") != "evidence_extraction_manifest.v2"
-        or manifest.get("publication_key") != publication.raw_evidence.publication_key
-        or manifest.get("document_sha256") != publication.prepared_raw.document_sha256
-        or manifest.get("evidence_count") != len(publication.evidences)
+        or manifest.get("publication_key") != frozen.raw_evidence.publication_key
+        or manifest.get("document_sha256") != frozen.prepared_raw.document_sha256
+        or manifest.get("evidence_count") != len(frozen.evidences)
         or not isinstance(evidence_entries, list)
-        or len(evidence_entries) != len(publication.evidences)
+        or len(evidence_entries) != len(frozen.evidences)
     ):
         raise ValueError("published Evidence Artifact identity conflict")
     if any(
@@ -160,11 +170,11 @@ def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -
         )
     except ValidationError as exc:
         raise ValueError("published Evidence Artifact contains invalid formal identities") from exc
-    checkpoint = advance_checkpoint(publication.prepared_raw)
+    checkpoint = advance_checkpoint(frozen.prepared_raw)
     return EvidencePublicationResult(
         raw_evidence_id=response.raw_evidence_id,
         evidence_ids=response.evidence_ids,
-        evidence_count=len(publication.evidences),
+        evidence_count=len(frozen.evidences),
         artifact_manifest_path=str(path),
         checkpoint=checkpoint,
     )

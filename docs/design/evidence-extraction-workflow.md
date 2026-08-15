@@ -58,6 +58,8 @@ terminal state, so a slow scheduled run is not claimed again concurrently; later
 - New Evidence Artifact manifests use `evidence_extraction_manifest.v2`, are keyed locally by the SHA-256 of
   `publication_key`, and record the formal Raw Evidence ID plus the `split_order` to Evidence ID mapping. Historical
   v1 manifests and pre-cutover `.pending/RAW_...` directories remain untouched and are not treated as formal IDs.
+- A completed v2 manifest and its frozen `prepared.json` are the recovery truth if the process stops before checkpoint
+  advancement; later Agent output cannot change the completed publication or prevent that checkpoint from advancing.
 - `SINGLE` has no core fields; `DOUBLE` requires `source_what_core`.
 - Keywords contain 1 to 5 unique values, each at most 5 characters.
 - Article publication time never substitutes for Evidence fact time.

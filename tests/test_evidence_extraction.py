@@ -358,6 +358,43 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(evidence_payload["source_what"], publication.evidences[0].source_what)
         self.assertEqual(EvidencePublicationResult.model_validate(output.content).evidence_ids, [evidence_id])
 
+    async def test_final_manifest_recovers_checkpoint_despite_new_agent_draft(self) -> None:
+        self._publish_raw_fixture()
+        publication = self._validated(self._prepared())
+        step_input = StepInput(previous_step_outputs={"validate-evidence-draft": StepOutput(content=publication)})
+        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        with (
+            patch(
+                "capabilities.evidence.functions.extraction.post_publication",
+                side_effect=[
+                    {"raw_evidence_id": raw_evidence_id},
+                    {"raw_evidence_id": raw_evidence_id, "evidence_ids": [evidence_id]},
+                ],
+            ),
+            patch(
+                "capabilities.evidence.functions.extraction.advance_checkpoint",
+                side_effect=RuntimeError("checkpoint interrupted"),
+            ),
+            self.assertRaisesRegex(RuntimeError, "checkpoint interrupted"),
+        ):
+            await publish_evidences(step_input)
+
+        changed = publication.model_copy(deep=True)
+        second = changed.evidences[0].model_copy(deep=True)
+        second.split_order = 1
+        second.source_what = "后续 Agent 输出的额外事实"
+        changed.evidences.append(second)
+        retry_input = StepInput(previous_step_outputs={"validate-evidence-draft": StepOutput(content=changed)})
+        with patch("capabilities.evidence.functions.extraction.post_publication") as repeated:
+            output = await publish_evidences(retry_input)
+
+        result = EvidencePublicationResult.model_validate(output.content)
+        self.assertEqual(repeated.call_count, 0)
+        self.assertEqual(result.evidence_count, 1)
+        self.assertEqual(result.evidence_ids, [evidence_id])
+        self.assertEqual(result.checkpoint, read_checkpoint())
+
     async def test_invalid_data_service_id_responses_do_not_advance_checkpoint(self) -> None:
         raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
         evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
