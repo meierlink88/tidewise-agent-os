@@ -2,10 +2,11 @@
 
 ## Outcome
 
-Incrementally consume completed Raw Collection manifests, extract atomic Evidence from each accepted document,
-publish Raw Evidence metadata and Evidence through Data Service APIs, and advance a crash-safe file checkpoint only
-after both publications and the local Evidence manifest succeed. The AI reads the verified local Markdown body, while
-Data Service receives only its MinIO URL path through the existing `raw_text` field.
+Incrementally consume completed Raw Collection manifests, classify each accepted Raw Evidence against the formal
+Evidence Category Catalog, extract atomic Evidence in the same AI reading, publish Raw Evidence metadata and Evidence
+through Data Service APIs, and advance a crash-safe file checkpoint only after both publications and the local
+Evidence manifest succeed. The AI reads the verified local Markdown body, while Data Service receives only its MinIO
+URL path through the existing `raw_text` field.
 
 AgentOS owns the stable `publication_key` used for retries but does not create formal Raw Evidence or Evidence IDs.
 Data Service returns `raw_evidence_id` from Raw Evidence Publication; AgentOS passes that exact value to Evidence
@@ -16,13 +17,27 @@ Publication, then records the returned `evidence_ids` in split order.
 ```text
 indexes/manifest-index.jsonl + data/evidence/checkpoint.json
   -> prepare-raw-document       (deterministic Function)
-  -> extract-evidences          (Studio-managed Evidence Extractor Agent)
-  -> validate-evidence-draft    (deterministic Function)
+  -> prepare-evidence-analysis  (deterministic Function, run-scoped Category Catalog)
+  -> analyze-raw-evidence       (Studio-managed Evidence Extractor Agent)
+  -> validate-evidence-analysis (deterministic Function, Category code -> ID)
   -> publish-evidences          (deterministic Function, Data Service + manifest + checkpoint)
 ```
 
-The four steps run inside an Agno `Loop` with a 100-document safety cap. `prepare-raw-document` returns
+The five steps run inside an Agno `Loop` with a 100-document safety cap. `prepare-raw-document` returns
 `stop=True` when no indexed work remains, which ends the loop without invoking the Agent.
+
+`prepare-evidence-analysis` calls `GET /api/data/v1/evidence-categories` only after work exists. The first document in
+a Workflow Run freezes the complete, strictly validated Catalog in `RunContext.dependencies`; all later documents in
+that run reuse the same snapshot. The Agent sees only each Category's `code`, `name`, and `description`. Formal IDs
+remain outside the model context and are resolved deterministically after the Agent returns one `category_code`.
+The final immutable `prepared.json` records the Catalog SHA-256, selected code, mapped ID, Agent semantics, and
+publication payload so the decision remains auditable after the in-memory Run Context is gone. The full Data-owned
+Catalog is never persisted by AgentOS; its complete snapshot exists only in `RunContext.dependencies` for that run.
+
+The Catalog GET requires the caller scope `data.evidence-categories.read` in addition to the existing Raw Evidence and
+Evidence publication scopes. Data Service must be deployed first and the AgentOS `DATA_SERVICE_TOKEN` principal must
+receive that read scope before AgentOS is restarted onto this Workflow contract. Rolling AgentOS out first would make
+scheduled Evidence Extraction runs fail at the Catalog boundary.
 
 The explicit new-environment seed creates `evidence-extraction-every-10-minutes` with cron `*/10 * * * *`
 in `Asia/Shanghai`. After seeding, PostgreSQL and Control Panel own the Schedule configuration; AgentOS startup
@@ -32,17 +47,24 @@ runs continue from the file checkpoint.
 
 ## Ownership
 
-- The Agent owns atomic semantic splitting, exclusions, originality/quotation judgment, SINGLE/DOUBLE, two-layer
-  5W1H, keywords, and the readable expression fingerprint.
-- Functions own file parsing, trust-boundary validation, `publication_key`, split order, fingerprint keys, API
-  timeouts, response validation, Artifact ordering, and checkpoint transitions. Formal IDs are recorded in the final
-  manifest but Data publication responses do not become separate local receipts.
-- Data Service owns the formal Raw Evidence/Evidence facts and enforces its accepted V1 API contract.
+- The Agent owns exactly one Catalog-backed Category code, atomic semantic splitting, exclusions,
+  originality/quotation judgment, SINGLE/DOUBLE, two-layer 5W1H, keywords, and the readable expression fingerprint.
+- Functions own Catalog retrieval and freezing, Category code-to-ID mapping, file parsing, trust-boundary validation,
+  `publication_key`, split order, fingerprint keys, API timeouts, response validation, Artifact ordering, and
+  checkpoint transitions. Formal IDs are recorded in the frozen publication or final manifest, but Data publication
+  responses do not become separate local receipts.
+- Data Service owns the Category Catalog and the formal Raw Evidence/Evidence facts, and enforces its accepted V1 API
+  contracts.
 
 ## Invariants
 
 - Evidence extraction reads the append-only manifest index by byte offset; it never scans historical document bodies.
 - One Raw document is the atomic retry unit.
+- One Workflow Run uses one immutable, complete Category Catalog snapshot. Empty, malformed, duplicated, unordered,
+  or otherwise invalid Catalog responses fail before Agent analysis.
+- Each Raw Evidence has exactly one Category in this Workflow contract. The Agent returns one exact Catalog code;
+  deterministic validation maps it to one formal ID, and Raw Evidence Publication sends a single-element
+  `category_ids` array.
 - Raw Evidence is published before its complete `1..N` Evidence set.
 - Raw Evidence Publication sends `publication_key` and no `raw_evidence_id`; Evidence items send no `evidence_id`.
 - The second publication uses only the `raw_evidence_id` returned by the first response. Its response must repeat that
@@ -57,10 +79,10 @@ runs continue from the file checkpoint.
   retry after either successful remote phase repeats the same immutable payload and consumes the same formal IDs.
 - The first prepared publication payload is frozen under `.pending`; retries reuse it even if a later Agent run emits
   different semantics, so an unknown remote outcome can never be retried with drifted content.
-- New Evidence Artifact manifests use `evidence_extraction_manifest.v2`, are keyed locally by the SHA-256 of
+- New Evidence Artifact manifests use `evidence_extraction_manifest.v3`, are keyed locally by the SHA-256 of
   `publication_key`, and record the formal Raw Evidence ID plus the `split_order` to Evidence ID mapping. Historical
-  v1 manifests and pre-cutover `.pending/RAW_...` directories remain untouched and are not treated as formal IDs.
-- A completed v2 manifest and its frozen `prepared.json` are the recovery truth if the process stops before checkpoint
+  v1/v2 manifests and pre-cutover `.pending/RAW_...` directories remain untouched and are not treated as formal IDs.
+- A completed v3 manifest and its frozen `prepared.json` are the recovery truth if the process stops before checkpoint
   advancement; later Agent output cannot change the completed publication or prevent that checkpoint from advancing.
 - `SINGLE` has no core fields; `DOUBLE` requires `source_what_core`.
 - Keywords contain 1 to 5 unique values, each at most 5 characters.

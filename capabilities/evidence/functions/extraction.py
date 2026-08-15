@@ -8,11 +8,15 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
+from agno.run import RunContext
 from agno.workflow import StepInput, StepOutput
 from pydantic import ValidationError
 
-from capabilities.evidence.internal.client import post_publication
+from capabilities.evidence.internal.client import get_evidence_categories, post_publication
 from capabilities.evidence.internal.models import (
+    EvidenceAnalysisRequest,
+    EvidenceCategoryCatalog,
+    EvidenceCategoryDefinition,
     EvidenceExtractionDraft,
     EvidenceExtractionIdle,
     EvidencePublicationItem,
@@ -32,6 +36,7 @@ from capabilities.evidence.internal.storage import (
 )
 
 _FINGERPRINT_VERSION = "evidence-expression.v1"
+_CATEGORY_CATALOG_DEPENDENCY = "evidence_category_catalog"
 
 
 def _model_from_content(model: type[Any], content: Any) -> Any:
@@ -58,6 +63,33 @@ def prepare_raw_document(step_input: StepInput) -> StepOutput:
     return StepOutput(content=prepared)
 
 
+async def prepare_evidence_analysis(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Freeze one formal Category Catalog per run and expose identity-free semantics to the Agent."""
+    prepared = _model_from_content(PreparedRawDocument, _step_content(step_input, "prepare-raw-document"))
+    dependencies = dict(run_context.dependencies or {})
+    snapshot = dependencies.get(_CATEGORY_CATALOG_DEPENDENCY)
+    if snapshot is None:
+        result = await asyncio.to_thread(get_evidence_categories)
+        try:
+            catalog = EvidenceCategoryCatalog.model_validate(result)
+        except ValidationError as exc:
+            raise ValueError("Data Service Evidence Category Catalog is invalid") from exc
+        dependencies[_CATEGORY_CATALOG_DEPENDENCY] = catalog.model_copy(deep=True)
+        run_context.dependencies = dependencies
+    else:
+        try:
+            catalog = EvidenceCategoryCatalog.model_validate(snapshot)
+        except ValidationError as exc:
+            raise ValueError("run-scoped Evidence Category Catalog is invalid") from exc
+    request = EvidenceAnalysisRequest(
+        document=prepared,
+        categories=[
+            EvidenceCategoryDefinition.model_validate(item.model_dump(exclude={"id"})) for item in catalog.categories
+        ],
+    )
+    return StepOutput(content=request)
+
+
 def _fingerprint_key(value: str) -> str:
     normalized = unicodedata.normalize("NFC", value).lower()
     normalized = "".join(
@@ -74,6 +106,16 @@ def _source_reference_id(identity: str) -> str:
 
 def _publication_artifact_id(publication_key: str) -> str:
     return hashlib.sha256(publication_key.encode("utf-8")).hexdigest()
+
+
+def _category_catalog_sha256(catalog: EvidenceCategoryCatalog) -> str:
+    payload = json.dumps(
+        catalog.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _freeze_prepared_publication(
@@ -96,10 +138,22 @@ def _freeze_prepared_publication(
     return candidate
 
 
-def validate_evidence_draft(step_input: StepInput) -> StepOutput:
-    """Validate Agent semantics and add deterministic publication metadata."""
+def validate_evidence_analysis(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Validate Agent semantics, resolve one formal Category ID and add publication metadata."""
     prepared = _model_from_content(PreparedRawDocument, _step_content(step_input, "prepare-raw-document"))
-    draft = _model_from_content(EvidenceExtractionDraft, _step_content(step_input, "extract-evidences"))
+    draft = _model_from_content(EvidenceExtractionDraft, _step_content(step_input, "analyze-raw-evidence"))
+    dependencies = run_context.dependencies or {}
+    snapshot = dependencies.get(_CATEGORY_CATALOG_DEPENDENCY)
+    if snapshot is None:
+        raise ValueError("run-scoped Evidence Category Catalog is missing")
+    try:
+        catalog = EvidenceCategoryCatalog.model_validate(snapshot)
+    except ValidationError as exc:
+        raise ValueError("run-scoped Evidence Category Catalog is invalid") from exc
+    categories_by_code = {item.code: item for item in catalog.categories}
+    category = categories_by_code.get(draft.raw_evidence.category_code)
+    if category is None:
+        raise ValueError(f"unknown Evidence Category code: {draft.raw_evidence.category_code}")
     quoted_name = draft.raw_evidence.quoted_source_name
     quoted_id = _source_reference_id(quoted_name) if quoted_name else None
     raw = RawEvidencePublication(
@@ -116,6 +170,7 @@ def validate_evidence_draft(step_input: StepInput) -> StepOutput:
         published_at=prepared.published_at,
         collected_at=prepared.collected_at,
         keywords=draft.raw_evidence.keywords,
+        category_ids=[category.id],
     )
     evidences: list[EvidencePublicationItem] = []
     for split_order, item in enumerate(draft.evidences):
@@ -130,7 +185,13 @@ def validate_evidence_draft(step_input: StepInput) -> StepOutput:
             }
         )
         evidences.append(EvidencePublicationItem.model_validate(values))
-    publication = PreparedEvidencePublication(prepared_raw=prepared, raw_evidence=raw, evidences=evidences)
+    publication = PreparedEvidencePublication(
+        prepared_raw=prepared,
+        category_catalog_sha256=_category_catalog_sha256(catalog),
+        selected_category_code=category.code,
+        raw_evidence=raw,
+        evidences=evidences,
+    )
     return StepOutput(content=publication)
 
 
@@ -150,7 +211,7 @@ def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -
         raise ValueError("published Evidence Artifact source identity conflict")
     evidence_entries = manifest.get("evidences")
     if (
-        manifest.get("schema") != "evidence_extraction_manifest.v2"
+        manifest.get("schema") != "evidence_extraction_manifest.v3"
         or manifest.get("publication_key") != frozen.raw_evidence.publication_key
         or manifest.get("document_sha256") != frozen.prepared_raw.document_sha256
         or manifest.get("evidence_count") != len(frozen.evidences)
@@ -184,7 +245,7 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
     """Publish Raw Evidence then the complete Evidence set and advance the file checkpoint."""
     publication = _model_from_content(
         PreparedEvidencePublication,
-        _step_content(step_input, "validate-evidence-draft"),
+        _step_content(step_input, "validate-evidence-analysis"),
     )
     publication_key = publication.raw_evidence.publication_key
     artifact_id = _publication_artifact_id(publication_key)
@@ -235,7 +296,7 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
         else:
             write_json(target, json.loads(source.read_text(encoding="utf-8")))
     manifest = {
-        "schema": "evidence_extraction_manifest.v2",
+        "schema": "evidence_extraction_manifest.v3",
         "publication_key": publication_key,
         "raw_evidence_id": raw_id,
         "collection_id": publication.prepared_raw.collection_id,

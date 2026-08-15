@@ -8,8 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError,
 _DATETIME_ADAPTER = TypeAdapter(datetime)
 _RAW_EVIDENCE_ID_PATTERN = r"^RAW[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 _EVIDENCE_ID_PATTERN = r"^EVD[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+_EVIDENCE_CATEGORY_ID_PATTERN = r"^EVC[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 RawEvidenceID = Annotated[str, Field(pattern=_RAW_EVIDENCE_ID_PATTERN)]
 EvidenceID = Annotated[str, Field(pattern=_EVIDENCE_ID_PATTERN)]
+EvidenceCategoryID = Annotated[str, Field(pattern=_EVIDENCE_CATEGORY_ID_PATTERN)]
 
 
 class EvidenceCheckpoint(BaseModel):
@@ -47,11 +49,66 @@ class PreparedRawDocument(BaseModel):
     collected_at: datetime
 
 
+class EvidenceCategoryDefinition(BaseModel):
+    """LLM-visible Evidence Category semantics without the formal Data identity."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(max_length=50, pattern=r"^[A-Z][A-Z0-9_]*$")
+    name: str = Field(min_length=1, max_length=50)
+    description: str = Field(min_length=1)
+
+    @field_validator("code", "name", "description")
+    @classmethod
+    def reject_blank_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Evidence Category text must be non-blank")
+        return value
+
+
+class EvidenceCategory(EvidenceCategoryDefinition):
+    """One formal Evidence Category returned by Data Service."""
+
+    id: EvidenceCategoryID
+
+
+class EvidenceCategoryCatalog(BaseModel):
+    """Complete, ordered Evidence Category Catalog snapshot."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    categories: list[EvidenceCategory] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_catalog_identity_and_order(self) -> "EvidenceCategoryCatalog":
+        ids = [item.id for item in self.categories]
+        codes = [item.code for item in self.categories]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Evidence Category IDs must be unique")
+        if len(codes) != len(set(codes)):
+            raise ValueError("Evidence Category codes must be unique")
+        if [(item.code, item.id) for item in self.categories] != sorted(
+            (item.code, item.id) for item in self.categories
+        ):
+            raise ValueError("Evidence Categories must be ordered by code and id")
+        return self
+
+
+class EvidenceAnalysisRequest(BaseModel):
+    """One Raw document plus the frozen, identity-free category vocabulary for the Agent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    document: PreparedRawDocument
+    categories: list[EvidenceCategoryDefinition] = Field(min_length=1)
+
+
 class RawEvidenceEnrichment(BaseModel):
     """Semantic fields required to publish the prepared Raw Evidence."""
 
     model_config = ConfigDict(extra="forbid")
 
+    category_code: str = Field(max_length=50, pattern=r"^[A-Z][A-Z0-9_]*$")
     keywords: list[str] = Field(min_length=1, max_length=5)
     is_original: bool
     quoted_source_name: str | None = Field(default=None, max_length=100)
@@ -205,6 +262,7 @@ class RawEvidencePublication(BaseModel):
     published_at: datetime | None
     collected_at: datetime
     keywords: list[str]
+    category_ids: list[EvidenceCategoryID] = Field(min_length=1, max_length=1)
 
 
 class EvidencePublicationItem(BaseModel):
@@ -236,8 +294,10 @@ class EvidencePublicationItem(BaseModel):
 class PreparedEvidencePublication(BaseModel):
     """Fully validated deterministic publication set for one Raw document."""
 
-    schema_version: Literal["prepared_evidence_publication.v2"] = "prepared_evidence_publication.v2"
+    schema_version: Literal["prepared_evidence_publication.v3"] = "prepared_evidence_publication.v3"
     prepared_raw: PreparedRawDocument
+    category_catalog_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    selected_category_code: str = Field(max_length=50, pattern=r"^[A-Z][A-Z0-9_]*$")
     raw_evidence: RawEvidencePublication
     evidences: list[EvidencePublicationItem] = Field(min_length=1)
 
