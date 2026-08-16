@@ -21,9 +21,9 @@ manifest:
       - "过滤娱乐、体育和生活方式噪声标题"
 
   evidence-extractor:
-    description: "将一篇 Raw Document 语义拆分为 Raw Evidence 元数据和原子 Evidence；生产处理请运行 Evidence Extraction Workflow。"
+    description: "一次阅读完成 Raw Evidence 唯一分类、语义补充和原子 Evidence 提取；生产处理请运行 Evidence Extraction Workflow。"
     quick_prompts:
-      - "提取这篇材料中的原子 Evidence"
+      - "从给定目录选择唯一分类并提取原子 Evidence"
       - "按 SINGLE/DOUBLE 两层 5W1H 拆分这篇材料"
       - "提炼这篇材料的关键词和可核验证据"
 
@@ -38,7 +38,7 @@ manifest:
       - "采集最近48小时可能影响中国A股板块和产业链行情的最新资讯，关注政策、供需、价格、重大订单、产能投放、技术突破和上市公司经营事件。"
 
   evidence-extraction:
-    description: "增量读取 Raw Collection Manifest 索引，提取并向 Data Service 发布 Raw Evidence 和 Evidence。"
+    description: "增量读取 Raw Collection Manifest 索引，冻结分类目录，并发布唯一分类的 Raw Evidence 和原子 Evidence。"
     quick_prompts:
       - "处理所有尚未提取的 Raw Document"
 

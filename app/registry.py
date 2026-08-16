@@ -21,14 +21,17 @@ from capabilities.collection.functions import (
 )
 from capabilities.collection.tools import COLLECTION_TOOLS
 from capabilities.evidence import (
+    EvidenceAnalysisRequest,
+    EvidenceCategoryCatalog,
     EvidenceExtractionDraft,
     PreparedEvidencePublication,
     PreparedRawDocument,
 )
 from capabilities.evidence.functions import (
+    prepare_evidence_analysis,
     prepare_raw_document,
     publish_evidences,
-    validate_evidence_draft,
+    validate_evidence_analysis,
 )
 from db import get_postgres_db
 
@@ -50,6 +53,8 @@ registry = Registry(
         TitleCurationDraft,
         PreparedArtifactSet,
         PreparedRawDocument,
+        EvidenceCategoryCatalog,
+        EvidenceAnalysisRequest,
         EvidenceExtractionDraft,
         PreparedEvidencePublication,
     ],
@@ -62,7 +67,8 @@ registry = Registry(
         build_artifact_step,
         publish_collection_step,
         prepare_raw_document,
-        validate_evidence_draft,
+        prepare_evidence_analysis,
+        validate_evidence_analysis,
         publish_evidences,
     ],
     agents=[tidewise_assistant],

@@ -7,14 +7,15 @@ from agno.workflow import Loop, Step, Workflow
 
 from agents.evidence_extractor import load_evidence_extractor_agent
 from capabilities.evidence.functions import (
+    prepare_evidence_analysis,
     prepare_raw_document,
     publish_evidences,
-    validate_evidence_draft,
+    validate_evidence_analysis,
 )
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTION_WORKFLOW_ID = "evidence-extraction"
-EVIDENCE_EXTRACTION_CONTRACT_VERSION = 3
+EVIDENCE_EXTRACTION_CONTRACT_VERSION = 4
 
 
 def _seed_workflow(agent: Agent) -> Workflow:
@@ -38,15 +39,22 @@ def _seed_workflow(agent: Agent) -> Workflow:
                         on_error="fail",
                     ),
                     Step(
-                        name="extract-evidences",
+                        name="prepare-evidence-analysis",
+                        executor=prepare_evidence_analysis,  # type: ignore[arg-type]  # Agno injects RunContext.
+                        max_retries=0,
+                        on_error="fail",
+                        strict_input_validation=True,
+                    ),
+                    Step(
+                        name="analyze-raw-evidence",
                         agent=agent,
                         max_retries=0,
                         on_error="fail",
                         strict_input_validation=True,
                     ),
                     Step(
-                        name="validate-evidence-draft",
-                        executor=validate_evidence_draft,
+                        name="validate-evidence-analysis",
+                        executor=validate_evidence_analysis,  # type: ignore[arg-type]  # Agno injects RunContext.
                         max_retries=0,
                         on_error="fail",
                         strict_input_validation=True,

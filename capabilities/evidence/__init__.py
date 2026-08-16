@@ -2,6 +2,8 @@
 
 from capabilities.evidence.internal.models import (
     AtomicEvidenceDraft,
+    EvidenceAnalysisRequest,
+    EvidenceCategoryCatalog,
     EvidenceExtractionDraft,
     PreparedEvidencePublication,
     PreparedRawDocument,
@@ -9,6 +11,8 @@ from capabilities.evidence.internal.models import (
 
 __all__ = [
     "AtomicEvidenceDraft",
+    "EvidenceAnalysisRequest",
+    "EvidenceCategoryCatalog",
     "EvidenceExtractionDraft",
     "PreparedEvidencePublication",
     "PreparedRawDocument",
