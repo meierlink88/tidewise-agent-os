@@ -614,7 +614,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                     {"raw_evidence_id": raw_evidence_id, "ids": [duplicate_id, duplicate_id]},
                 ],
             ),
-            self.assertRaisesRegex(ValueError, "duplicate identities"),
+            self.assertRaisesRegex(ValueError, "Evidence publication response is invalid"),
         ):
             await publish_evidences(step_input)
 
@@ -749,7 +749,10 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             (
                 [
                     {"id": raw_evidence_id},
-                    {"raw_evidence_id": raw_evidence_id, "ids": [evidence_id, evidence_id]},
+                    {
+                        "raw_evidence_id": raw_evidence_id,
+                        "ids": [evidence_id, "EVD15bec7e3-998c-5434-aa5d-29712c4c67cf"],
+                    },
                 ],
                 "Evidence identity count mismatch",
             ),

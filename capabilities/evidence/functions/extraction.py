@@ -202,8 +202,6 @@ def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -
         )
     except ValidationError as exc:
         raise ValueError("published Evidence Artifact contains invalid formal identities") from exc
-    if len(set(response.ids)) != len(response.ids):
-        raise ValueError("published Evidence Artifact contains invalid formal identities")
     checkpoint = advance_checkpoint(frozen.prepared_raw)
     return EvidencePublicationResult(
         raw_evidence_id=response.raw_evidence_id,
@@ -257,8 +255,6 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
         raise ValueError("Raw Evidence identity mismatch between publication responses")
     if len(evidence_response.ids) != len(publication.evidences):
         raise ValueError("Evidence identity count mismatch in publication response")
-    if len(set(evidence_response.ids)) != len(evidence_response.ids):
-        raise ValueError("Evidence publication response contains duplicate identities")
 
     for name in ("prepared.json",):
         source = pending / name

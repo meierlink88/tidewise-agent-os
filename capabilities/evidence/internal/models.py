@@ -253,6 +253,12 @@ class EvidenceSetPublicationResponse(BaseModel):
     raw_evidence_id: RawEvidenceID
     ids: list[EvidenceID] = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def validate_unique_ids(self) -> "EvidenceSetPublicationResponse":
+        if len(set(self.ids)) != len(self.ids):
+            raise ValueError("Evidence identities must be unique")
+        return self
+
 
 class EvidencePublicationResult(BaseModel):
     """Workflow-visible terminal result for one published Raw document."""
