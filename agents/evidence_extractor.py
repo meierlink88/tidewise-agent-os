@@ -11,15 +11,18 @@ from capabilities.evidence import EvidenceExtractionDraft
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTOR_AGENT_ID = "evidence-extractor"
-EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 2
+EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 4
 EVIDENCE_EXTRACTOR_DESCRIPTION = "Classifies one Raw Evidence and extracts its atomic Evidences in one reading."
 _SEED_PROMPT = Path(__file__).with_name("evidence_extractor.seed.md")
-_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 2:
+_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 4:
 - Read the supplied EvidenceAnalysisRequest exactly once.
 - It contains one document and the complete allowed Category vocabulary.
 - Choose exactly one category and return its code as raw_evidence.category_code.
 - Category IDs are deliberately absent. Never invent an ID or return more than one category code.
-- In the same structured response, return Raw Evidence enrichment and all directly supported atomic Evidences.
+- In the same structured response, return Raw Evidence enrichment and the complete set of directly supported
+  atomic Evidences.
+- Each Evidence contains only a concise summary and semantic with exactly who, what, when, where, why and how.
+- semantic.what is required; use null for any other dimension not directly supported by the document.
 - Do not call Tools or publish data.
 - The deterministic Workflow validates the code, resolves the formal ID and owns all side effects.
 """
@@ -56,7 +59,7 @@ def build_evidence_extractor_agent() -> Agent:
 
 
 def ensure_evidence_extractor_agent(registry: Registry) -> int:
-    """Create published version 1 once; preserve operator-managed instructions."""
+    """Create the Agent once and migrate contract-bound runtime configuration."""
     db = get_postgres_db()
     component = db.get_component(EVIDENCE_EXTRACTOR_AGENT_ID, component_type=ComponentType.AGENT)
     if component is not None:
@@ -73,6 +76,7 @@ def ensure_evidence_extractor_agent(registry: Registry) -> int:
         current.description = EVIDENCE_EXTRACTOR_DESCRIPTION
         current.tools = []
         current.tool_call_limit = None
+        current.instructions = _seed_instructions()
         current.additional_context = _RUNTIME_CONTRACT
         current.output_schema = EvidenceExtractionDraft
         current.parse_response = True

@@ -9,8 +9,8 @@ Evidence manifest succeed. The AI reads the verified local Markdown body, while 
 URL path through the existing `raw_text` field.
 
 AgentOS owns the stable `publication_key` used for retries but does not create formal Raw Evidence or Evidence IDs.
-Data Service returns `raw_evidence_id` from Raw Evidence Publication; AgentOS passes that exact value to Evidence
-Publication, then records the returned `evidence_ids` in split order.
+Data Service returns `id` from Raw Evidence Publication; AgentOS passes that exact value as `raw_evidence_id` to
+Evidence Publication, then records the returned unordered `ids` set without assigning business order.
 
 ## Runtime shape
 
@@ -47,12 +47,11 @@ runs continue from the file checkpoint.
 
 ## Ownership
 
-- The Agent owns exactly one Catalog-backed Category code, atomic semantic splitting, exclusions,
-  originality/quotation judgment, SINGLE/DOUBLE, two-layer 5W1H, keywords, and the readable expression fingerprint.
+- The Agent owns exactly one Catalog-backed Category code, atomic splitting, exclusions, originality/quotation
+  judgment, keywords, one concise `summary`, and one strict 5W1H `semantic` object for every atomic Evidence.
 - Functions own Catalog retrieval and freezing, Category code-to-ID mapping, file parsing, trust-boundary validation,
-  `publication_key`, split order, fingerprint keys, API timeouts, response validation, Artifact ordering, and
-  checkpoint transitions. Formal IDs are recorded in the frozen publication or final manifest, but Data publication
-  responses do not become separate local receipts.
+  `publication_key`, API timeouts, response validation, Artifact ordering, and checkpoint transitions. Formal IDs are
+  recorded in the final manifest, but Data publication responses do not become separate local receipts.
 - Data Service owns the Category Catalog and the formal Raw Evidence/Evidence facts, and enforces its accepted V1 API
   contracts.
 
@@ -67,8 +66,14 @@ runs continue from the file checkpoint.
   `category_ids` array.
 - Raw Evidence is published before its complete `1..N` Evidence set.
 - Raw Evidence Publication sends `publication_key` and no `raw_evidence_id`; Evidence items send no `evidence_id`.
-- The second publication uses only the `raw_evidence_id` returned by the first response. Its response must repeat that
-  identity and return exactly one unique formal Evidence ID per submitted `split_order`.
+- Each Evidence publication item contains exactly `summary` and `semantic`. `semantic` contains exactly `who`,
+  `what`, `when`, `where`, `why`, and `how`; `what` is nonblank, and an unsupported optional dimension is `null`.
+- One independently meaningful and verifiable thing is one atomic Evidence. Multiple distinct things are split;
+  details and limitations of the same thing remain together. Statement, forecast, opinion, intention, negation,
+  condition, quantity, time range, and uncertainty modality must be preserved.
+- The second publication uses only the `id` returned by the first response. Its response must repeat that identity and
+  return exactly one unique formal Evidence ID per submitted item. The returned IDs are deterministic but unordered;
+  AgentOS never zips them back to input positions.
 - Raw Evidence `raw_text` is the environment-neutral `/{bucket}/{object_key}` path recorded by Raw Collection, never
   the article body or a Base URL.
 - Browser access is `environment MinIO Base URL + raw_text`; Data Service does not proxy the object.
@@ -79,14 +84,15 @@ runs continue from the file checkpoint.
   retry after either successful remote phase repeats the same immutable payload and consumes the same formal IDs.
 - The first prepared publication payload is frozen under `.pending`; retries reuse it even if a later Agent run emits
   different semantics, so an unknown remote outcome can never be retried with drifted content.
-- New Evidence Artifact manifests use `evidence_extraction_manifest.v3`, are keyed locally by the SHA-256 of
-  `publication_key`, and record the formal Raw Evidence ID plus the `split_order` to Evidence ID mapping. Historical
-  v1/v2 manifests and pre-cutover `.pending/RAW_...` directories remain untouched and are not treated as formal IDs.
-- A completed v3 manifest and its frozen `prepared.json` are the recovery truth if the process stops before checkpoint
+- New frozen publications use `prepared_evidence_publication.v4`; new manifests use
+  `evidence_extraction_manifest.v4`, are keyed locally by the SHA-256 of `publication_key`, and record the formal Raw
+  Evidence ID plus the complete returned `evidence_ids` set. Historical v1/v2/v3 manifests and pre-cutover pending
+  directories remain untouched and are not replayed by this change.
+- A completed v4 manifest and its frozen `prepared.json` are the recovery truth if the process stops before checkpoint
   advancement; later Agent output cannot change the completed publication or prevent that checkpoint from advancing.
-- `SINGLE` has no core fields; `DOUBLE` requires `source_what_core`.
 - Keywords contain 1 to 5 unique values, each at most 5 characters.
 - Article publication time never substitutes for Evidence fact time.
-- Split order, expression keys, and fingerprint version are deterministic AgentOS outputs; formal Raw Evidence and
-  Evidence IDs are Data Service outputs.
+- `split_order`, `layer_type`, all Evidence `source_*`/`source_*_core` fields, `expression_fingerprint`,
+  `expression_key`, and `fingerprint_version` are not part of the contract.
+- Formal Raw Evidence and Evidence IDs are Data Service outputs.
 - The Evidence Artifact manifest is written last; checkpoint advances only after that manifest exists.

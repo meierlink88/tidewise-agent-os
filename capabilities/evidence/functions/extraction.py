@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import json
 import shutil
-import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +34,6 @@ from capabilities.evidence.internal.storage import (
     write_json,
 )
 
-_FINGERPRINT_VERSION = "evidence-expression.v1"
 _CATEGORY_CATALOG_DEPENDENCY = "evidence_category_catalog"
 
 
@@ -88,16 +86,6 @@ async def prepare_evidence_analysis(step_input: StepInput, run_context: RunConte
         ],
     )
     return StepOutput(content=request)
-
-
-def _fingerprint_key(value: str) -> str:
-    normalized = unicodedata.normalize("NFC", value).lower()
-    normalized = "".join(
-        character for character in normalized if not unicodedata.category(character).startswith(("P", "Z"))
-    )
-    if not normalized:
-        raise ValueError("Evidence expression fingerprint has no normalized content")
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _source_reference_id(identity: str) -> str:
@@ -172,19 +160,7 @@ def validate_evidence_analysis(step_input: StepInput, run_context: RunContext) -
         keywords=draft.raw_evidence.keywords,
         category_ids=[category.id],
     )
-    evidences: list[EvidencePublicationItem] = []
-    for split_order, item in enumerate(draft.evidences):
-        values = item.model_dump()
-        fingerprint = item.expression_fingerprint.strip()
-        values.update(
-            {
-                "split_order": split_order,
-                "expression_fingerprint": fingerprint,
-                "expression_key": _fingerprint_key(fingerprint),
-                "fingerprint_version": _FINGERPRINT_VERSION,
-            }
-        )
-        evidences.append(EvidencePublicationItem.model_validate(values))
+    evidences = [EvidencePublicationItem.model_validate(item.model_dump()) for item in draft.evidences]
     publication = PreparedEvidencePublication(
         prepared_raw=prepared,
         category_catalog_sha256=_category_catalog_sha256(catalog),
@@ -209,32 +185,27 @@ def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -
         or frozen.raw_evidence.publication_key != publication.raw_evidence.publication_key
     ):
         raise ValueError("published Evidence Artifact source identity conflict")
-    evidence_entries = manifest.get("evidences")
+    evidence_ids = manifest.get("evidence_ids")
     if (
-        manifest.get("schema") != "evidence_extraction_manifest.v3"
+        manifest.get("schema") != "evidence_extraction_manifest.v4"
         or manifest.get("publication_key") != frozen.raw_evidence.publication_key
         or manifest.get("document_sha256") != frozen.prepared_raw.document_sha256
         or manifest.get("evidence_count") != len(frozen.evidences)
-        or not isinstance(evidence_entries, list)
-        or len(evidence_entries) != len(frozen.evidences)
+        or not isinstance(evidence_ids, list)
+        or len(evidence_ids) != len(frozen.evidences)
     ):
         raise ValueError("published Evidence Artifact identity conflict")
-    if any(
-        not isinstance(entry, dict) or entry.get("split_order") != split_order
-        for split_order, entry in enumerate(evidence_entries)
-    ):
-        raise ValueError("published Evidence Artifact split order conflict")
     try:
         response = EvidenceSetPublicationResponse(
             raw_evidence_id=manifest.get("raw_evidence_id"),
-            evidence_ids=[entry.get("evidence_id") for entry in evidence_entries],
+            ids=evidence_ids,
         )
     except ValidationError as exc:
         raise ValueError("published Evidence Artifact contains invalid formal identities") from exc
     checkpoint = advance_checkpoint(frozen.prepared_raw)
     return EvidencePublicationResult(
         raw_evidence_id=response.raw_evidence_id,
-        evidence_ids=response.evidence_ids,
+        evidence_ids=response.ids,
         evidence_count=len(frozen.evidences),
         artifact_manifest_path=str(path),
         checkpoint=checkpoint,
@@ -267,7 +238,7 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
         raw_response = RawEvidencePublicationResponse.model_validate(raw_response_payload)
     except ValidationError as exc:
         raise ValueError("Raw Evidence publication response is invalid") from exc
-    raw_id = raw_response.raw_evidence_id
+    raw_id = raw_response.id
     evidence_response_payload = await asyncio.to_thread(
         post_publication,
         "evidence-publications",
@@ -282,10 +253,8 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
         raise ValueError("Evidence publication response is invalid") from exc
     if evidence_response.raw_evidence_id != raw_id:
         raise ValueError("Raw Evidence identity mismatch between publication responses")
-    if len(evidence_response.evidence_ids) != len(publication.evidences):
+    if len(evidence_response.ids) != len(publication.evidences):
         raise ValueError("Evidence identity count mismatch in publication response")
-    if len(set(evidence_response.evidence_ids)) != len(evidence_response.evidence_ids):
-        raise ValueError("Evidence publication response contains duplicate identities")
 
     for name in ("prepared.json",):
         source = pending / name
@@ -296,17 +265,14 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
         else:
             write_json(target, json.loads(source.read_text(encoding="utf-8")))
     manifest = {
-        "schema": "evidence_extraction_manifest.v3",
+        "schema": "evidence_extraction_manifest.v4",
         "publication_key": publication_key,
         "raw_evidence_id": raw_id,
         "collection_id": publication.prepared_raw.collection_id,
         "document_path": publication.prepared_raw.document_path,
         "document_sha256": publication.prepared_raw.document_sha256,
         "evidence_count": len(publication.evidences),
-        "evidences": [
-            {"split_order": split_order, "evidence_id": evidence_id}
-            for split_order, evidence_id in enumerate(evidence_response.evidence_ids)
-        ],
+        "evidence_ids": evidence_response.ids,
         "artifacts": {"prepared": "prepared.json"},
     }
     write_json(final_manifest, manifest)
@@ -314,7 +280,7 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
     checkpoint = advance_checkpoint(publication.prepared_raw)
     result = EvidencePublicationResult(
         raw_evidence_id=raw_id,
-        evidence_ids=evidence_response.evidence_ids,
+        evidence_ids=evidence_response.ids,
         evidence_count=len(publication.evidences),
         artifact_manifest_path=str(final_manifest),
         checkpoint=checkpoint,
