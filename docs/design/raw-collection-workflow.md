@@ -92,6 +92,9 @@ their protocol supports it; deterministic Artifact construction always enforces 
 - A runtime contract migration may publish a new component version while preserving operator-managed Instructions
   byte-for-byte. Obsolete provider-specific Tool instructions are superseded through code-owned additional context.
 - Raw Collection Workflow graph versions remain Studio-managed; Python Function executors remain Git-managed.
+- The Workflow exclusively persists the durable Agno session. Studio-managed Collector and Title Curator components
+  are rehydrated as database-free runtime copies only when embedded in Workflow Steps, so their outputs remain under
+  Workflow step details without competing Agent session writes. Direct Agent runs retain their configured database.
 
 ## Invariants
 

@@ -1,8 +1,12 @@
 """Safe components available to the local AgentOS Studio registry."""
 
+from agno.agent import Agent
 from agno.registry import Registry
 
+from agents.evidence_extractor import EVIDENCE_EXTRACTOR_AGENT_ID, load_evidence_extractor_agent
+from agents.raw_collector import COLLECTOR_AGENT_ID, load_collector_agent
 from agents.tidewise_assistant import tidewise_assistant
+from agents.title_curator import TITLE_CURATOR_AGENT_ID, load_title_curator_agent
 from app.settings import default_model
 from capabilities.collection import (
     CollectionQueryPlan,
@@ -41,7 +45,23 @@ def platform_identity() -> str:
     return "Tidewise AgentOS"
 
 
-registry = Registry(
+class TidewiseRegistry(Registry):
+    """Resolve Studio Agents as sessionless runtime copies when composing Workflows."""
+
+    def get_agent(self, agent_id: str) -> Agent | None:
+        code_defined = super().get_agent(agent_id)
+        if code_defined is not None:
+            return code_defined
+        if agent_id == COLLECTOR_AGENT_ID:
+            return load_collector_agent(self).agent
+        if agent_id == TITLE_CURATOR_AGENT_ID:
+            return load_title_curator_agent(self).agent
+        if agent_id == EVIDENCE_EXTRACTOR_AGENT_ID:
+            return load_evidence_extractor_agent(self)
+        return None
+
+
+registry = TidewiseRegistry(
     name="Tidewise AgentOS Registry",
     tools=COLLECTION_TOOLS,
     models=[default_model()],

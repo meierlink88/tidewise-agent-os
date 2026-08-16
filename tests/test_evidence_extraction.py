@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from agno.agent import Agent
 from agno.registry import Registry
 from agno.run import RunContext
 from agno.run.agent import RunOutput
@@ -22,7 +23,9 @@ from pydantic import ValidationError
 from agents.evidence_extractor import (
     build_evidence_extractor_agent,
     ensure_evidence_extractor_agent,
+    load_evidence_extractor_agent,
 )
+from app.registry import TidewiseRegistry
 from capabilities.collection.internal.artifacts import build_artifact_set, publish_artifact_set
 from capabilities.collection.internal.buffer import write_title_curation, write_tool_batch
 from capabilities.collection.internal.models import (
@@ -50,7 +53,11 @@ from capabilities.evidence.internal.models import (
     RawEvidenceEnrichment,
 )
 from capabilities.evidence.internal.storage import checkpoint_path, evidence_artifact_root, read_checkpoint
-from workflows.evidence_extraction import EVIDENCE_EXTRACTION_CONTRACT_VERSION, _seed_workflow
+from workflows.evidence_extraction import (
+    EVIDENCE_EXTRACTION_CONTRACT_VERSION,
+    _seed_workflow,
+    ensure_evidence_extraction_workflow,
+)
 
 
 class AcceptingRawDocumentStore:
@@ -893,6 +900,86 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(inspect.iscoroutinefunction(steps[1].executor))
         self.assertTrue(inspect.iscoroutinefunction(steps[4].executor))
+
+    def test_workflow_agent_loads_component_without_runtime_session_db(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 7}
+        loaded = Agent(id="evidence-extractor", instructions="published instructions", db=db)
+        registry = MagicMock()
+
+        with (
+            patch("agents.evidence_extractor.get_postgres_db", return_value=db),
+            patch("agents.evidence_extractor.Agent.load", return_value=loaded) as agent_load,
+        ):
+            agent = load_evidence_extractor_agent(registry)
+
+        agent_load.assert_called_once_with(
+            "evidence-extractor",
+            db=db,
+            registry=registry,
+            version=7,
+        )
+        self.assertIsNone(agent.db)
+
+    def test_database_workflow_rehydrates_a_sessionless_agent_runtime_copy(self) -> None:
+        component_db = MagicMock()
+        published = Agent(id="evidence-extractor", instructions="published instructions", db=component_db)
+        workflow = _seed_workflow(published)
+        runtime = Agent(id="evidence-extractor", instructions="published instructions", db=None)
+        registry = TidewiseRegistry(
+            functions=[
+                prepare_raw_document,
+                prepare_evidence_analysis,
+                validate_evidence_analysis,
+                publish_evidences,
+            ]
+        )
+
+        with patch("app.registry.load_evidence_extractor_agent", return_value=runtime) as runtime_load:
+            restored = Workflow.from_dict(workflow.to_dict(), registry=registry)
+
+        runtime_load.assert_called_once_with(registry)
+        loop = cast(Loop, cast(list[object], restored.steps)[0])
+        analyze = cast(list[Step], loop.steps)[2]
+        self.assertIsNotNone(restored.db)
+        self.assertIsNotNone(analyze.agent)
+        assert analyze.agent is not None
+        self.assertIsNone(analyze.agent.db)
+
+    def test_workflow_contract_migration_keeps_workflow_db_and_detaches_agent_db(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 12}
+        db.get_config.return_value = {
+            "config": {
+                "id": "evidence-extraction",
+                "name": "Evidence Extraction",
+                "metadata": {"evidence_extraction_contract_version": 5},
+            }
+        }
+        published_agent = Agent(id="evidence-extractor", instructions="published instructions", db=db)
+
+        with (
+            patch("workflows.evidence_extraction.get_postgres_db", return_value=db),
+            patch("agents.evidence_extractor.get_postgres_db", return_value=db),
+            patch("agents.evidence_extractor.Agent.load", return_value=published_agent),
+            patch.object(Workflow, "save", autospec=True, return_value=13) as workflow_save,
+        ):
+            version = ensure_evidence_extraction_workflow(MagicMock())
+
+        self.assertEqual(version, 13)
+        migrated = cast(Workflow, workflow_save.call_args.args[0])
+        self.assertIs(migrated.db, db)
+        loop = cast(Loop, cast(list[object], migrated.steps)[0])
+        analyze = cast(list[Step], loop.steps)[2]
+        self.assertIsNotNone(analyze.agent)
+        assert analyze.agent is not None
+        self.assertIsNone(analyze.agent.db)
+        self.assertIsNotNone(migrated.metadata)
+        assert migrated.metadata is not None
+        self.assertEqual(
+            migrated.metadata["evidence_extraction_contract_version"],
+            EVIDENCE_EXTRACTION_CONTRACT_VERSION,
+        )
 
     def test_agent_contract_migration_publishes_reviewed_atomic_evidence_prompt(self) -> None:
         db = MagicMock()

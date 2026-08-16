@@ -26,6 +26,11 @@ indexes/manifest-index.jsonl + data/evidence/checkpoint.json
 The five steps run inside an Agno `Loop` with a 100-document safety cap. `prepare-raw-document` returns
 `stop=True` when no indexed work remains, which ends the loop without invoking the Agent.
 
+The Workflow owns the durable Agno session. The Evidence Extractor remains a PostgreSQL/Studio-managed component,
+but the copy rehydrated into the Agent Step has no independent session database and therefore cannot overwrite the
+Workflow session row that stores run and step details. Running the Agent directly through AgentOS still resolves its
+published database configuration and keeps normal Agent session persistence.
+
 `prepare-evidence-analysis` calls `GET /api/data/v1/evidence-categories` only after work exists. The first document in
 a Workflow Run freezes the complete, strictly validated Catalog in `RunContext.dependencies`; all later documents in
 that run reuse the same snapshot. The Agent sees only each Category's `code`, `name`, and `description`. Formal IDs

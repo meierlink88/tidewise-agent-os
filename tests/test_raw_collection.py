@@ -17,7 +17,8 @@ from agno.run import RunContext
 from agno.workflow import Step, StepInput, StepOutput
 from pydantic import ValidationError
 
-from agents.title_curator import ensure_title_curator_agent
+from agents.raw_collector import LoadedCollectorAgent, load_collector_agent
+from agents.title_curator import LoadedTitleCuratorAgent, ensure_title_curator_agent, load_title_curator_agent
 from capabilities.collection.functions import (
     build_artifact_step,
     execute_collection_channels_step,
@@ -45,7 +46,7 @@ from capabilities.collection.internal.models import (
     TitleCurationRequest,
 )
 from capabilities.collection.tools import COLLECTION_TOOLS
-from workflows.raw_collection import _seed_workflow
+from workflows.raw_collection import RAW_COLLECTION_CONTRACT_VERSION, _seed_workflow, ensure_raw_collection_workflow
 
 
 class RecordingRawDocumentStore:
@@ -614,6 +615,68 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(all(step.max_retries == 0 for step in steps))
         self.assertTrue(all(str(step.on_error) == "fail" for step in steps))
+
+    def test_workflow_agents_load_components_without_runtime_session_db(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 11}
+        collector = Agent(id="raw-collector", instructions="published collector instructions", db=db)
+        curator = Agent(id="title-curator", instructions="published curator instructions", db=db)
+
+        with (
+            patch("agents.raw_collector.get_postgres_db", return_value=db),
+            patch("agents.raw_collector.Agent.load", return_value=collector),
+        ):
+            loaded_collector = load_collector_agent(MagicMock())
+        with (
+            patch("agents.title_curator.get_postgres_db", return_value=db),
+            patch("agents.title_curator.Agent.load", return_value=curator),
+        ):
+            loaded_curator = load_title_curator_agent(MagicMock())
+
+        self.assertIsNone(loaded_collector.agent.db)
+        self.assertIsNone(loaded_curator.agent.db)
+
+    def test_workflow_contract_migration_keeps_workflow_db_and_detaches_agent_dbs(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 15}
+        db.get_config.return_value = {
+            "config": {
+                "id": "raw-collection",
+                "name": "Raw Collection",
+                "metadata": {"raw_collection_contract_version": 9},
+            }
+        }
+        collector_agent = Agent(id="raw-collector", instructions="published collector instructions", db=db)
+        curator_agent = Agent(id="title-curator", instructions="published curator instructions", db=db)
+        collector_agent.db = None
+        curator_agent.db = None
+        collector = LoadedCollectorAgent(
+            agent=collector_agent,
+            version=21,
+            instructions_sha256="collector-sha256",
+        )
+        curator = LoadedTitleCuratorAgent(
+            agent=curator_agent,
+            version=22,
+            instructions_sha256="curator-sha256",
+        )
+
+        with (
+            patch("workflows.raw_collection.get_postgres_db", return_value=db),
+            patch("workflows.raw_collection.load_collector_agent", return_value=collector),
+            patch("workflows.raw_collection.load_title_curator_agent", return_value=curator),
+            patch("workflows.raw_collection.Workflow.save", autospec=True, return_value=16) as workflow_save,
+        ):
+            version = ensure_raw_collection_workflow(MagicMock())
+
+        self.assertEqual(version, 16)
+        migrated = workflow_save.call_args.args[0]
+        self.assertIs(migrated.db, db)
+        steps = cast(list[Step], migrated.steps)
+        agent_steps = [step.agent for step in steps if step.agent is not None]
+        self.assertEqual([agent.id for agent in agent_steps], ["raw-collector", "title-curator"])
+        self.assertTrue(all(agent.db is None for agent in agent_steps))
+        self.assertEqual(migrated.metadata["raw_collection_contract_version"], RAW_COLLECTION_CONTRACT_VERSION)
 
     def test_live_non_streaming_workflow_result_has_visible_agent_steps(self) -> None:
         """Optional REST seam: set RUN_LIVE_AGENTOS_TESTS=1 after starting local AgentOS."""
