@@ -11,10 +11,10 @@ from capabilities.evidence import EvidenceExtractionDraft
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTOR_AGENT_ID = "evidence-extractor"
-EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 3
+EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 4
 EVIDENCE_EXTRACTOR_DESCRIPTION = "Classifies one Raw Evidence and extracts its atomic Evidences in one reading."
 _SEED_PROMPT = Path(__file__).with_name("evidence_extractor.seed.md")
-_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 3:
+_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 4:
 - Read the supplied EvidenceAnalysisRequest exactly once.
 - It contains one document and the complete allowed Category vocabulary.
 - Choose exactly one category and return its code as raw_evidence.category_code.

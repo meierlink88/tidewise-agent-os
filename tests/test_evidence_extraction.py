@@ -20,7 +20,6 @@ from agno.workflow import Loop, Step, StepInput, StepOutput, Workflow
 from pydantic import ValidationError
 
 from agents.evidence_extractor import (
-    EVIDENCE_EXTRACTOR_CONTRACT_VERSION,
     build_evidence_extractor_agent,
     ensure_evidence_extractor_agent,
 )
@@ -901,7 +900,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         db = MagicMock()
         db.get_component.return_value = {"current_version": 7}
         current = MagicMock()
-        current.metadata = {"evidence_extractor_contract_version": EVIDENCE_EXTRACTOR_CONTRACT_VERSION - 1}
+        current.metadata = {"evidence_extractor_contract_version": 3}
         current.instructions = "retired SINGLE/DOUBLE and source_* contract"
         current.save.return_value = 8
 
