@@ -31,7 +31,6 @@ from capabilities.collection.internal.models import (
     SourceLevel,
     TitleCurationDecision,
     TitleCurationDraft,
-    TitleRelevance,
 )
 from capabilities.evidence.functions import (
     prepare_evidence_analysis,
@@ -144,8 +143,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                 decisions=[
                     TitleCurationDecision(
                         candidate_id=candidate.candidate_id,
-                        relevance=TitleRelevance.RELEVANT,
-                        reason_code="company_operation",
+                        is_relevant=True,
                     )
                 ]
             ),

@@ -7,11 +7,14 @@ Workflow Functions build and publish immutable Artifacts:
 
 ```text
 CollectionRequest
-  -> agentic-collect                 -> CollectionQueryPlan only
+  -> plan-collection-query           -> CollectionQueryPlan only
   -> execute-collection-channels
        -> web_fetch implementation   -> one enabled Web Search channel
        -> api_fetch implementation   -> all enabled API channels, bounded concurrent
        -> rss_fetch implementation   -> all enabled RSS/Atom channels, bounded concurrent
+  -> prepare-title-curation          -> candidate_id and title only
+  -> curate-collection-titles        -> candidate_id and strict is_relevant boolean
+  -> validate-title-curation         -> exact Candidate coverage
   -> build-artifact-set
   -> publish-collection            -> MinIO Markdown objects, then local manifest
   -> CollectionResult
@@ -19,6 +22,10 @@ CollectionRequest
 
 The Workflow freezes an immutable enabled-channel snapshot before the Agent plans the query. Complete provider results
 go directly to the run-scoped Collection Buffer; the model never receives or reconstructs source content.
+
+Title Curator is a conservative binary pre-filter. Clearly relevant titles receive `is_relevant=true`; clearly
+irrelevant titles receive `false`; title-only ambiguity is retained as `true` so potentially important source material
+is not discarded before full-text Evidence Extraction. The Agent does not generate open-ended reason codes.
 
 ## Channel catalog
 
@@ -79,6 +86,8 @@ their protocol supports it; deterministic Artifact construction always enforces 
 ## Prompt and runtime ownership
 
 - Collector business instructions remain a published Agno Studio component in PostgreSQL.
+- Title Curator's binary output schema and conservative retention rules are contract-bound. A contract migration
+  republishes the reviewed seed prompt so its Instructions and Pydantic schema cannot drift across the same version.
 - Code owns the query-plan schema, runtime contract, model wiring, adapters, catalog and Artifact invariants.
 - A runtime contract migration may publish a new component version while preserving operator-managed Instructions
   byte-for-byte. Obsolete provider-specific Tool instructions are superseded through code-owned additional context.
@@ -94,6 +103,8 @@ their protocol supports it; deterministic Artifact construction always enforces 
   Artifacts.
 - Every Candidate preserves channel code, query, URL, original publisher, effective source level, direct content,
   publication-time hint and collection time.
+- Every Candidate receives exactly one strict boolean title-relevance decision. Irrelevant candidates use the
+  deterministic local audit reason `title_irrelevant`; no model-generated reason taxonomy is persisted.
 - Every successful channel call writes a complete Tool Batch before returning its receipt.
 - Every Candidate reaches exactly one deterministic terminal disposition before publication.
 - Manifest publication is last; downstream Workflows consume `indexes/manifest-index.jsonl` by byte offset.

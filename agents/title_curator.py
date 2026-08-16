@@ -13,7 +13,7 @@ from capabilities.collection import TitleCurationDraft
 from db import get_postgres_db
 
 TITLE_CURATOR_AGENT_ID = "title-curator"
-TITLE_CURATOR_CONTRACT_VERSION = 3
+TITLE_CURATOR_CONTRACT_VERSION = 4
 TITLE_CURATOR_AGENT_NAME = "Collection Title Curator"
 _SEED_PROMPT = Path(__file__).with_name("title_curator.seed.md")
 
@@ -37,6 +37,7 @@ def _seed_instructions() -> str:
 def _configure(agent: Agent) -> Agent:
     agent.db = get_postgres_db()
     agent.name = TITLE_CURATOR_AGENT_NAME
+    agent.instructions = _seed_instructions()
     agent.tools = []
     agent.retries = 0
     agent.output_schema = TitleCurationDraft
@@ -66,7 +67,7 @@ def build_title_curator_agent() -> Agent:
 
 
 def ensure_title_curator_agent(registry: Registry) -> int:
-    """Create the initial published component and migrate only runtime wiring."""
+    """Create the initial component and migrate its contract-bound runtime configuration."""
     db = get_postgres_db()
     component = db.get_component(TITLE_CURATOR_AGENT_ID, component_type=ComponentType.AGENT)
     if component is not None:
