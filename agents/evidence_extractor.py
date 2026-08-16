@@ -110,7 +110,7 @@ def ensure_evidence_extractor_agent(registry: Registry) -> int:
 
 
 def load_evidence_extractor_agent(registry: Registry) -> Agent:
-    """Load the current published Studio Agent for Workflow composition."""
+    """Load the current published Studio Agent without independent Workflow session storage."""
     db = get_postgres_db()
     component = db.get_component(EVIDENCE_EXTRACTOR_AGENT_ID, component_type=ComponentType.AGENT)
     if component is None:
@@ -121,4 +121,5 @@ def load_evidence_extractor_agent(registry: Registry) -> Agent:
     agent = Agent.load(EVIDENCE_EXTRACTOR_AGENT_ID, db=db, registry=registry, version=version)
     if agent is None:
         raise ValueError("Evidence Extractor published version could not be rehydrated")
+    agent.db = None
     return agent

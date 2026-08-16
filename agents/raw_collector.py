@@ -109,7 +109,7 @@ def ensure_collector_agent(registry: Registry) -> int:
 
 
 def load_collector_agent(registry: Registry) -> LoadedCollectorAgent:
-    """Load the current published Studio version for a single Workflow run."""
+    """Load the current published Studio version without independent Workflow session storage."""
     db = get_postgres_db()
     component = db.get_component(COLLECTOR_AGENT_ID, component_type=ComponentType.AGENT)
     if component is None:
@@ -124,4 +124,5 @@ def load_collector_agent(registry: Registry) -> LoadedCollectorAgent:
     if not isinstance(agent.instructions, str) or not agent.instructions.strip():
         raise ValueError("Raw Collector published instructions are empty")
     instructions_sha256 = hashlib.sha256(agent.instructions.encode("utf-8")).hexdigest()
+    agent.db = None
     return LoadedCollectorAgent(agent=agent, version=version, instructions_sha256=instructions_sha256)

@@ -96,7 +96,7 @@ def ensure_title_curator_agent(registry: Registry) -> int:
 
 
 def load_title_curator_agent(registry: Registry) -> LoadedTitleCuratorAgent:
-    """Load the current published Studio version for Workflow composition."""
+    """Load the current published Studio version without independent Workflow session storage."""
     db = get_postgres_db()
     component = db.get_component(TITLE_CURATOR_AGENT_ID, component_type=ComponentType.AGENT)
     if component is None:
@@ -109,6 +109,7 @@ def load_title_curator_agent(registry: Registry) -> LoadedTitleCuratorAgent:
         raise ValueError("Title Curator published version could not be rehydrated")
     if not isinstance(agent.instructions, str) or not agent.instructions.strip():
         raise ValueError("Title Curator published instructions are empty")
+    agent.db = None
     return LoadedTitleCuratorAgent(
         agent=agent,
         version=version,
