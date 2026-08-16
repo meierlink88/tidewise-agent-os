@@ -59,7 +59,7 @@ def build_evidence_extractor_agent() -> Agent:
 
 
 def ensure_evidence_extractor_agent(registry: Registry) -> int:
-    """Create published version 1 once; preserve operator-managed instructions."""
+    """Create the Agent once and migrate contract-bound runtime configuration."""
     db = get_postgres_db()
     component = db.get_component(EVIDENCE_EXTRACTOR_AGENT_ID, component_type=ComponentType.AGENT)
     if component is not None:
@@ -76,6 +76,7 @@ def ensure_evidence_extractor_agent(registry: Registry) -> int:
         current.description = EVIDENCE_EXTRACTOR_DESCRIPTION
         current.tools = []
         current.tool_call_limit = None
+        current.instructions = _seed_instructions()
         current.additional_context = _RUNTIME_CONTRACT
         current.output_schema = EvidenceExtractionDraft
         current.parse_response = True

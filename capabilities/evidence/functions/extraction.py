@@ -202,6 +202,8 @@ def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -
         )
     except ValidationError as exc:
         raise ValueError("published Evidence Artifact contains invalid formal identities") from exc
+    if len(set(response.ids)) != len(response.ids):
+        raise ValueError("published Evidence Artifact contains invalid formal identities")
     checkpoint = advance_checkpoint(frozen.prepared_raw)
     return EvidencePublicationResult(
         raw_evidence_id=response.raw_evidence_id,
