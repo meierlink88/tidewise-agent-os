@@ -55,32 +55,6 @@ class CollectionQueryPlan(BaseModel):
         return self
 
 
-class TitleRelevance(StrEnum):
-    """Title-only investment-research relevance returned by the curator."""
-
-    RELEVANT = "relevant"
-    IRRELEVANT = "irrelevant"
-    UNCERTAIN = "uncertain"
-
-
-class TitleRelevanceReason(StrEnum):
-    """Stable audit reason selected by the curator and enforced by code."""
-
-    POLICY_SIGNAL = "policy_signal"
-    MACROECONOMIC_SIGNAL = "macroeconomic_signal"
-    INDUSTRY_SIGNAL = "industry_signal"
-    COMPANY_OPERATION = "company_operation"
-    MARKET_EVENT = "market_event"
-    ENTERTAINMENT_NOISE = "entertainment_noise"
-    SPORTS_NOISE = "sports_noise"
-    LIFESTYLE_NOISE = "lifestyle_noise"
-    ADVERTISEMENT_NOISE = "advertisement_noise"
-    GENERIC_KNOWLEDGE = "generic_knowledge"
-    LOCAL_TRIVIA = "local_trivia"
-    NO_RESEARCH_VALUE = "no_research_value"
-    INSUFFICIENT_TITLE_CONTEXT = "insufficient_title_context"
-
-
 class TitleCurationItem(BaseModel):
     """Minimal title-only input visible to the Title Curator Agent."""
 
@@ -99,13 +73,12 @@ class TitleCurationRequest(BaseModel):
 
 
 class TitleCurationDecision(BaseModel):
-    """One structured title-only relevance decision."""
+    """One strict binary title-only relevance decision."""
 
     model_config = ConfigDict(extra="forbid")
 
     candidate_id: str = Field(min_length=1)
-    relevance: TitleRelevance
-    reason_code: TitleRelevanceReason
+    is_relevant: bool = Field(strict=True)
 
 
 class TitleCurationDraft(BaseModel):

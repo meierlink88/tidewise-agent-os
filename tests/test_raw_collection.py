@@ -10,13 +10,14 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from agno.agent import Agent
 from agno.run import RunContext
 from agno.workflow import Step, StepInput, StepOutput
 from pydantic import ValidationError
 
+from agents.title_curator import ensure_title_curator_agent
 from capabilities.collection.functions import (
     build_artifact_step,
     execute_collection_channels_step,
@@ -42,7 +43,6 @@ from capabilities.collection.internal.models import (
     TitleCurationDecision,
     TitleCurationDraft,
     TitleCurationRequest,
-    TitleRelevance,
 )
 from capabilities.collection.tools import COLLECTION_TOOLS
 from workflows.raw_collection import _seed_workflow
@@ -78,6 +78,24 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
     def test_collection_request_accepts_plain_objective(self) -> None:
         request = CollectionRequest.model_validate("  采集最近2小时A股事件  ")
         self.assertEqual(request.objective, "采集最近2小时A股事件")
+
+    def test_title_curation_contract_is_binary_and_strict(self) -> None:
+        decision = TitleCurationDecision(candidate_id="candidate-a", is_relevant=True)
+
+        self.assertEqual(
+            decision.model_dump(),
+            {"candidate_id": "candidate-a", "is_relevant": True},
+        )
+        with self.assertRaises(ValidationError):
+            TitleCurationDecision.model_validate(
+                {
+                    "candidate_id": "candidate-a",
+                    "is_relevant": True,
+                    "reason_code": "policy_signal",
+                }
+            )
+        with self.assertRaises(ValidationError):
+            TitleCurationDecision.model_validate({"candidate_id": "candidate-a", "is_relevant": "true"})
 
     def test_workflow_rejects_second_time_constraint(self) -> None:
         with self.assertRaises(ValidationError):
@@ -224,8 +242,7 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
                 decisions=[
                     TitleCurationDecision(
                         candidate_id=item.candidate_id,
-                        relevance=TitleRelevance.RELEVANT,
-                        reason_code="industry_signal",
+                        is_relevant=True,
                     )
                     for item in [first, duplicate, outside]
                 ]
@@ -373,18 +390,15 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
                 decisions=[
                     TitleCurationDecision(
                         candidate_id="policy-first",
-                        relevance=TitleRelevance.RELEVANT,
-                        reason_code="policy_signal",
+                        is_relevant=True,
                     ),
                     TitleCurationDecision(
                         candidate_id="policy-duplicate",
-                        relevance=TitleRelevance.RELEVANT,
-                        reason_code="policy_signal",
+                        is_relevant=True,
                     ),
                     TitleCurationDecision(
                         candidate_id="sports-noise",
-                        relevance=TitleRelevance.IRRELEVANT,
-                        reason_code="sports_noise",
+                        is_relevant=False,
                     ),
                 ]
             ),
@@ -404,8 +418,9 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         by_id = {item["candidate_id"]: item for item in ledger}
         duplicate_rows = [item for item in ledger if item["disposition"] == "exact_duplicate"]
         self.assertEqual([item["reason"] for item in duplicate_rows], ["normalized_title_sha256_already_indexed"])
-        self.assertEqual(by_id["sports-noise"]["reason"], "sports_noise")
+        self.assertEqual(by_id["sports-noise"]["reason"], "title_irrelevant")
         self.assertEqual(by_id["sports-noise"]["title_relevance"], "irrelevant")
+        self.assertNotIn("title_relevance_reason", by_id["sports-noise"])
         self.assertIsNone(by_id["sports-noise"]["document_path"])
 
     def test_title_dedup_keeps_legacy_index_immutable_and_uses_its_urls(self) -> None:
@@ -447,8 +462,7 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
                 decisions=[
                     TitleCurationDecision(
                         candidate_id="legacy-url",
-                        relevance=TitleRelevance.RELEVANT,
-                        reason_code="policy_signal",
+                        is_relevant=True,
                     )
                 ]
             ),
@@ -510,13 +524,11 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             decisions=[
                 TitleCurationDecision(
                     candidate_id="candidate-a",
-                    relevance=TitleRelevance.RELEVANT,
-                    reason_code="policy_signal",
+                    is_relevant=True,
                 ),
                 TitleCurationDecision(
                     candidate_id="candidate-unknown",
-                    relevance=TitleRelevance.UNCERTAIN,
-                    reason_code="insufficient_title_context",
+                    is_relevant=True,
                 ),
             ]
         )
@@ -533,13 +545,11 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             decisions=[
                 TitleCurationDecision(
                     candidate_id="candidate-a",
-                    relevance=TitleRelevance.RELEVANT,
-                    reason_code="policy_signal",
+                    is_relevant=True,
                 ),
                 TitleCurationDecision(
                     candidate_id="candidate-a",
-                    relevance=TitleRelevance.UNCERTAIN,
-                    reason_code="insufficient_title_context",
+                    is_relevant=False,
                 ),
             ]
         )
@@ -551,6 +561,27 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaisesRegex(ValueError, "duplicate Candidate IDs"):
             await validate_title_curation(duplicate_input, context)
+
+    def test_title_curator_contract_migration_publishes_reviewed_binary_prompt(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 8}
+        current = MagicMock()
+        current.metadata = {"title_curator_contract_version": 3}
+        current.instructions = "reason_code 使用简短稳定的小写英文下划线代码"
+        current.save.return_value = 9
+
+        with (
+            patch("agents.title_curator.get_postgres_db", return_value=db),
+            patch("agents.title_curator.Agent.load", return_value=current),
+        ):
+            version = ensure_title_curator_agent(MagicMock())
+
+        self.assertEqual(version, 9)
+        self.assertIn("is_relevant", current.instructions)
+        self.assertNotIn("reason_code", current.instructions)
+        self.assertNotIn("uncertain", current.instructions)
+        self.assertIs(current.output_schema, TitleCurationDraft)
+        self.assertEqual(current.metadata["title_curator_contract_version"], 4)
 
     def test_studio_workflow_seed_round_trips_registered_functions(self) -> None:
         collector = Agent(id="raw-collector", name="Collection Query Planner")

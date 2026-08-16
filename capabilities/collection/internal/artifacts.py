@@ -30,7 +30,6 @@ from capabilities.collection.internal.models import (
     CollectionRequest,
     CollectionResult,
     PreparedArtifactSet,
-    TitleRelevance,
 )
 from capabilities.collection.internal.object_storage import (
     RawDocumentStore,
@@ -230,8 +229,8 @@ def build_artifact_set(
             disposition, reason = "invalid_result", "empty_normalized_title"
         title_sha256 = _sha256(normalized_title)
         fingerprint = _simhash64(normalized_title)
-        if decision.relevance is TitleRelevance.IRRELEVANT:
-            disposition, reason = "irrelevant", decision.reason_code.value
+        if not decision.is_relevant:
+            disposition, reason = "irrelevant", "title_irrelevant"
         try:
             canonical_url = _canonical_url(str(candidate.url))
         except ValueError:
@@ -288,8 +287,7 @@ def build_artifact_set(
                 "source_level": candidate.source_level.value,
                 "published_at": candidate.published_at.isoformat() if candidate.published_at else None,
                 "collected_at": candidate.collected_at.isoformat(),
-                "title_relevance": decision.relevance.value,
-                "title_relevance_reason": decision.reason_code.value,
+                "title_relevance": "relevant" if decision.is_relevant else "irrelevant",
                 "disposition": disposition,
                 "reason": reason,
                 "document_path": document_path,
