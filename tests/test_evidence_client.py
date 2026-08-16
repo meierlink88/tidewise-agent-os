@@ -70,7 +70,7 @@ class EvidencePublicationClientTest(unittest.TestCase):
     def test_returns_result_from_success_envelope(self) -> None:
         payload = {
             "request_id": "data-test",
-            "result": {"raw_evidence_id": "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"},
+            "result": {"id": "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"},
         }
         with (
             patch.dict(os.environ, {"DATA_SERVICE_TOKEN": "test-token"}),
@@ -82,7 +82,7 @@ class EvidencePublicationClientTest(unittest.TestCase):
 
     def test_rejects_success_without_strict_envelope(self) -> None:
         for payload in (
-            {"raw_evidence_id": "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"},
+            {"id": "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"},
             {"request_id": "data-test"},
             {"request_id": "", "result": {}},
         ):

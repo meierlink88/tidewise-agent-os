@@ -3,9 +3,8 @@
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-_DATETIME_ADAPTER = TypeAdapter(datetime)
 _RAW_EVIDENCE_ID_PATTERN = r"^RAW[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 _EVIDENCE_ID_PATTERN = r"^EVD[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 _EVIDENCE_CATEGORY_ID_PATTERN = r"^EVC[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
@@ -145,94 +144,52 @@ class RawEvidenceEnrichment(BaseModel):
         return self
 
 
-class AtomicEvidenceDraft(BaseModel):
-    """LLM-owned semantic draft; deterministic publication metadata is added later."""
+class EvidenceSemantic(BaseModel):
+    """Strict 5W1H meaning of one atomic Evidence statement."""
 
     model_config = ConfigDict(extra="forbid")
 
-    layer_type: Literal["SINGLE", "DOUBLE"]
-    source_who: str | None = None
-    source_what: str = Field(min_length=1)
-    source_when: datetime | None = None
-    source_when_raw: str | None = None
-    source_where: str | None = None
-    source_why: str | None = None
-    source_how: str | None = None
-    source_who_core: str | None = None
-    source_what_core: str | None = None
-    source_when_core: datetime | None = None
-    source_when_raw_core: str | None = None
-    source_where_core: str | None = None
-    source_why_core: str | None = None
-    source_how_core: str | None = None
-    expression_fingerprint: str = Field(min_length=1, max_length=200)
+    who: str | None
+    what: str = Field(min_length=1)
+    when: str | None
+    where: str | None
+    why: str | None
+    how: str | None
 
-    @model_validator(mode="before")
-    @classmethod
-    def preserve_fuzzy_fact_times(cls, value: Any) -> Any:
-        """Move non-ISO fact-time expressions into their lossless raw fields."""
-        if not isinstance(value, dict):
-            return value
-        normalized = value.copy()
-        for timestamp_field, raw_field in (
-            ("source_when", "source_when_raw"),
-            ("source_when_core", "source_when_raw_core"),
-        ):
-            candidate = normalized.get(timestamp_field)
-            if not isinstance(candidate, str):
-                continue
-            try:
-                _DATETIME_ADAPTER.validate_python(candidate)
-            except ValidationError:
-                if not normalized.get(raw_field):
-                    normalized[raw_field] = candidate
-                normalized[timestamp_field] = None
-        return normalized
-
-    @field_validator("source_what", "expression_fingerprint")
+    @field_validator("what")
     @classmethod
     def strip_required_text(cls, value: str) -> str:
         stripped = value.strip()
         if not stripped:
-            raise ValueError("required Evidence text must not be blank")
+            raise ValueError("Evidence semantic.what must not be blank")
         return stripped
 
-    @field_validator(
-        "source_who",
-        "source_when_raw",
-        "source_where",
-        "source_why",
-        "source_how",
-        "source_who_core",
-        "source_what_core",
-        "source_when_raw_core",
-        "source_where_core",
-        "source_why_core",
-        "source_how_core",
-    )
+    @field_validator("who", "when", "where", "why", "how")
     @classmethod
     def strip_optional_text(cls, value: str | None) -> str | None:
         if value is None:
             return None
         stripped = value.strip()
-        return stripped or None
+        if not stripped:
+            raise ValueError("Evidence semantic strings must not be blank; use null when unsupported")
+        return stripped
 
-    @model_validator(mode="after")
-    def validate_layers(self) -> "AtomicEvidenceDraft":
-        core_values = (
-            self.source_who_core,
-            self.source_what_core,
-            self.source_when_core,
-            self.source_when_raw_core,
-            self.source_where_core,
-            self.source_why_core,
-            self.source_how_core,
-        )
-        if self.layer_type == "SINGLE" and any(value is not None for value in core_values):
-            raise ValueError("SINGLE Evidence cannot contain core fields")
-        if self.layer_type == "DOUBLE" and not self.source_what_core:
-            raise ValueError("DOUBLE Evidence requires source_what_core")
-        return self
+
+class AtomicEvidenceDraft(BaseModel):
+    """LLM-owned summary and 5W1H meaning for one atomic Evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str = Field(min_length=1, max_length=200)
+    semantic: EvidenceSemantic
+
+    @field_validator("summary")
+    @classmethod
+    def strip_summary(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Evidence summary must not be blank")
+        return stripped
 
 
 class EvidenceExtractionDraft(BaseModel):
@@ -265,36 +222,14 @@ class RawEvidencePublication(BaseModel):
     category_ids: list[EvidenceCategoryID] = Field(min_length=1, max_length=1)
 
 
-class EvidencePublicationItem(BaseModel):
+class EvidencePublicationItem(AtomicEvidenceDraft):
     """One complete Data Service Evidence publication item."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    split_order: int = Field(ge=0)
-    layer_type: Literal["SINGLE", "DOUBLE"]
-    source_who: str | None
-    source_what: str
-    source_when: datetime | None
-    source_when_raw: str | None
-    source_where: str | None
-    source_why: str | None
-    source_how: str | None
-    source_who_core: str | None
-    source_what_core: str | None
-    source_when_core: datetime | None
-    source_when_raw_core: str | None
-    source_where_core: str | None
-    source_why_core: str | None
-    source_how_core: str | None
-    expression_fingerprint: str
-    expression_key: str = Field(pattern=r"^[0-9a-f]{64}$")
-    fingerprint_version: Literal["evidence-expression.v1"] = "evidence-expression.v1"
 
 
 class PreparedEvidencePublication(BaseModel):
     """Fully validated deterministic publication set for one Raw document."""
 
-    schema_version: Literal["prepared_evidence_publication.v3"] = "prepared_evidence_publication.v3"
+    schema_version: Literal["prepared_evidence_publication.v4"] = "prepared_evidence_publication.v4"
     prepared_raw: PreparedRawDocument
     category_catalog_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     selected_category_code: str = Field(max_length=50, pattern=r"^[A-Z][A-Z0-9_]*$")
@@ -307,22 +242,22 @@ class RawEvidencePublicationResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    raw_evidence_id: RawEvidenceID
+    id: RawEvidenceID
 
 
 class EvidenceSetPublicationResponse(BaseModel):
-    """Formal Evidence identities returned by Data Service in split order."""
+    """Formal identities returned for one unordered, complete Evidence set."""
 
     model_config = ConfigDict(extra="forbid")
 
     raw_evidence_id: RawEvidenceID
-    evidence_ids: list[EvidenceID] = Field(min_length=1)
+    ids: list[EvidenceID] = Field(min_length=1)
 
 
 class EvidencePublicationResult(BaseModel):
     """Workflow-visible terminal result for one published Raw document."""
 
-    schema_version: Literal["evidence_publication_result.v2"] = "evidence_publication_result.v2"
+    schema_version: Literal["evidence_publication_result.v3"] = "evidence_publication_result.v3"
     raw_evidence_id: RawEvidenceID
     evidence_ids: list[EvidenceID] = Field(min_length=1)
     evidence_count: int = Field(ge=1)

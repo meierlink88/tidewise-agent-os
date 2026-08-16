@@ -15,7 +15,7 @@ from capabilities.evidence.functions import (
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTION_WORKFLOW_ID = "evidence-extraction"
-EVIDENCE_EXTRACTION_CONTRACT_VERSION = 4
+EVIDENCE_EXTRACTION_CONTRACT_VERSION = 5
 
 
 def _seed_workflow(agent: Agent) -> Workflow:

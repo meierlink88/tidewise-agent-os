@@ -11,15 +11,18 @@ from capabilities.evidence import EvidenceExtractionDraft
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTOR_AGENT_ID = "evidence-extractor"
-EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 2
+EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 3
 EVIDENCE_EXTRACTOR_DESCRIPTION = "Classifies one Raw Evidence and extracts its atomic Evidences in one reading."
 _SEED_PROMPT = Path(__file__).with_name("evidence_extractor.seed.md")
-_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 2:
+_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 3:
 - Read the supplied EvidenceAnalysisRequest exactly once.
 - It contains one document and the complete allowed Category vocabulary.
 - Choose exactly one category and return its code as raw_evidence.category_code.
 - Category IDs are deliberately absent. Never invent an ID or return more than one category code.
-- In the same structured response, return Raw Evidence enrichment and all directly supported atomic Evidences.
+- In the same structured response, return Raw Evidence enrichment and the complete set of directly supported
+  atomic Evidences.
+- Each Evidence contains only a concise summary and semantic with exactly who, what, when, where, why and how.
+- semantic.what is required; use null for any other dimension not directly supported by the document.
 - Do not call Tools or publish data.
 - The deterministic Workflow validates the code, resolves the formal ID and owns all side effects.
 """
