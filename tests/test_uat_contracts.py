@@ -1,4 +1,6 @@
+import importlib.util
 from pathlib import Path
+from types import ModuleType
 from unittest import TestCase
 
 from agno.os import AgentOSBuiltinAuth
@@ -8,6 +10,16 @@ from fastmcp import FastMCP
 from scripts.smoke_uat import UAT_SMOKE_SERVICE_ACCOUNT_SCOPES
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_loopback_resolver() -> ModuleType:
+    path = REPOSITORY_ROOT / "infra/uat/resolve_loopback_https.py"
+    spec = importlib.util.spec_from_file_location("resolve_loopback_https", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class UatIngressContractTest(TestCase):
@@ -44,6 +56,8 @@ class UatIngressContractTest(TestCase):
         self.assertIn("/.well-known/oauth-authorization-server/agentos", nginx)
         self.assertIn("/.well-known/oauth-protected-resource/agentos/mcp", nginx)
         self.assertIn('--resolve "${external_hostname}:443:127.0.0.1"', preflight)
+        self.assertIn('python3 "${script_root}/resolve_loopback_https.py"', preflight)
+        self.assertIn('--resolve "$public_resolve"', preflight)
         self.assertIn('--resolve "${external_hostname}:443:127.0.0.1"', deploy)
         self.assertNotIn("--insecure", preflight)
         self.assertNotIn("--insecure", deploy)
@@ -82,3 +96,29 @@ class UatIngressContractTest(TestCase):
 
         with self.assertRaisesRegex(ValueError, "Issuer URL must be HTTPS"):
             FastMCP(name="uat-contract", auth=auth).http_app(path="/mcp")
+
+
+class UatLoopbackResolverTest(TestCase):
+    def test_preserves_public_tls_hostname_while_targeting_loopback(self) -> None:
+        resolver = load_loopback_resolver()
+
+        self.assertEqual(
+            resolver.loopback_resolve_entry("https://tideai.tripwise.cn/raw-evidence"),
+            "tideai.tripwise.cn:443:127.0.0.1",
+        )
+
+    def test_rejects_urls_that_cannot_use_the_reviewed_tls_ingress(self) -> None:
+        resolver = load_loopback_resolver()
+        invalid_urls = (
+            "http://tideai.tripwise.cn",
+            "https://tideai.tripwise.cn:8443",
+            "https://user:password@tideai.tripwise.cn",
+            "https://tideai.tripwise.cn?download=true",
+            "https://tideai.tripwise.cn#fragment",
+            "/raw-evidence",
+        )
+
+        for invalid_url in invalid_urls:
+            with self.subTest(url=invalid_url):
+                with self.assertRaises(ValueError):
+                    resolver.loopback_resolve_entry(invalid_url)

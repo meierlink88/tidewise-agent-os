@@ -3,6 +3,7 @@
 set -euo pipefail
 
 deployment_root="${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
+script_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 expected_runner="${UAT_RUNNER_NAME:?UAT_RUNNER_NAME is required}"
 swr_registry="${SWR_REGISTRY:?SWR_REGISTRY is required}"
 agentos_image="${AGENTOS_IMAGE:?AGENTOS_IMAGE is required}"
@@ -93,17 +94,29 @@ export CANARY_BODY=$'# Raw Evidence UAT preflight\n\nBrowser-readable Markdown.\
 export RAW_EVIDENCE_BUCKET="${RAW_EVIDENCE_BUCKET:-raw-evidence}"
 canary_body_file="$(mktemp)"
 canary_headers_file="$(mktemp)"
-cleanup_minio_canary() {
+delete_minio_canary() {
   docker run --rm --network tidewise-uat \
     -e MINIO_ENDPOINT -e MINIO_ACCESS_KEY -e MINIO_SECRET_KEY -e RAW_EVIDENCE_BUCKET -e CANARY_KEY \
     --entrypoint python "$agentos_image" -c '
 import os
 from urllib.parse import urlsplit
 from minio import Minio
+from minio.error import S3Error
 parsed = urlsplit(os.environ["MINIO_ENDPOINT"] if "://" in os.environ["MINIO_ENDPOINT"] else "http://" + os.environ["MINIO_ENDPOINT"])
 endpoint = parsed.hostname if parsed.port is None else f"{parsed.hostname}:{parsed.port}"
-Minio(endpoint, access_key=os.environ["MINIO_ACCESS_KEY"], secret_key=os.environ["MINIO_SECRET_KEY"], secure=parsed.scheme == "https").remove_object(os.environ["RAW_EVIDENCE_BUCKET"], os.environ["CANARY_KEY"])
-' >/dev/null 2>&1 || true
+client = Minio(endpoint, access_key=os.environ["MINIO_ACCESS_KEY"], secret_key=os.environ["MINIO_SECRET_KEY"], secure=parsed.scheme == "https")
+client.remove_object(os.environ["RAW_EVIDENCE_BUCKET"], os.environ["CANARY_KEY"])
+try:
+    client.stat_object(os.environ["RAW_EVIDENCE_BUCKET"], os.environ["CANARY_KEY"])
+except S3Error as error:
+    if error.code not in {"NoSuchKey", "NoSuchObject"}:
+        raise
+else:
+    raise SystemExit("canary still exists after authenticated delete")
+'
+}
+cleanup_minio_canary() {
+  delete_minio_canary >/dev/null 2>&1 || true
   rm -f "$canary_body_file" "$canary_headers_file"
 }
 trap cleanup_minio_canary EXIT
@@ -117,7 +130,9 @@ payload = os.environ["CANARY_BODY"].encode()
 configured_raw_document_store().publish_markdown(bucket=os.environ["RAW_EVIDENCE_BUCKET"], object_key=os.environ["CANARY_KEY"], content=payload, sha256=hashlib.sha256(payload).hexdigest())
 '
 public_base="${RAW_EVIDENCE_PUBLIC_BASE_URL:?RAW_EVIDENCE_PUBLIC_BASE_URL is required}"
+public_resolve="$(python3 "${script_root}/resolve_loopback_https.py" "$public_base")"
 curl --silent --show-error --fail --connect-timeout 5 --max-time 15 \
+  --resolve "$public_resolve" \
   --dump-header "$canary_headers_file" --output "$canary_body_file" \
   "${public_base%/}/${RAW_EVIDENCE_BUCKET}/${CANARY_KEY}"
 printf '%s' "$CANARY_BODY" | cmp -s - "$canary_body_file" \
@@ -126,7 +141,8 @@ grep -Eiq '^content-type:[[:space:]]*text/markdown([;[:space:]]|$)' "$canary_hea
   || fail minio-public-read "browser response is not Markdown"
 grep -Eiq '^content-disposition:[[:space:]]*inline' "$canary_headers_file" \
   || fail minio-public-read "browser response is not inline"
-cleanup_minio_canary
+delete_minio_canary
+rm -f "$canary_body_file" "$canary_headers_file"
 trap - EXIT
 pass minio-authenticated-write-and-public-read
 
