@@ -2,17 +2,22 @@
 
 import json
 import os
+import re
+from copy import deepcopy
 from datetime import datetime
-from typing import Any, Protocol, Self
+from enum import StrEnum
+from time import monotonic
+from typing import Annotated, Any, Protocol, Self
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
     HttpUrl,
+    Strict,
     StrictBool,
     StrictInt,
     StrictStr,
@@ -32,6 +37,54 @@ _SNAPSHOT_PATH = "/api/data/v1/source-snapshot"
 _MAX_RESPONSE_BYTES = 500_000
 _MAX_SOURCES = 200
 _CLIENT_TIMEOUT_SECONDS = 3.5
+_READ_CHUNK_BYTES = 64 * 1024
+_DATA_REQUEST_ID_PATTERN = re.compile(r"^data-[0-9]{8}T[0-9]{6}\.[0-9]{9}$")
+_SOURCE_ERROR_CODES = {
+    "FORBIDDEN",
+    "INTERNAL_ERROR",
+    "INVALID_REQUEST",
+    "SOURCE_FAILED",
+    "SOURCE_SNAPSHOT_FAILED",
+    "SOURCE_TIMEOUT",
+    "UNAUTHENTICATED",
+}
+
+
+class SourceSnapshotErrorKind(StrEnum):
+    CONFIGURATION = "configuration"
+    HTTP = "http"
+    INVALID = "invalid"
+    TOO_LARGE = "too_large"
+    UNAVAILABLE = "unavailable"
+
+
+class SourceSnapshotError(ValueError):
+    """Sanitized failure classification for deterministic Workflow handling."""
+
+    def __init__(self, kind: SourceSnapshotErrorKind, message: str) -> None:
+        super().__init__(message)
+        self.kind = kind
+
+
+class _RejectRedirects(HTTPRedirectHandler):
+    def redirect_request(
+        self,
+        req: Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> None:
+        del req, fp, code, msg, headers, newurl
+        return None
+
+
+_NO_REDIRECT_OPENER = build_opener(_RejectRedirects())
+
+
+def _open_request(request: Request, *, timeout: float) -> Any:
+    return _NO_REDIRECT_OPENER.open(request, timeout=timeout)
 
 
 class SourceSnapshotProvider(Protocol):
@@ -53,26 +106,22 @@ class _SourceRecord(BaseModel):
     channel_type: ChannelType
     adapter_key: AdapterKey
     enabled: StrictBool
-    endpoint: HttpUrl
+    endpoint: HttpUrl = Field(max_length=2048)
     app_key: StrictStr | None = Field(max_length=512)
     config: dict[StrictStr, Any]
     priority: StrictInt = Field(ge=1, le=5)
     timeout_seconds: StrictInt = Field(ge=1, le=300)
     max_results: StrictInt = Field(ge=1, le=100)
     default_source_level: SourceLevel
-    created_at: datetime
-    updated_at: datetime
+    created_at: Annotated[datetime, Strict()]
+    updated_at: Annotated[datetime, Strict()]
 
     @model_validator(mode="after")
     def validate_source_contract(self) -> "_SourceRecord":
-        if self.app_key is not None and not self.app_key.strip():
-            raise ValueError("app_key must be nonblank when present")
         if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
             raise ValueError("created_at must include a timezone")
         if self.updated_at.tzinfo is None or self.updated_at.utcoffset() is None:
             raise ValueError("updated_at must include a timezone")
-        if self.updated_at < self.created_at:
-            raise ValueError("updated_at must not precede created_at")
         self._validate_config()
         return self
 
@@ -88,14 +137,12 @@ class _SourceRecord(BaseModel):
             ):
                 raise ValueError("config.source_levels contains an invalid entry")
         maximum = self.config.get("max_bytes")
-        if maximum is not None and (
-            not isinstance(maximum, int) or isinstance(maximum, bool) or not 65_536 <= maximum <= 10_485_760
+        if (
+            self.channel_type == ChannelType.RSS
+            and maximum is not None
+            and (not isinstance(maximum, int) or isinstance(maximum, bool) or not 65_536 <= maximum <= 10_485_760)
         ):
             raise ValueError("config.max_bytes is outside the allowed range")
-
-    def as_channel(self) -> CollectionChannel:
-        values = self.model_dump(exclude={"id"})
-        return CollectionChannel.model_validate(values)
 
 
 class _SnapshotResult(BaseModel):
@@ -107,8 +154,44 @@ class _SnapshotResult(BaseModel):
 class _SnapshotEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    request_id: StrictStr = Field(min_length=1)
+    request_id: StrictStr = Field(min_length=1, max_length=128)
     result: _SnapshotResult
+
+
+class _ErrorDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    code: StrictStr = Field(min_length=1, max_length=100)
+    message: StrictStr = Field(min_length=1, max_length=500)
+    details: dict[StrictStr, Any]
+
+
+class _ErrorEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    error: _ErrorDetail
+    request_id: StrictStr = Field(min_length=1, max_length=128)
+
+
+def _map_source_to_execution_channel(source: _SourceRecord) -> CollectionChannel:
+    """Map the wire contract explicitly while leaving Data Source ID out of execution identity."""
+    return CollectionChannel(
+        code=source.code,
+        name=source.name,
+        ownership_type=source.ownership_type,
+        channel_type=source.channel_type,
+        adapter_key=source.adapter_key,
+        enabled=source.enabled,
+        endpoint=source.endpoint,
+        app_key=source.app_key,
+        config=deepcopy(source.config),
+        priority=source.priority,
+        timeout_seconds=source.timeout_seconds,
+        max_results=source.max_results,
+        default_source_level=source.default_source_level,
+        created_at=source.created_at,
+        updated_at=source.updated_at,
+    )
 
 
 class DataServiceSourceSnapshotProvider:
@@ -117,10 +200,25 @@ class DataServiceSourceSnapshotProvider:
     def __init__(self, *, base_url: str, token: str, timeout_seconds: float = _CLIENT_TIMEOUT_SECONDS) -> None:
         normalized_url = base_url.strip().rstrip("/")
         parsed = urlsplit(normalized_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
-            raise ValueError("DATA_SERVICE_BASE_URL is invalid")
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise SourceSnapshotError(SourceSnapshotErrorKind.CONFIGURATION, "DATA_SERVICE_BASE_URL is invalid")
         if not token.strip():
-            raise ValueError("DATA_SERVICE_TOKEN is not configured")
+            raise SourceSnapshotError(
+                SourceSnapshotErrorKind.CONFIGURATION,
+                "DATA_SERVICE_TOKEN is not configured",
+            )
+        if timeout_seconds <= 0:
+            raise SourceSnapshotError(
+                SourceSnapshotErrorKind.CONFIGURATION,
+                "Source Snapshot timeout must be positive",
+            )
         self._base_url = normalized_url
         self._token = token.strip()
         self._timeout_seconds = timeout_seconds
@@ -138,23 +236,63 @@ class DataServiceSourceSnapshotProvider:
             headers={"Authorization": f"Bearer {self._token}"},
             method="GET",
         )
+        deadline = monotonic() + self._timeout_seconds
         try:
-            with urlopen(request, timeout=self._timeout_seconds) as response:
+            with _open_request(request, timeout=self._timeout_seconds) as response:
                 if response.status != 200:
-                    raise ValueError(f"Data Service Source Snapshot returned unexpected HTTP {response.status}")
-                payload = response.read(_MAX_RESPONSE_BYTES + 1)
+                    raise SourceSnapshotError(
+                        SourceSnapshotErrorKind.HTTP,
+                        f"Data Service Source Snapshot returned unexpected HTTP {response.status}",
+                    )
+                payload = self._read_response(response, deadline)
         except HTTPError as exc:
-            raise ValueError(self._http_error_message(exc)) from None
+            raise SourceSnapshotError(SourceSnapshotErrorKind.HTTP, self._http_error_message(exc)) from None
         except (TimeoutError, URLError):
-            raise ValueError("Data Service Source Snapshot is unavailable within the request budget") from None
+            raise SourceSnapshotError(
+                SourceSnapshotErrorKind.UNAVAILABLE,
+                "Data Service Source Snapshot is unavailable within the request budget",
+            ) from None
         if len(payload) > _MAX_RESPONSE_BYTES:
-            raise ValueError("Data Service Source Snapshot exceeds the 500000-byte contract limit")
+            raise SourceSnapshotError(
+                SourceSnapshotErrorKind.TOO_LARGE,
+                "Data Service Source Snapshot exceeds the 500000-byte contract limit",
+            )
         try:
             envelope = _SnapshotEnvelope.model_validate_json(payload)
             self._validate_complete_snapshot(envelope.result.sources)
-            return tuple(source.as_channel().model_copy(deep=True) for source in envelope.result.sources)
+            return tuple(_map_source_to_execution_channel(source) for source in envelope.result.sources)
         except (ValidationError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
-            raise ValueError("Data Service Source Snapshot violates the complete snapshot contract") from None
+            raise SourceSnapshotError(
+                SourceSnapshotErrorKind.INVALID,
+                "Data Service Source Snapshot violates the complete snapshot contract",
+            ) from None
+
+    @staticmethod
+    def _read_response(response: Any, deadline: float) -> bytes:
+        chunks: list[bytes] = []
+        total = 0
+        reader = getattr(response, "read1", response.read)
+        while True:
+            if chunks and response.isclosed():
+                return b"".join(chunks)
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                raise TimeoutError
+            DataServiceSourceSnapshotProvider._set_socket_timeout(response, remaining)
+            chunk = reader(min(_READ_CHUNK_BYTES, _MAX_RESPONSE_BYTES + 1 - total))
+            if not chunk:
+                return b"".join(chunks)
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > _MAX_RESPONSE_BYTES:
+                return b"".join(chunks)
+
+    @staticmethod
+    def _set_socket_timeout(response: Any, timeout_seconds: float) -> None:
+        try:
+            response.fp.raw._sock.settimeout(timeout_seconds)
+        except AttributeError as exc:
+            raise TimeoutError from exc
 
     @staticmethod
     def _validate_complete_snapshot(sources: tuple[_SourceRecord, ...]) -> None:
@@ -181,16 +319,12 @@ class DataServiceSourceSnapshotProvider:
         code = "UNKNOWN"
         request_id = "unknown"
         try:
-            payload = json.loads(exc.read(65_537))
-            if isinstance(payload, dict):
-                raw_request_id = payload.get("request_id")
-                error = payload.get("error")
-                raw_code = error.get("code") if isinstance(error, dict) else None
-                if isinstance(raw_request_id, str) and raw_request_id.strip():
-                    request_id = raw_request_id.strip()
-                if isinstance(raw_code, str) and raw_code.strip():
-                    code = raw_code.strip()
-        except (json.JSONDecodeError, UnicodeDecodeError):
+            envelope = _ErrorEnvelope.model_validate_json(exc.read(65_537))
+            if envelope.error.code in _SOURCE_ERROR_CODES:
+                code = envelope.error.code
+            if _DATA_REQUEST_ID_PATTERN.fullmatch(envelope.request_id):
+                request_id = envelope.request_id
+        except (ValidationError, UnicodeDecodeError):
             pass
         return f"Data Service Source Snapshot failed with HTTP {exc.code}: {code} (request_id={request_id})"
 

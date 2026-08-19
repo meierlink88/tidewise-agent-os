@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 import unittest
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,15 +26,29 @@ _PROVIDER_FIXTURE = Path(__file__).parent / "fixtures" / "source-snapshot.v1.jso
 class _SnapshotHandler(BaseHTTPRequestHandler):
     body: ClassVar[bytes] = b"{}"
     status: ClassVar[int] = 200
+    redirect_to: ClassVar[str | None] = None
+    chunk_delay_seconds: ClassVar[float] = 0
     requests: ClassVar[list[tuple[str, str | None]]] = []
 
     def do_GET(self) -> None:
         type(self).requests.append((self.path, self.headers.get("Authorization")))
         self.send_response(type(self).status)
+        redirect_to = type(self).redirect_to
+        if redirect_to is not None:
+            self.send_header("Location", redirect_to)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(type(self).body)))
         self.end_headers()
-        self.wfile.write(type(self).body)
+        try:
+            if type(self).chunk_delay_seconds:
+                for byte in type(self).body:
+                    self.wfile.write(bytes([byte]))
+                    self.wfile.flush()
+                    time.sleep(type(self).chunk_delay_seconds)
+            else:
+                self.wfile.write(type(self).body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def log_message(self, format: str, *args: object) -> None:
         del format, args
@@ -46,6 +61,8 @@ class SourceSnapshotConsumerContractTest(unittest.TestCase):
     def setUp(self) -> None:
         _SnapshotHandler.body = _PROVIDER_FIXTURE.read_bytes()
         _SnapshotHandler.status = 200
+        _SnapshotHandler.redirect_to = None
+        _SnapshotHandler.chunk_delay_seconds = 0
         _SnapshotHandler.requests = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), _SnapshotHandler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -77,6 +94,19 @@ class SourceSnapshotConsumerContractTest(unittest.TestCase):
         channels = self._provider().load_active_snapshot()
 
         self.assertEqual(channels, ())
+
+    def test_wire_validation_accepts_values_allowed_by_openapi_without_adding_domain_rules(self) -> None:
+        fixture = json.loads(_PROVIDER_FIXTURE.read_text())
+        sources = self._sources(fixture)
+        sources[0]["app_key"] = ""
+        sources[0]["config"] = {"max_bytes": 1}
+        sources[0]["updated_at"] = "2026-08-18T00:00:00Z"
+        _SnapshotHandler.body = json.dumps({"request_id": "openapi-valid", "result": {"sources": sources}}).encode()
+
+        channels = self._provider().load_active_snapshot()
+
+        self.assertEqual(channels[0].app_key, "")
+        self.assertEqual(channels[0].config, {"max_bytes": 1})
 
     def test_contract_integrity_failures_reject_the_whole_snapshot_without_leaking_credentials(self) -> None:
         fixture = json.loads(_PROVIDER_FIXTURE.read_text())
@@ -125,6 +155,10 @@ class SourceSnapshotConsumerContractTest(unittest.TestCase):
         wrong_type[0]["priority"] = "1"
         cases["wrong JSON type"] = wrong_type
 
+        numeric_timestamp = self._sources(fixture)
+        numeric_timestamp[0]["created_at"] = 0
+        cases["numeric timestamp"] = numeric_timestamp
+
         invalid_config = self._sources(fixture)
         invalid_config[0]["config"] = {
             "source_levels": {"example.com": "INVALID"},
@@ -151,6 +185,10 @@ class SourceSnapshotConsumerContractTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "violates the complete snapshot contract") as caught:
             self._provider().load_active_snapshot()
         self.assertNotIn("must-not-escape", str(caught.exception))
+
+        _SnapshotHandler.body = json.dumps({"request_id": "x" * 129, "result": {"sources": []}}).encode()
+        with self.assertRaisesRegex(ValueError, "violates the complete snapshot contract"):
+            self._provider().load_active_snapshot()
 
     def test_snapshot_source_count_is_bounded(self) -> None:
         source = self._sources(json.loads(_PROVIDER_FIXTURE.read_text()))[0]
@@ -179,28 +217,79 @@ class SourceSnapshotConsumerContractTest(unittest.TestCase):
         _SnapshotHandler.status = 503
         _SnapshotHandler.body = json.dumps(
             {
-                "request_id": "data-request-42",
+                "request_id": "data-20260819T142600.123456789",
                 "error": {
                     "code": "SOURCE_TIMEOUT",
                     "message": "provider credential must-not-escape",
+                    "details": {},
                 },
             }
         ).encode()
 
         with self.assertRaisesRegex(
             ValueError,
-            r"HTTP 503: SOURCE_TIMEOUT \(request_id=data-request-42\)",
+            r"HTTP 503: SOURCE_TIMEOUT \(request_id=data-20260819T142600.123456789\)",
         ) as caught:
             self._provider().load_active_snapshot()
         self.assertNotIn("must-not-escape", str(caught.exception))
 
+        _SnapshotHandler.body = json.dumps(
+            {
+                "request_id": "provider-credential-must-not-escape",
+                "error": {
+                    "code": "CREDENTIAL_MUST_NOT_ESCAPE",
+                    "message": "provider credential must-not-escape",
+                    "details": {},
+                },
+            }
+        ).encode()
+        with self.assertRaises(ValueError) as caught:
+            self._provider().load_active_snapshot()
+        self.assertNotIn("MUST_NOT_ESCAPE", str(caught.exception))
+        self.assertNotIn("credential-must-not-escape", str(caught.exception))
+
         with patch(
-            "capabilities.collection.internal.source_snapshot.urlopen",
+            "capabilities.collection.internal.source_snapshot._open_request",
             side_effect=URLError("provider credential must-not-escape"),
         ):
             with self.assertRaisesRegex(ValueError, "unavailable within the request budget") as caught:
                 self._provider().load_active_snapshot()
         self.assertNotIn("must-not-escape", str(caught.exception))
+
+    def test_cross_origin_redirect_is_rejected_without_forwarding_the_token(self) -> None:
+        class RedirectTargetHandler(_SnapshotHandler):
+            requests: ClassVar[list[tuple[str, str | None]]] = []
+            status = 200
+            redirect_to = None
+            chunk_delay_seconds = 0
+            body = _PROVIDER_FIXTURE.read_bytes()
+
+        target = ThreadingHTTPServer(("127.0.0.1", 0), RedirectTargetHandler)
+        target_thread = threading.Thread(target=target.serve_forever, daemon=True)
+        target_thread.start()
+        _SnapshotHandler.status = 302
+        _SnapshotHandler.redirect_to = f"http://127.0.0.1:{target.server_port}/stolen"
+        try:
+            with self.assertRaisesRegex(ValueError, "HTTP 302"):
+                self._provider().load_active_snapshot()
+            self.assertEqual(RedirectTargetHandler.requests, [])
+        finally:
+            target.shutdown()
+            target.server_close()
+            target_thread.join(timeout=2)
+
+    def test_slow_drip_response_cannot_exceed_the_end_to_end_budget(self) -> None:
+        _SnapshotHandler.chunk_delay_seconds = 0.02
+        started = time.monotonic()
+
+        with self.assertRaisesRegex(ValueError, "request budget"):
+            DataServiceSourceSnapshotProvider(
+                base_url=f"http://127.0.0.1:{self.server.server_port}",
+                token="service-token",
+                timeout_seconds=0.05,
+            ).load_active_snapshot()
+
+        self.assertLess(time.monotonic() - started, 0.3)
 
     def _provider(self) -> DataServiceSourceSnapshotProvider:
         return DataServiceSourceSnapshotProvider(
