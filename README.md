@@ -28,7 +28,7 @@ tidewise-infra
 
 ```bash
 cp example.env .env
-# 填写 DEEPSEEK_API_KEY、DB_PASS 和 MinIO 凭据；首次初始化还需创建 agent_os 数据库/角色。
+# 填写 DEEPSEEK_API_KEY、DB_PASS、DATA_SERVICE_TOKEN 和 MinIO 凭据；首次初始化还需创建 agent_os 数据库/角色。
 
 docker compose up -d --build agentos
 curl -sSf http://localhost:8000/health
@@ -56,7 +56,7 @@ Control Plane 的 Studio 中编辑并发布 Instructions；`raw-collection` 每�
 加载当前发布版，无需重启容器。Agent 只把提示词的语义目标规划为 `query`
 与 `lookback_hours`；Workflow 冻结本次通道快照，并使用同一截止时间确定性并行执行三类采集能力。
 
-`raw-collection` 首次启动时也会创建一个 Studio 发布版本。四步 Workflow 编排可在 Studio
+`raw-collection` 首次启动时也会创建一个 Studio 发布版本。Workflow 编排可在 Studio
 中创建新版本并发布；步骤使用的 Agent 工具和自定义 Function 实现在 Git 中维护。共享采集
 采集实现集中在 `capabilities/collection/`，Evidence 实现集中在 `capabilities/evidence/`；每个领域只以 `tools/`、`functions/`、`internal/` 组织，不属于某个 Agent 或 Workflow 私有。
 采集 Workflow Executor 使用 Agno 异步运行接口，所有外部通道使用异步 HTTP；Tool Batch、
@@ -81,16 +81,16 @@ Agent 或 Workflow。
 的 `raw_text` 保存 `/{bucket}/{object_key}`，例如 `/raw-evidence/documents/2026/08/15/<sha256>.md`，不保存环境
 Base URL。浏览器使用 MinIO 对外 Base URL 与该路径直接拼接。
 
-采集 Agent 不负责调用通道，只输出严格查询计划。Workflow 的确定性 Function 每次各执行一次
-`web_fetch`、`api_fetch`、`rss_fetch` 共享实现。三个 Tool 门面仍在 Registry 中可见，用于独立验证。通道实例保存在 AgentOS
-PostgreSQL 的 `collection_channels` 表：Web Search 最多启用一个，API 与 RSS 会有界并发执行全部
-启用通道。固定通道不可删除但可以禁用；动态 RSS/Atom 通道使用 `generic_rss` Adapter，可直接
-新增和删除。`priority=1` 表示最高优先级。
+采集 Agent 不负责调用通道，只输出严格查询计划。Workflow 在 Planner 前使用 `DATA_SERVICE_TOKEN`
+从 Data Service 读取一次完整 active Source Snapshot，并为本次运行冻结。确定性 Function 每次各执行一次
+`web_fetch`、`api_fetch`、`rss_fetch` 共享实现。三个 Tool 门面仍在 Registry 中可见，用于独立验证。
+Web Search 最多启用一个，API 与 RSS 会有界并发执行全部启用 Source；动态 RSS/Atom Source 使用
+`generic_rss` Adapter。`priority=1` 表示最高优先级。
 
-首次启动会从 `.env` 幂等插入 7 个固定通道，并把搜索 Key 和 Base URL 写入缺失的新行；已存在
-行绝不会被启动过程覆盖。此后直接修改表内的 `enabled`、`endpoint`、`app_key`、`config`、
-`priority`、`timeout_seconds`、`max_results` 或 `default_source_level`，下一次 Workflow 运行即生效，
-无需重启容器。当前阶段 `app_key` 按明确决策明文存储；Tool 不会把它返回给模型或 Artifact。
+Source 的创建、启停、Endpoint、Provider Key、配置与持久化由 Data Service 独占管理；AgentOS 不再创建、
+Seed、CRUD 或读取本地 `collection_channels`。Snapshot 获取或完整性校验失败时，Workflow 在准备阶段
+fail closed，不使用部分数据、缓存或旧表兜底。当前服务信任边界内 `app_key` 由 Data Snapshot 明文提供，
+但不会返回给模型、日志或 Artifact。
 
 Tavily 固定请求 `include_raw_content: "text"`，避免使用供应商的 HTML→Markdown 转换；AgentOS 把各通道
 已归一的文本统一包装为带 YAML frontmatter 的 Markdown Artifact。

@@ -50,9 +50,6 @@ services:
       RAW_EVIDENCE_BUCKET: ${RAW_EVIDENCE_BUCKET:-raw-evidence}
       COLLECTOR_ARTIFACT_ROOT: /app/data/collector
       EVIDENCE_ARTIFACT_ROOT: /app/data/evidence
-      PARALLEL_API_KEY: ${PARALLEL_API_KEY:-}
-      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
-      BOCHA_API_KEY: ${BOCHA_API_KEY:-}
       JWT_VERIFICATION_KEY: ${JWT_VERIFICATION_KEY:?JWT_VERIFICATION_KEY is required}
       JWT_JWKS_FILE: /run/secrets/agentos-jwks.json
       MCP_CONNECT_SECRET: ${MCP_CONNECT_SECRET:-}

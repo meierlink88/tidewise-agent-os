@@ -7,6 +7,7 @@ Workflow Functions build and publish immutable Artifacts:
 
 ```text
 CollectionRequest
+  -> prepare-collection-context      -> one complete frozen Data Source Snapshot
   -> plan-collection-query           -> CollectionQueryPlan only
   -> execute-collection-channels
        -> web_fetch implementation   -> one enabled Web Search channel
@@ -27,9 +28,11 @@ Title Curator is a conservative binary pre-filter. Clearly relevant titles recei
 irrelevant titles receive `false`; title-only ambiguity is retained as `true` so potentially important source material
 is not discarded before full-text Evidence Extraction. The Agent does not generate open-ended reason codes.
 
-## Channel catalog
+## Source Snapshot
 
-`collection_channels` lives in the existing AgentOS PostgreSQL database. Every row contains:
+Data Service is the only Source management and persistence authority. Before every Raw Collection run, AgentOS calls
+the versioned `GET /api/data/v1/source-snapshot` contract exactly once with its service token. The complete active
+Snapshot contains:
 
 - immutable `code` for channel identity;
 - editable `name` for operators;
@@ -41,17 +44,15 @@ is not discarded before full-text Evidence Extraction. The Agent does not genera
 - `default_source_level`: `L1_OFFICIAL`, `L2_WIRE`, `L3_MEDIA`, or `L4_SOCIAL`;
 - creation and update timestamps.
 
-Priority 1 is highest. A database constraint allows at most one enabled Web Search row. Fixed rows cannot be deleted,
-but they may be disabled or reconfigured. Dynamic rows may be added and deleted. Standard RSS and Atom rows all use
-the `generic_rss` Adapter.
-
-Startup creates the table and inserts only missing fixed rows. Search Key and endpoint environment variables provide
-first-seed values; startup never overwrites an existing row. Database edits therefore affect the next Workflow run
-without a restart.
+Priority 1 is highest. The consumer requires an active-only, unique and stably ordered complete Snapshot with at most
+one Web Search Source. Empty Snapshot is valid. AgentOS maps it onto the existing immutable Collection Channel execution
+model and freezes it before planning. Fetch, authorization, timeout, size or integrity failure aborts preparation;
+AgentOS never truncates, drops an item, uses a partial response, caches a previous response or falls back to its legacy
+table. The legacy table is retained only for rollback to an older image and is not read or mutated by current code.
 
 ## Adapter seam
 
-The database owns channel instances and operational settings. Python owns incompatible provider protocols. An Adapter
+Data Service owns Source instances and operational settings. Python owns incompatible provider protocols. An Adapter
 accepts one validated channel plus one common fetch request and returns normalized `Candidate` values.
 
 Initial Adapter keys are:
@@ -65,8 +66,8 @@ Bocha, Parallel, the structured APIs and RSS/Atom have no equivalent Markdown-fo
 protocols and already normalize provider text, snippets or feed content before Artifact construction. AgentOS is the
 single owner of the persisted Markdown wrapper and YAML frontmatter.
 
-Adding another instance of a supported protocol is a database operation. Adding an incompatible protocol still needs a
-reviewed Adapter. Web Search candidates resolve source trust from the actual result host when `config.source_levels`
+Adding another instance of a supported protocol is a Data Service Source operation. Adding an incompatible protocol still
+needs a reviewed Adapter. Web Search candidates resolve source trust from the actual result host when `config.source_levels`
 contains a matching domain; otherwise they inherit the channel default.
 
 ## Time contract
@@ -88,7 +89,7 @@ their protocol supports it; deterministic Artifact construction always enforces 
 - Collector business instructions remain a published Agno Studio component in PostgreSQL.
 - Title Curator's binary output schema and conservative retention rules are contract-bound. A contract migration
   republishes the reviewed seed prompt so its Instructions and Pydantic schema cannot drift across the same version.
-- Code owns the query-plan schema, runtime contract, model wiring, adapters, catalog and Artifact invariants.
+- Code owns the query-plan schema, runtime contract, model wiring, adapters, Source Snapshot consumer and Artifact invariants.
 - A runtime contract migration may publish a new component version while preserving operator-managed Instructions
   byte-for-byte. Obsolete provider-specific Tool instructions are superseded through code-owned additional context.
 - Raw Collection Workflow graph versions remain Studio-managed; Python Function executors remain Git-managed.
@@ -100,7 +101,7 @@ their protocol supports it; deterministic Artifact construction always enforces 
 
 - The Agno Workflow Run ID is the only collection identity.
 - Every acquisition façade in one run uses the same frozen channel snapshot, cutoff and requested lookback.
-- `web_fetch` fails closed if the catalog exposes more than one enabled Web Search row.
+- `web_fetch` fails closed if the frozen Snapshot exposes more than one enabled Web Search Source.
 - `api_fetch` and `rss_fetch` execute enabled channels in stable priority/code order with bounded concurrency.
 - One provider failure does not discard successful sibling results; raw provider errors and keys never enter receipts or
   Artifacts.
@@ -123,6 +124,7 @@ their protocol supports it; deterministic Artifact construction always enforces 
 ## Failure semantics
 
 - Missing provenance, cutoff, invalid query, or invalid lookback produces a stable safe Tool error and no write.
+- Source Snapshot fetch, authorization, timeout, size or integrity failure aborts the Workflow before planning.
 - Missing Adapter, provider timeout, invalid response, or request failure is isolated to that channel.
 - A façade with no enabled channels returns `no_channels`; sibling façades still execute.
 - If no Tool Batch exists after deterministic acquisition, Artifact construction fails rather than publishing false success.
@@ -135,7 +137,7 @@ their protocol supports it; deterministic Artifact construction always enforces 
 
 Acceptance is observed at the three Tool interfaces and the complete Workflow:
 
-- catalog state selects the expected channels;
+- the complete Data Source Snapshot selects the expected channels once per run;
 - Adapter payloads normalize to Candidate contracts;
 - concurrent fan-out isolates partial failure;
 - all Tool Batches share one exact interval;

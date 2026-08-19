@@ -44,7 +44,7 @@ _ADAPTER_CHANNEL_TYPES = {
 
 
 class CollectionChannel(BaseModel):
-    """One executable channel instance loaded from PostgreSQL."""
+    """One executable channel instance frozen from a Data Service Source Snapshot."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -57,7 +57,7 @@ class CollectionChannel(BaseModel):
     endpoint: HttpUrl
     app_key: str | None = None
     config: dict[str, Any]
-    priority: int = Field(default=1, ge=1)
+    priority: int = Field(default=1, ge=1, le=5)
     timeout_seconds: int = Field(default=30, ge=1, le=300)
     max_results: int = Field(default=10, ge=1, le=100)
     default_source_level: SourceLevel

@@ -16,7 +16,6 @@ from agents.tidewise_assistant import tidewise_assistant
 from agents.title_curator import ensure_title_curator_agent
 from app.registry import registry
 from app.schedules import validate_schedules
-from capabilities.collection import ensure_channel_catalog
 from db import get_postgres_db
 from workflows.deployment_check import deployment_check
 from workflows.evidence_extraction import ensure_evidence_extraction_workflow
@@ -81,7 +80,6 @@ if MCP_CONNECT_SECRET:
 @asynccontextmanager
 async def lifespan(app):  # type: ignore[no-untyped-def]
     log_info("AgentOS lifespan: startup")
-    ensure_channel_catalog()
     ensure_collector_agent(registry)
     ensure_title_curator_agent(registry)
     ensure_evidence_extractor_agent(registry)
