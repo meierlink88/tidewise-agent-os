@@ -80,7 +80,14 @@ pass https-ingress
 docker run --rm --network tidewise-uat --entrypoint curl "$agentos_image" \
   -fsS --connect-timeout 5 --max-time 15 http://data:9011/readyz >/dev/null \
   || fail data-service "http://data:9011/readyz is unavailable"
-pass internal-data-service
+: "${DATA_SERVICE_TOKEN:?DATA_SERVICE_TOKEN is required}"
+docker run --rm --network tidewise-uat \
+  -e DATA_SERVICE_BASE_URL=http://data:9011 -e DATA_SERVICE_TOKEN \
+  --entrypoint python "$agentos_image" -c '
+from capabilities.collection import load_active_source_snapshot
+load_active_source_snapshot()
+' >/dev/null || fail source-snapshot "authenticated complete Source Snapshot is unavailable or invalid"
+pass internal-data-service-and-source-snapshot
 
 minio_health_url="${MINIO_ENDPOINT:?MINIO_ENDPOINT is required}"
 minio_health_url="${minio_health_url%/}/minio/health/live"

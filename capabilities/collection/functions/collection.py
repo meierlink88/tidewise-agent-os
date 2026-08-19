@@ -14,7 +14,6 @@ from capabilities.collection.internal.acquisition import execute_fetch
 from capabilities.collection.internal.artifacts import build_artifact_set, publish_artifact_set
 from capabilities.collection.internal.buffer import read_tool_batches, write_title_curation
 from capabilities.collection.internal.channels.models import ChannelType
-from capabilities.collection.internal.channels.repository import get_channel_repository
 from capabilities.collection.internal.models import (
     CollectionQueryPlan,
     CollectionRequest,
@@ -24,6 +23,7 @@ from capabilities.collection.internal.models import (
     TitleCurationItem,
     TitleCurationRequest,
 )
+from capabilities.collection.internal.source_snapshot import load_active_source_snapshot
 
 
 def request_from_input(value: Any) -> CollectionRequest:
@@ -47,8 +47,7 @@ def request_from_input(value: Any) -> CollectionRequest:
 async def prepare_collection_context(step_input: StepInput, run_context: RunContext) -> StepOutput:
     """Validate input and freeze one channel/cutoff snapshot before Agent planning."""
     request = request_from_input(step_input.input)
-    repository = get_channel_repository()
-    channels = await asyncio.to_thread(repository.list_enabled_snapshot)
+    channels = await asyncio.to_thread(load_active_source_snapshot)
     dependencies = dict(run_context.dependencies or {})
     dependencies.update(
         {

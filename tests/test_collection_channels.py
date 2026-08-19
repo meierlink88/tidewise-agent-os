@@ -5,16 +5,12 @@ import json
 import os
 import tempfile
 import unittest
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, ClassVar, cast
+from typing import cast
 from unittest.mock import AsyncMock, patch
 
 from agno.run import RunContext
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
-from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from capabilities.collection.internal.adapters.base import FetchRequest
 from capabilities.collection.internal.adapters.registry import ADAPTERS
@@ -25,7 +21,6 @@ from capabilities.collection.internal.channels.models import (
     CollectionChannel,
     OwnershipType,
 )
-from capabilities.collection.internal.channels.repository import ChannelRepository
 from capabilities.collection.internal.models import Candidate, FetchReceipt, SourceLevel
 from capabilities.collection.tools import api_fetch, rss_fetch, web_fetch
 
@@ -99,10 +94,6 @@ def _channel(
         created_at=datetime(2026, 8, 12, tzinfo=UTC),
         updated_at=datetime(2026, 8, 12, tzinfo=UTC),
     )
-
-
-def _constraint_name(error: IntegrityError) -> str | None:
-    return cast(Any, error.orig).diag.constraint_name
 
 
 class CollectionChannelToolTest(unittest.IsolatedAsyncioTestCase):
@@ -240,208 +231,6 @@ class CollectionChannelToolTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(receipt.outcome, "succeeded")
         self.assertEqual([item.channel_code for item in receipt.channels], ["people-rss", "xinhua-rss"])
         self.assertEqual(adapter.calls, 2)
-
-
-class CollectionChannelRepositoryTest(unittest.TestCase):
-    def setUp(self) -> None:
-        self.repository = ChannelRepository(create_engine("sqlite+pysqlite:///:memory:"))
-        self.repository.ensure_catalog()
-
-    def test_fixed_channels_are_seeded_once_without_overwriting_operator_state(self) -> None:
-        channels = self.repository.list_all()
-        self.assertEqual(len(channels), 7)
-        self.assertEqual(
-            [item.code for item in channels if item.channel_type == ChannelType.WEB_SEARCH and item.enabled],
-            ["bocha"],
-        )
-
-        self.repository.update_channel("bocha", enabled=False, app_key="operator-key")
-        self.repository.ensure_catalog()
-
-        bocha = next(item for item in self.repository.list_all() if item.code == "bocha")
-        self.assertFalse(bocha.enabled)
-        self.assertEqual(bocha.app_key, "operator-key")
-
-    def test_fixed_channel_cannot_be_deleted_but_dynamic_rss_can(self) -> None:
-        with self.assertRaisesRegex(ValueError, "fixed channel cannot be deleted"):
-            self.repository.delete_channel("bocha")
-
-        dynamic = _channel(
-            "people-rss",
-            ChannelType.RSS,
-            "generic_rss",
-            ownership_type=OwnershipType.DYNAMIC,
-        )
-        self.repository.create_dynamic(dynamic)
-        self.assertEqual([item.code for item in self.repository.list_enabled(ChannelType.RSS)], ["people-rss"])
-
-        self.repository.delete_channel("people-rss")
-        self.assertEqual(self.repository.list_enabled(ChannelType.RSS), [])
-
-    def test_only_one_web_search_channel_can_be_enabled(self) -> None:
-        with self.assertRaisesRegex(ValueError, "only one web_search channel may be enabled"):
-            self.repository.update_channel("tavily", enabled=True)
-
-
-@unittest.skipUnless(os.getenv("TEST_POSTGRES_URL"), "TEST_POSTGRES_URL is required for PostgreSQL integration")
-class CollectionChannelPostgresIntegrationTest(unittest.TestCase):
-    engine: ClassVar[Engine]
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.engine = create_engine(os.environ["TEST_POSTGRES_URL"], pool_pre_ping=True)
-        with cls.engine.begin() as connection:
-            connection.exec_driver_sql("DROP TABLE IF EXISTS collection_channels CASCADE")
-            connection.exec_driver_sql("DROP TABLE IF EXISTS collection_channels_decoy CASCADE")
-            connection.exec_driver_sql("DROP FUNCTION IF EXISTS guard_collection_channel_identity() CASCADE")
-            connection.exec_driver_sql("DROP FUNCTION IF EXISTS decoy_collection_channel_guard() CASCADE")
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        cls.engine.dispose()
-
-    def test_01_concurrent_startup_is_idempotent(self) -> None:
-        with self.engine.begin() as connection:
-            connection.exec_driver_sql(
-                "CREATE TABLE collection_channels_decoy (value integer, "
-                "CONSTRAINT ck_collection_channels_adapter_type CHECK (value > 0), "
-                "CONSTRAINT ck_collection_channels_dynamic_protocol CHECK (value > 0))"
-            )
-            connection.exec_driver_sql(
-                "CREATE FUNCTION decoy_collection_channel_guard() RETURNS trigger AS $$ "
-                "BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql"
-            )
-            connection.exec_driver_sql(
-                "CREATE TRIGGER collection_channel_identity_guard BEFORE UPDATE "
-                "ON collection_channels_decoy FOR EACH ROW EXECUTE FUNCTION decoy_collection_channel_guard()"
-            )
-
-        def initialize(_: int) -> None:
-            ChannelRepository(self.engine).ensure_catalog()
-
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            list(executor.map(initialize, range(8)))
-
-        repository = ChannelRepository(self.engine)
-        self.assertEqual(len(repository.list_all()), 7)
-        with self.engine.connect() as connection:
-            trigger_count = connection.execute(
-                text(
-                    "SELECT count(*) FROM pg_trigger "
-                    "WHERE tgname = 'collection_channel_identity_guard' AND NOT tgisinternal "
-                    "AND tgrelid = 'collection_channels'::regclass"
-                )
-            ).scalar_one()
-            constraint_count = connection.execute(
-                text(
-                    "SELECT count(*) FROM pg_constraint WHERE conrelid = 'collection_channels'::regclass "
-                    "AND conname IN ('ck_collection_channels_adapter_type', "
-                    "'ck_collection_channels_dynamic_protocol')"
-                )
-            ).scalar_one()
-        self.assertEqual(trigger_count, 1)
-        self.assertEqual(constraint_count, 2)
-
-    def test_02_postgres_enforces_identity_protocol_and_ranges(self) -> None:
-        with self.assertRaises(DBAPIError):
-            with self.engine.begin() as connection:
-                connection.execute(text("DELETE FROM collection_channels WHERE code = 'bocha'"))
-
-        with self.assertRaises(DBAPIError):
-            with self.engine.begin() as connection:
-                connection.execute(text("UPDATE collection_channels SET code = 'renamed' WHERE code = 'bocha'"))
-
-        base: dict[str, object] = {
-            "name": "Invalid",
-            "ownership_type": "fixed",
-            "channel_type": "api",
-            "adapter_key": "cls",
-            "endpoint": "https://example.com/api",
-            "priority": 1,
-            "timeout_seconds": 30,
-            "max_results": 10,
-            "default_source_level": "L3_MEDIA",
-        }
-        invalid_cases: dict[str, dict[str, object]] = {
-            "dynamic-protocol": {"ownership_type": "dynamic"},
-            "adapter-type": {"adapter_key": "bocha"},
-            "priority": {"priority": 0},
-            "timeout": {"timeout_seconds": 0},
-            "max-results": {"max_results": 0},
-            "source-level": {"default_source_level": "INVALID"},
-        }
-        statement = text(
-            "INSERT INTO collection_channels "
-            "(code,name,ownership_type,channel_type,adapter_key,enabled,endpoint,config,priority,"
-            "timeout_seconds,max_results,default_source_level,created_at,updated_at) VALUES "
-            "(:code,:name,:ownership_type,:channel_type,:adapter_key,false,:endpoint,'{}',:priority,"
-            ":timeout_seconds,:max_results,:default_source_level,now(),now())"
-        )
-        for code, changes in invalid_cases.items():
-            with self.subTest(code=code), self.assertRaises(IntegrityError):
-                with self.engine.begin() as connection:
-                    connection.execute(statement, {**base, **changes, "code": f"invalid-{code}"})
-
-        ownership_values = {
-            **base,
-            "code": "invalid-ownership-enum",
-            "ownership_type": "INVALID",
-            "channel_type": "rss",
-            "adapter_key": "generic_rss",
-        }
-        with self.assertRaises(IntegrityError) as ownership_error:
-            with self.engine.begin() as connection:
-                connection.execute(statement, ownership_values)
-        self.assertEqual(_constraint_name(ownership_error.exception), "ck_collection_channels_ownership")
-
-        with self.engine.connect() as connection:
-            transaction = connection.begin()
-            try:
-                connection.exec_driver_sql(
-                    "ALTER TABLE collection_channels DROP CONSTRAINT ck_collection_channels_adapter_type"
-                )
-                with self.assertRaises(IntegrityError) as channel_error:
-                    connection.execute(
-                        statement,
-                        {**base, "code": "invalid-channel-enum", "channel_type": "INVALID"},
-                    )
-                self.assertEqual(_constraint_name(channel_error.exception), "ck_collection_channels_type")
-            finally:
-                transaction.rollback()
-
-        with self.assertRaises(IntegrityError):
-            with self.engine.begin() as connection:
-                connection.execute(statement, {**base, "code": "bocha"})
-
-    def test_03_postgres_allows_only_one_enabled_web_search(self) -> None:
-        repository = ChannelRepository(self.engine)
-        with self.assertRaisesRegex(ValueError, "only one web_search"):
-            repository.update_channel("tavily", enabled=True)
-
-    def test_04_postgres_dynamic_rss_lifecycle(self) -> None:
-        repository = ChannelRepository(self.engine)
-        now = datetime.now(UTC)
-        dynamic = CollectionChannel(
-            code="postgres-dynamic-rss",
-            name="PostgreSQL Dynamic RSS",
-            ownership_type=OwnershipType.DYNAMIC,
-            channel_type=ChannelType.RSS,
-            adapter_key="generic_rss",
-            enabled=True,
-            endpoint="https://example.com/feed.xml",
-            config={},
-            priority=1,
-            timeout_seconds=30,
-            max_results=10,
-            default_source_level=SourceLevel.L3_MEDIA,
-            created_at=now,
-            updated_at=now,
-        )
-
-        repository.create_dynamic(dynamic)
-        self.assertIn(dynamic.code, [item.code for item in repository.list_enabled(ChannelType.RSS)])
-        repository.delete_channel(dynamic.code)
-        self.assertNotIn(dynamic.code, [item.code for item in repository.list_enabled(ChannelType.RSS)])
 
 
 class CollectionAdapterContractTest(unittest.IsolatedAsyncioTestCase):

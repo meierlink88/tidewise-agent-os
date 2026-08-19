@@ -1,4 +1,4 @@
-"""Database-managed collection channel catalog."""
+"""Source Snapshot-backed collection channel execution contracts."""
 
 from capabilities.collection.internal.channels.models import (
     AdapterKey,
