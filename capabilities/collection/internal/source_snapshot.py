@@ -7,21 +7,21 @@ from copy import deepcopy
 from datetime import datetime
 from enum import StrEnum
 from time import monotonic
-from typing import Annotated, Any, Protocol, Self
+from typing import Any, Protocol, Self
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pydantic import (
+    AnyUrl,
     BaseModel,
     ConfigDict,
     Field,
-    HttpUrl,
-    Strict,
     StrictBool,
     StrictInt,
     StrictStr,
     ValidationError,
+    field_validator,
     model_validator,
 )
 
@@ -39,6 +39,10 @@ _MAX_SOURCES = 200
 _CLIENT_TIMEOUT_SECONDS = 3.5
 _READ_CHUNK_BYTES = 64 * 1024
 _DATA_REQUEST_ID_PATTERN = re.compile(r"^data-[0-9]{8}T[0-9]{6}\.[0-9]{9}$")
+_RFC3339_DATETIME_PATTERN = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]+)?(?:[Zz]|[+-][0-9]{2}:[0-9]{2})$"
+)
 _SOURCE_ERROR_CODES = {
     "FORBIDDEN",
     "INTERNAL_ERROR",
@@ -106,15 +110,22 @@ class _SourceRecord(BaseModel):
     channel_type: ChannelType
     adapter_key: AdapterKey
     enabled: StrictBool
-    endpoint: HttpUrl = Field(max_length=2048)
+    endpoint: AnyUrl = Field(max_length=2048)
     app_key: StrictStr | None = Field(max_length=512)
     config: dict[StrictStr, Any]
     priority: StrictInt = Field(ge=1, le=5)
     timeout_seconds: StrictInt = Field(ge=1, le=300)
     max_results: StrictInt = Field(ge=1, le=100)
     default_source_level: SourceLevel
-    created_at: Annotated[datetime, Strict()]
-    updated_at: Annotated[datetime, Strict()]
+    created_at: datetime
+    updated_at: datetime
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def validate_rfc3339_datetime(cls, value: Any) -> Any:
+        if not isinstance(value, str) or _RFC3339_DATETIME_PATTERN.fullmatch(value) is None:
+            raise ValueError("timestamp must use RFC3339 date-time syntax")
+        return value
 
     @model_validator(mode="after")
     def validate_source_contract(self) -> "_SourceRecord":
@@ -131,10 +142,7 @@ class _SourceRecord(BaseModel):
             if not isinstance(source_levels, dict):
                 raise ValueError("config.source_levels must be an object")
             valid_levels = {level.value for level in SourceLevel}
-            if any(
-                not isinstance(host, str) or not host.strip() or not isinstance(level, str) or level not in valid_levels
-                for host, level in source_levels.items()
-            ):
+            if any(not isinstance(level, str) or level not in valid_levels for level in source_levels.values()):
                 raise ValueError("config.source_levels contains an invalid entry")
         maximum = self.config.get("max_bytes")
         if (
@@ -182,7 +190,7 @@ def _map_source_to_execution_channel(source: _SourceRecord) -> CollectionChannel
         channel_type=source.channel_type,
         adapter_key=source.adapter_key,
         enabled=source.enabled,
-        endpoint=source.endpoint,
+        endpoint=str(source.endpoint),
         app_key=source.app_key,
         config=deepcopy(source.config),
         priority=source.priority,
@@ -246,7 +254,16 @@ class DataServiceSourceSnapshotProvider:
                     )
                 payload = self._read_response(response, deadline)
         except HTTPError as exc:
-            raise SourceSnapshotError(SourceSnapshotErrorKind.HTTP, self._http_error_message(exc)) from None
+            try:
+                message = self._http_error_message(exc, deadline)
+            except TimeoutError:
+                raise SourceSnapshotError(
+                    SourceSnapshotErrorKind.UNAVAILABLE,
+                    "Data Service Source Snapshot is unavailable within the request budget",
+                ) from None
+            finally:
+                exc.close()
+            raise SourceSnapshotError(SourceSnapshotErrorKind.HTTP, message) from None
         except (TimeoutError, URLError):
             raise SourceSnapshotError(
                 SourceSnapshotErrorKind.UNAVAILABLE,
@@ -268,31 +285,50 @@ class DataServiceSourceSnapshotProvider:
             ) from None
 
     @staticmethod
-    def _read_response(response: Any, deadline: float) -> bytes:
+    def _read_response(response: Any, deadline: float, *, maximum_bytes: int = _MAX_RESPONSE_BYTES) -> bytes:
         chunks: list[bytes] = []
         total = 0
         reader = getattr(response, "read1", response.read)
         while True:
-            if chunks and response.isclosed():
+            if chunks and DataServiceSourceSnapshotProvider._response_is_closed(response):
                 return b"".join(chunks)
             remaining = deadline - monotonic()
             if remaining <= 0:
                 raise TimeoutError
             DataServiceSourceSnapshotProvider._set_socket_timeout(response, remaining)
-            chunk = reader(min(_READ_CHUNK_BYTES, _MAX_RESPONSE_BYTES + 1 - total))
+            chunk = reader(min(_READ_CHUNK_BYTES, maximum_bytes + 1 - total))
             if not chunk:
                 return b"".join(chunks)
             chunks.append(chunk)
             total += len(chunk)
-            if total > _MAX_RESPONSE_BYTES:
+            if total > maximum_bytes:
                 return b"".join(chunks)
 
     @staticmethod
+    def _response_is_closed(response: Any) -> bool:
+        current = response
+        for _ in range(4):
+            isclosed = getattr(current, "isclosed", None)
+            if callable(isclosed) and isclosed():
+                return True
+            current = getattr(current, "fp", None)
+            if current is None:
+                return False
+        return False
+
+    @staticmethod
     def _set_socket_timeout(response: Any, timeout_seconds: float) -> None:
-        try:
-            response.fp.raw._sock.settimeout(timeout_seconds)
-        except AttributeError as exc:
-            raise TimeoutError from exc
+        current = response
+        for _ in range(4):
+            raw = getattr(current, "raw", None)
+            sock = getattr(raw, "_sock", None)
+            if sock is not None:
+                sock.settimeout(timeout_seconds)
+                return
+            current = getattr(current, "fp", None)
+            if current is None:
+                break
+        raise TimeoutError
 
     @staticmethod
     def _validate_complete_snapshot(sources: tuple[_SourceRecord, ...]) -> None:
@@ -315,11 +351,12 @@ class DataServiceSourceSnapshotProvider:
                 raise ValueError("snapshot Source config is too large")
 
     @staticmethod
-    def _http_error_message(exc: HTTPError) -> str:
+    def _http_error_message(exc: HTTPError, deadline: float) -> str:
         code = "UNKNOWN"
         request_id = "unknown"
         try:
-            envelope = _ErrorEnvelope.model_validate_json(exc.read(65_537))
+            payload = DataServiceSourceSnapshotProvider._read_response(exc, deadline, maximum_bytes=65_536)
+            envelope = _ErrorEnvelope.model_validate_json(payload)
             if envelope.error.code in _SOURCE_ERROR_CODES:
                 code = envelope.error.code
             if _DATA_REQUEST_ID_PATTERN.fullmatch(envelope.request_id):

@@ -99,14 +99,20 @@ class SourceSnapshotConsumerContractTest(unittest.TestCase):
         fixture = json.loads(_PROVIDER_FIXTURE.read_text())
         sources = self._sources(fixture)
         sources[0]["app_key"] = ""
-        sources[0]["config"] = {"max_bytes": 1}
+        sources[0]["config"] = {
+            "max_bytes": 1,
+            "source_levels": {"": "L1_OFFICIAL"},
+        }
         sources[0]["updated_at"] = "2026-08-18T00:00:00Z"
         _SnapshotHandler.body = json.dumps({"request_id": "openapi-valid", "result": {"sources": sources}}).encode()
 
         channels = self._provider().load_active_snapshot()
 
         self.assertEqual(channels[0].app_key, "")
-        self.assertEqual(channels[0].config, {"max_bytes": 1})
+        self.assertEqual(
+            channels[0].config,
+            {"max_bytes": 1, "source_levels": {"": "L1_OFFICIAL"}},
+        )
 
     def test_contract_integrity_failures_reject_the_whole_snapshot_without_leaking_credentials(self) -> None:
         fixture = json.loads(_PROVIDER_FIXTURE.read_text())
@@ -158,6 +164,18 @@ class SourceSnapshotConsumerContractTest(unittest.TestCase):
         numeric_timestamp = self._sources(fixture)
         numeric_timestamp[0]["created_at"] = 0
         cases["numeric timestamp"] = numeric_timestamp
+
+        space_timestamp = self._sources(fixture)
+        space_timestamp[0]["created_at"] = "2026-08-19 00:00:00Z"
+        cases["space-separated timestamp"] = space_timestamp
+
+        compact_offset = self._sources(fixture)
+        compact_offset[0]["created_at"] = "2026-08-19T00:00:00+0000"
+        cases["non-RFC3339 offset"] = compact_offset
+
+        unsupported_execution_endpoint = self._sources(fixture)
+        unsupported_execution_endpoint[0]["endpoint"] = "ftp://example.com/source"
+        cases["URI unsupported by collection execution"] = unsupported_execution_endpoint
 
         invalid_config = self._sources(fixture)
         invalid_config[0]["config"] = {
@@ -280,6 +298,30 @@ class SourceSnapshotConsumerContractTest(unittest.TestCase):
 
     def test_slow_drip_response_cannot_exceed_the_end_to_end_budget(self) -> None:
         _SnapshotHandler.chunk_delay_seconds = 0.02
+        started = time.monotonic()
+
+        with self.assertRaisesRegex(ValueError, "request budget"):
+            DataServiceSourceSnapshotProvider(
+                base_url=f"http://127.0.0.1:{self.server.server_port}",
+                token="service-token",
+                timeout_seconds=0.05,
+            ).load_active_snapshot()
+
+        self.assertLess(time.monotonic() - started, 0.3)
+
+    def test_slow_drip_error_response_uses_the_same_end_to_end_budget(self) -> None:
+        _SnapshotHandler.status = 503
+        _SnapshotHandler.chunk_delay_seconds = 0.02
+        _SnapshotHandler.body = json.dumps(
+            {
+                "request_id": "data-20260819T142600.123456789",
+                "error": {
+                    "code": "SOURCE_TIMEOUT",
+                    "message": "timeout",
+                    "details": {},
+                },
+            }
+        ).encode()
         started = time.monotonic()
 
         with self.assertRaisesRegex(ValueError, "request budget"):
