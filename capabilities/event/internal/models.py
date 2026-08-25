@@ -5,9 +5,15 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from capabilities.evidence import EvidenceSemantic
+
 EvidenceID = Annotated[
     str,
     Field(pattern=r"^EVD[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"),
+]
+RawEvidenceID = Annotated[
+    str,
+    Field(pattern=r"^RAW[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"),
 ]
 
 
@@ -17,21 +23,84 @@ class EventEvidenceInput(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: EvidenceID
-    raw_evidence_id: str
+    raw_evidence_id: RawEvidenceID
     summary: str = Field(min_length=1, max_length=200)
-    semantic: dict[str, str | None]
+    semantic: EvidenceSemantic
+
+
+class FrozenEventExtractionBatch(BaseModel):
+    """Immutable semantic input selected before an Event extraction run."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["frozen_event_extraction_batch.v1"] = "frozen_event_extraction_batch.v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    created_at: datetime
+    evidences: list[EventEvidenceInput] = Field(min_length=1, max_length=50)
+
+    @field_validator("created_at")
+    @classmethod
+    def require_utc_created_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value):
+            raise ValueError("Event batch created_at must use UTC")
+        return value
 
 
 class EventExtractionBatch(BaseModel):
-    """Immutable batch claimed by one Event Extraction run."""
+    """Frozen input plus the exclusive processing lease for one Workflow run."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal["event_extraction_batch.v1"] = "event_extraction_batch.v1"
     batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     created_at: datetime
-    needs_analysis: bool
     evidences: list[EventEvidenceInput] = Field(min_length=1, max_length=50)
+    needs_analysis: bool
+    lease_id: str = Field(min_length=1, max_length=128)
+    lease_expires_at: datetime
+
+    @field_validator("created_at")
+    @classmethod
+    def require_utc_created_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value):
+            raise ValueError("Event batch created_at must use UTC")
+        return value
+
+    @field_validator("lease_expires_at")
+    @classmethod
+    def require_utc_lease_expiry(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value):
+            raise ValueError("Event batch lease_expires_at must use UTC")
+        return value
+
+
+class EventExtractionLease(BaseModel):
+    """Exclusive, renewable ownership of one pending local batch."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["event_extraction_lease.v1"] = "event_extraction_lease.v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    lease_id: str = Field(min_length=1, max_length=128)
+    expires_at: datetime
+
+    @field_validator("expires_at")
+    @classmethod
+    def require_utc_expiry(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value):
+            raise ValueError("Event extraction lease expiry must use UTC")
+        return value
+
+
+class EventExtractionBusy(BaseModel):
+    """Safe early stop when another Workflow run owns the pending batch."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["event_extraction_busy.v1"] = "event_extraction_busy.v1"
+    status: Literal["busy"] = "busy"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    retry_after: datetime
 
 
 class EventSemantic(BaseModel):
@@ -182,6 +251,13 @@ class EventSubmissionJournal(BaseModel):
     schema_version: Literal["event_submission_journal.v1"] = "event_submission_journal.v1"
     batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     submissions: list[EventSubmissionRecord]
+
+    @model_validator(mode="after")
+    def require_unique_candidate_keys(self) -> "EventSubmissionJournal":
+        keys = [item.candidate_key for item in self.submissions]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Event submission journal Candidate keys must be unique")
+        return self
 
 
 class EventExtractionResult(BaseModel):

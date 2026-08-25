@@ -39,6 +39,7 @@ echo ""
 
 if docker compose exec -T agentos python -u - "$QUESTION" <<'PY'
 import asyncio
+import json
 import sys
 import time
 
@@ -62,6 +63,15 @@ async def run_check(headers: dict | None, auth_note: str) -> None:
             step(f"Handshake — {auth_note}")
             tools = await session.list_tools()
             step(f"MCP OK — {len(tools.tools)} tools")
+            config_result = await session.call_tool("get_agentos_config", {})
+            config = json.loads(config_result.content[0].text)
+            agent_ids = {item["id"] for item in config["agents"]}
+            workflow_ids = {item["id"] for item in config["workflows"]}
+            required_agents = {"event-extractor", "evidence-extractor", "raw-collector"}
+            required_workflows = {"event-extraction", "evidence-extraction", "raw-collection"}
+            if not required_agents <= agent_ids or not required_workflows <= workflow_ids:
+                raise RuntimeError("MCP AgentOS config is missing required registered components")
+            step("MCP config — registered Agents and Workflows visible")
             start = time.perf_counter()
             result = await session.call_tool(
                 "run_agent",

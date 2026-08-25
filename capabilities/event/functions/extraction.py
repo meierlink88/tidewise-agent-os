@@ -12,6 +12,7 @@ from capabilities.event.internal.models import (
     EventCandidateAcceptance,
     EventCandidateSubmission,
     EventExtractionBatch,
+    EventExtractionBusy,
     EventExtractionDraft,
     EventExtractionIdle,
     EventExtractionResult,
@@ -24,6 +25,8 @@ from capabilities.event.internal.storage import (
     freeze_draft,
     load_draft,
     load_journal,
+    release_event_batch_lease,
+    renew_event_batch_lease,
     write_journal,
 )
 
@@ -49,6 +52,8 @@ def prepare_event_batch(step_input: StepInput) -> StepOutput:
     batch = claim_event_batch()
     if batch is None:
         return StepOutput(content=EventExtractionIdle(), stop=True)
+    if isinstance(batch, EventExtractionBusy):
+        return StepOutput(content=batch, stop=True)
     return StepOutput(content=batch)
 
 
@@ -76,8 +81,15 @@ def _validate_partition(batch: EventExtractionBatch, draft: EventExtractionDraft
 def freeze_event_analysis(step_input: StepInput) -> StepOutput:
     """Validate the Agent result against the frozen batch and persist it immutably."""
     batch = _model_from_content(EventExtractionBatch, _step_content(step_input, "prepare-event-batch"))
-    draft = _model_from_content(EventExtractionDraft, _step_content(step_input, "analyze-event-batch"))
-    return StepOutput(content=freeze_draft(batch, _validate_partition(batch, draft)))
+    try:
+        renew_event_batch_lease(batch)
+        draft = _model_from_content(EventExtractionDraft, _step_content(step_input, "analyze-event-batch"))
+        frozen = freeze_draft(batch, _validate_partition(batch, draft))
+        renew_event_batch_lease(batch)
+        return StepOutput(content=frozen)
+    except Exception:
+        release_event_batch_lease(batch)
+        raise
 
 
 def _candidate_key(candidate: EventCandidateSubmission) -> str:
@@ -93,37 +105,44 @@ def _candidate_key(candidate: EventCandidateSubmission) -> str:
 async def submit_event_candidates(step_input: StepInput) -> StepOutput:
     """POST every frozen Candidate separately and journal each reliable acceptance."""
     batch = _model_from_content(EventExtractionBatch, _step_content(step_input, "prepare-event-batch"))
-    draft = load_draft(batch.batch_id)
-    journal = load_journal(batch.batch_id)
-    accepted = {item.candidate_key: item for item in journal.submissions}
-    ordered_keys: list[str] = []
-    for candidate in draft.candidates:
-        key = _candidate_key(candidate)
-        ordered_keys.append(key)
-        if key in accepted:
-            continue
-        response_payload = await asyncio.to_thread(
-            post_event_candidate,
-            candidate.model_dump(mode="json"),
-        )
-        try:
-            response = EventCandidateAcceptance.model_validate(response_payload)
-        except Exception as exc:
-            raise ValueError("Reasoning Server acceptance response is invalid") from exc
-        record = EventSubmissionRecord(candidate_key=key, **response.model_dump())
-        journal = EventSubmissionJournal(
+    try:
+        renew_event_batch_lease(batch)
+        draft = load_draft(batch.batch_id)
+        journal = load_journal(batch.batch_id)
+        accepted = {item.candidate_key: item for item in journal.submissions}
+        ordered_keys = [_candidate_key(candidate) for candidate in draft.candidates]
+        if not set(accepted) <= set(ordered_keys):
+            raise ValueError("Event submission journal contains an unknown Candidate key")
+        for candidate, key in zip(draft.candidates, ordered_keys, strict=True):
+            if key in accepted:
+                continue
+            renew_event_batch_lease(batch)
+            response_payload = await asyncio.to_thread(
+                post_event_candidate,
+                candidate.model_dump(mode="json"),
+            )
+            try:
+                response = EventCandidateAcceptance.model_validate(response_payload)
+            except Exception as exc:
+                raise ValueError("Reasoning Server acceptance response is invalid") from exc
+            record = EventSubmissionRecord(candidate_key=key, **response.model_dump())
+            journal = EventSubmissionJournal(
+                batch_id=batch.batch_id,
+                submissions=[*journal.submissions, record],
+            )
+            write_journal(journal)
+            renew_event_batch_lease(batch)
+            accepted[key] = record
+        result = EventExtractionResult(
             batch_id=batch.batch_id,
-            submissions=[*journal.submissions, record],
+            evidence_ids=sorted(item.id for item in batch.evidences),
+            candidate_count=len(draft.candidates),
+            no_event_count=len(draft.no_event),
+            needs_review_count=len(draft.needs_review),
+            submission_ids=[accepted[key].submission_id for key in ordered_keys],
         )
-        write_journal(journal)
-        accepted[key] = record
-    result = EventExtractionResult(
-        batch_id=batch.batch_id,
-        evidence_ids=sorted(item.id for item in batch.evidences),
-        candidate_count=len(draft.candidates),
-        no_event_count=len(draft.no_event),
-        needs_review_count=len(draft.needs_review),
-        submission_ids=[accepted[key].submission_id for key in ordered_keys],
-    )
-    complete_batch(result)
-    return StepOutput(content=result)
+        complete_batch(batch, result)
+        return StepOutput(content=result)
+    except Exception:
+        release_event_batch_lease(batch)
+        raise

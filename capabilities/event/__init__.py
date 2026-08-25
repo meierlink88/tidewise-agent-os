@@ -7,10 +7,12 @@ from capabilities.event.internal.models import (
     EventDisposition,
     EventEvidenceInput,
     EventExtractionBatch,
+    EventExtractionBusy,
     EventExtractionDraft,
     EventExtractionIdle,
     EventExtractionResult,
     EventSemantic,
+    FrozenEventExtractionBatch,
 )
 
 __all__ = [
@@ -20,8 +22,10 @@ __all__ = [
     "EventDisposition",
     "EventEvidenceInput",
     "EventExtractionBatch",
+    "EventExtractionBusy",
     "EventExtractionDraft",
     "EventExtractionIdle",
     "EventExtractionResult",
+    "FrozenEventExtractionBatch",
     "EventSemantic",
 ]

@@ -6,9 +6,14 @@
 
 - Agent：`tidewise-assistant`，默认使用 DeepSeek V4 Flash。
 - Agent：`raw-collector`，由 Agno Studio/PostgreSQL 管理提示词版本，由 Workflow 调用。
+- Agent：`title-curator`，对采集标题做投研相关性判断，由 Raw Collection Workflow 调用。
+- Agent：`evidence-extractor`，从 Raw Evidence 提取 Atomic Evidence，由 Studio/PostgreSQL 管理。
+- Agent：`event-extractor`，按 5W1H 身份语义把同批 Evidence 提炼为 Event Candidate。
 - Workflow：`local-ping`，无模型依赖的运行时检查。
 - Workflow：`deployment-check`，检查数据库、MCP、组件和调度状态。
 - Workflow：`raw-collection`，由 Agno Studio/PostgreSQL 管理编排版本，执行 Agent 采集、确定性去重和 manifest-last 发布。
+- Workflow：`evidence-extraction`，增量提取并发布 Atomic Evidence，回写正式 Evidence ID。
+- Workflow：`event-extraction`，冻结本地 Evidence 批次并逐 Candidate 交给 Reasoning Server。
 - API/MCP：`http://localhost:8000`、`http://localhost:8000/mcp`。
 
 ## 本地拓扑
@@ -58,7 +63,8 @@ Control Plane 的 Studio 中编辑并发布 Instructions；`raw-collection` 每�
 
 `raw-collection` 首次启动时也会创建一个 Studio 发布版本。Workflow 编排可在 Studio
 中创建新版本并发布；步骤使用的 Agent 工具和自定义 Function 实现在 Git 中维护。共享采集
-采集实现集中在 `capabilities/collection/`，Evidence 实现集中在 `capabilities/evidence/`；每个领域只以 `tools/`、`functions/`、`internal/` 组织，不属于某个 Agent 或 Workflow 私有。
+采集实现集中在 `capabilities/collection/`，Evidence 实现集中在 `capabilities/evidence/`，Event Candidate
+提炼与交接集中在 `capabilities/event/`；每个领域只以 `tools/`、`functions/`、`internal/` 组织，不属于某个 Agent 或 Workflow 私有。
 采集 Workflow Executor 使用 Agno 异步运行接口，所有外部通道使用异步 HTTP；Tool Batch、
 Artifact 构建和发布的文件操作会卸载到工作线程，因此单 Worker 运行采集时不会阻塞其他业务
 Agent 或 Workflow。

@@ -5,14 +5,20 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from typing import cast
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from agno.registry import Registry
 from agno.run.agent import RunOutput
 from agno.run.base import RunStatus
 from agno.workflow import Condition, Step, StepInput, StepOutput, Workflow
 
-from agents.event_extractor import build_event_extractor_agent
+from agents.event_extractor import (
+    EVENT_EXTRACTOR_CONTRACT_VERSION,
+    build_event_extractor_agent,
+    ensure_event_extractor_agent,
+)
+from app.registry import TidewiseRegistry
 from capabilities.event import EventExtractionBatch, EventExtractionDraft, EventExtractionResult
 from capabilities.event.functions import (
     event_batch_requires_analysis,
@@ -24,6 +30,7 @@ from capabilities.evidence import ResolvedEvidence
 from workflows.event_extraction import (
     EVENT_EXTRACTION_CONTRACT_VERSION,
     _seed_workflow,
+    ensure_event_extraction_workflow,
 )
 
 
@@ -154,6 +161,30 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaisesRegex(ValueError, "partition"):
             self._freeze(batch, draft)
+
+    def test_concurrent_schedule_callback_stops_without_reprocessing_pending_batch(self) -> None:
+        batch = self._prepare()
+        with patch(
+            "capabilities.event.internal.storage.read_resolved_evidences",
+            return_value=self._evidences(),
+        ):
+            concurrent = prepare_event_batch(StepInput(input="concurrent"))
+
+        self.assertTrue(concurrent.stop)
+        self.assertEqual(concurrent.content.status, "busy")
+        self.assertEqual(concurrent.content.batch_id, batch.batch_id)
+
+    def test_expired_processing_lease_allows_crash_recovery_without_new_batch(self) -> None:
+        batch = self._prepare()
+        lease_path = self.event_root / ".pending" / batch.batch_id / "lease.json"
+        lease = json.loads(lease_path.read_text(encoding="utf-8"))
+        lease["expires_at"] = "2000-01-01T00:00:00Z"
+        lease_path.write_text(json.dumps(lease), encoding="utf-8")
+
+        resumed = self._prepare()
+        self.assertEqual(resumed.batch_id, batch.batch_id)
+        self.assertNotEqual(resumed.lease_id, batch.lease_id)
+        self.assertTrue(resumed.needs_analysis)
 
     async def test_posts_each_candidate_and_completed_evidence_is_not_selected_again(self) -> None:
         batch = self._prepare()
@@ -329,6 +360,72 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         analyzed = EventExtractionBatch.model_validate(controlled_agent.call_args.kwargs["input"])
         self.assertEqual([item.id for item in analyzed.evidences], [self.FIRST_ID, self.SECOND_ID])
         posted.assert_called_once()
+
+    def test_agent_contract_migration_reapplies_reviewed_runtime_contract(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 4}
+        current = MagicMock()
+        current.metadata = {"event_extractor_contract_version": 0}
+        current.save.return_value = 5
+        with (
+            patch("agents.event_extractor.get_postgres_db", return_value=db),
+            patch("agents.event_extractor.Agent.load", return_value=current),
+        ):
+            version = ensure_event_extractor_agent(MagicMock())
+
+        self.assertEqual(version, 5)
+        self.assertEqual(current.output_schema, EventExtractionDraft)
+        self.assertEqual(current.tools, [])
+        self.assertEqual(
+            current.metadata["event_extractor_contract_version"],
+            EVENT_EXTRACTOR_CONTRACT_VERSION,
+        )
+        current.save.assert_called_once_with(
+            db=db,
+            stage="published",
+            notes=f"Event Extractor runtime contract migration {EVENT_EXTRACTOR_CONTRACT_VERSION}",
+        )
+
+    def test_workflow_contract_migration_uses_sessionless_published_agent(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 7}
+        db.get_config.return_value = {
+            "config": {
+                "id": "event-extraction",
+                "name": "Event Extraction",
+                "metadata": {"event_extraction_contract_version": 0},
+            }
+        }
+        runtime_agent = build_event_extractor_agent()
+        runtime_agent.db = None
+        with (
+            patch("workflows.event_extraction.get_postgres_db", return_value=db),
+            patch("workflows.event_extraction.load_event_extractor_agent", return_value=runtime_agent),
+            patch.object(Workflow, "save", autospec=True, return_value=8) as saved,
+        ):
+            version = ensure_event_extraction_workflow(MagicMock())
+
+        self.assertEqual(version, 8)
+        migrated = cast(Workflow, saved.call_args.args[0])
+        self.assertEqual(
+            migrated.metadata,
+            {"event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION},
+        )
+        condition = cast(Condition, cast(list[object], migrated.steps)[1])
+        analyze = cast(Step, condition.steps[0])
+        self.assertIsNotNone(analyze.agent)
+        assert analyze.agent is not None
+        self.assertIsNone(analyze.agent.db)
+
+    def test_tidewise_registry_resolves_published_event_extractor(self) -> None:
+        runtime_agent = build_event_extractor_agent()
+        runtime_agent.db = None
+        registry = TidewiseRegistry(name="Event Registry Test")
+        with patch("app.registry.load_event_extractor_agent", return_value=runtime_agent) as loaded:
+            resolved = registry.get_agent("event-extractor")
+
+        self.assertIs(resolved, runtime_agent)
+        loaded.assert_called_once_with(registry)
 
 
 if __name__ == "__main__":

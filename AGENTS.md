@@ -14,10 +14,12 @@ AgentOS (app/main.py)
 ├── Collection Query Planner (Agno Studio/PostgreSQL component; seeded by agents/raw_collector.py)
 ├── Collection Title Curator (Agno Studio/PostgreSQL component; seeded by agents/title_curator.py)
 ├── Evidence Extractor  (Agno Studio/PostgreSQL component; seeded by agents/evidence_extractor.py)
+├── Event Extractor     (Agno Studio/PostgreSQL component; seeded by agents/event_extractor.py)
 ├── Local Ping         (workflows/local_ping.py)
 ├── Deployment Check   (workflows/deployment_check.py)
 ├── Raw Collection     (Agno Studio/PostgreSQL component; seeded by workflows/raw_collection.py)
-└── Evidence Extraction (Agno Studio/PostgreSQL component; seeded by workflows/evidence_extraction.py)
+├── Evidence Extraction (Agno Studio/PostgreSQL component; seeded by workflows/evidence_extraction.py)
+└── Event Extraction    (Agno Studio/PostgreSQL component; seeded by workflows/event_extraction.py)
 ```
 
 共享能力：
@@ -29,7 +31,9 @@ AgentOS (app/main.py)
 - `app/config.yaml`：组件描述和快捷提示。
 - `capabilities/collection/`：Collection 领域能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
 - `capabilities/evidence/`：Evidence 领域能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
+- `capabilities/event/`：Event Candidate 提炼与 Reasoning Server 交接能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
 - `data/collector/`：本地原始采集 Artifact；目录受 Git 忽略。
+- `data/evidence/`、`data/event/`：本地 Evidence 与 Event 提炼 Artifact；目录受 Git 忽略。
 
 ## 本地 Docker 约束
 

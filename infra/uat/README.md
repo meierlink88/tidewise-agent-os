@@ -106,6 +106,7 @@ Environment or repository Variables:
 - `MINIO_ENDPOINT` — MinIO S3 API URL reachable from containers, including `http://` or `https://`
 - `RAW_EVIDENCE_PUBLIC_BASE_URL` — browser-facing MinIO Base URL; deployment verifies a canary through it
 - `REASON_SERVICE_BASE_URL` — internal Reasoning Server URL reachable from `tidewise-uat`
+- `EVENT_EXTRACTION_BATCH_SIZE` — optional `1..50` Event extraction batch size; defaults to `50`
 - `CONTROL_PLANE_JWT_VERIFICATION_KEY` — PEM public key generated for the UAT OS connection in Agno Control Plane
 
 Secrets:

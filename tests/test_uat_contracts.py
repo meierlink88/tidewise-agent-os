@@ -84,7 +84,12 @@ class UatIngressContractTest(TestCase):
         self.assertIn("EVENT_ARTIFACT_ROOT: /app/data/event", compose)
         self.assertIn("REASON_SERVICE_TOKEN: ${{ secrets.REASON_SERVICE_TOKEN }}", workflow)
         self.assertIn("REASON_SERVICE_BASE_URL: ${{ vars.REASON_SERVICE_BASE_URL }}", workflow)
+        self.assertIn("EVENT_EXTRACTION_BATCH_SIZE: ${{ vars.EVENT_EXTRACTION_BATCH_SIZE || '50' }}", workflow)
+        self.assertIn('"EVENT_EXTRACTION_BATCH_SIZE",', workflow)
         self.assertIn("internal-reasoning-server", preflight)
+        self.assertIn(
+            'session.call_tool("get_agentos_config", {})', (REPOSITORY_ROOT / "scripts/smoke_uat.py").read_text()
+        )
 
     def test_mcp_oauth_accepts_https_path_issuer(self) -> None:
         auth = AgentOSBuiltinAuth(
