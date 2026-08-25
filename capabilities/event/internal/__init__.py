@@ -1,0 +1,1 @@
+"""Private Event capability implementation."""

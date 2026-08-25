@@ -64,7 +64,8 @@ Artifact 构建和发布的文件操作会卸载到工作线程，因此单 Work
 Agent 或 Workflow。
 
 新环境显式执行一次 `python -m scripts.seed_schedules` 后，会得到默认的
-`raw-collection-hourly` 和 `evidence-extraction-every-10-minutes` Schedule。默认名称只用于首次
+`raw-collection-hourly`、`evidence-extraction-every-10-minutes` 和
+`event-extraction-every-minute` Schedule。默认名称只用于首次
 创建；之后名称、cron、endpoint、payload 和启停状态均由 PostgreSQL 与 AgentOS Control Panel
 管理。应用启动仅按 Workflow endpoint 做只读缺失、重复和启停检查，不创建或覆盖 Schedule，
 因此 Control Panel 中的改名和其他运行配置会跨容器重启保留。

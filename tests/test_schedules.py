@@ -6,6 +6,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from app.schedules import (
+    EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
+    EVENT_EXTRACTION_SCHEDULE_PROMPT,
     EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
     EVIDENCE_EXTRACTION_SCHEDULE_PROMPT,
     RAW_COLLECTION_SCHEDULE_ENDPOINT,
@@ -29,6 +31,12 @@ class ScheduleSeedTest(unittest.TestCase):
                 name="evidence-extraction-schedule",
                 endpoint=EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
                 enabled=True,
+            ),
+            SimpleNamespace(
+                id="event-id",
+                name="renamed-event-schedule",
+                endpoint=EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
+                enabled=False,
             ),
         ]
 
@@ -61,6 +69,12 @@ class ScheduleSeedTest(unittest.TestCase):
                 endpoint=EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
                 enabled=True,
             ),
+            SimpleNamespace(
+                id="event-id",
+                name="Event Extraction",
+                endpoint=EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
+                enabled=True,
+            ),
         ]
 
         with patch.dict(os.environ, {"ENABLE_DEPLOY_CHECK": "false"}):
@@ -75,6 +89,7 @@ class ScheduleSeedTest(unittest.TestCase):
         manager.create.side_effect = [
             SimpleNamespace(id="raw-id"),
             SimpleNamespace(id="evidence-id"),
+            SimpleNamespace(id="event-id"),
         ]
 
         with patch.dict(os.environ, {"ENABLE_DEPLOY_CHECK": "false"}):
@@ -83,13 +98,22 @@ class ScheduleSeedTest(unittest.TestCase):
         calls = [call.kwargs for call in manager.create.call_args_list]
         self.assertEqual(
             {call["endpoint"] for call in calls},
-            {RAW_COLLECTION_SCHEDULE_ENDPOINT, EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT},
+            {
+                RAW_COLLECTION_SCHEDULE_ENDPOINT,
+                EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
+                EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
+            },
         )
         evidence = next(call for call in calls if call["endpoint"] == EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT)
         self.assertEqual(evidence["cron"], "*/10 * * * *")
         self.assertEqual(evidence["payload"], {"message": EVIDENCE_EXTRACTION_SCHEDULE_PROMPT})
         self.assertEqual(evidence["timezone"], "Asia/Shanghai")
         self.assertEqual(evidence["if_exists"], "raise")
+        event = next(call for call in calls if call["endpoint"] == EVENT_EXTRACTION_SCHEDULE_ENDPOINT)
+        self.assertEqual(event["cron"], "* * * * *")
+        self.assertEqual(event["payload"], {"message": EVENT_EXTRACTION_SCHEDULE_PROMPT})
+        self.assertEqual(event["timezone"], "Asia/Shanghai")
+        self.assertEqual(event["if_exists"], "raise")
 
 
 class ScheduleInspectionTest(unittest.TestCase):

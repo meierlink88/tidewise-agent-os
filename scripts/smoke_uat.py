@@ -10,7 +10,11 @@ import httpx
 from agno.db.schemas.service_accounts import ServiceAccount
 from agno.os.service_accounts import generate_token
 
-from app.schedules import EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT, RAW_COLLECTION_SCHEDULE_ENDPOINT
+from app.schedules import (
+    EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
+    EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
+    RAW_COLLECTION_SCHEDULE_ENDPOINT,
+)
 from db import get_postgres_db
 
 BASE_URL = "http://127.0.0.1:9081"
@@ -35,11 +39,22 @@ async def _probe(token: str) -> None:
         agent_ids = {item["id"] for item in agents}
         workflow_ids = {item["id"] for item in workflows}
         schedule_endpoints = [item["endpoint"] for item in schedules["data"]]
-        required_agents = {"tidewise-assistant", "raw-collector", "evidence-extractor"}
-        required_workflows = {"local-ping", "raw-collection", "evidence-extraction"}
+        required_agents = {
+            "tidewise-assistant",
+            "raw-collector",
+            "evidence-extractor",
+            "event-extractor",
+        }
+        required_workflows = {
+            "local-ping",
+            "raw-collection",
+            "evidence-extraction",
+            "event-extraction",
+        }
         required_schedule_endpoints = {
             RAW_COLLECTION_SCHEDULE_ENDPOINT,
             EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
+            EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
         }
         if not required_agents <= agent_ids:
             raise RuntimeError(f"missing Agents: {sorted(required_agents - agent_ids)}")

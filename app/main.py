@@ -10,6 +10,7 @@ from pathlib import Path
 from agno.os import AgentOS
 from agno.utils.log import log_info
 
+from agents.event_extractor import ensure_event_extractor_agent
 from agents.evidence_extractor import ensure_evidence_extractor_agent
 from agents.raw_collector import ensure_collector_agent
 from agents.tidewise_assistant import tidewise_assistant
@@ -18,6 +19,7 @@ from app.registry import registry
 from app.schedules import validate_schedules
 from db import get_postgres_db
 from workflows.deployment_check import deployment_check
+from workflows.event_extraction import ensure_event_extraction_workflow
 from workflows.evidence_extraction import ensure_evidence_extraction_workflow
 from workflows.local_ping import local_ping
 from workflows.raw_collection import ensure_raw_collection_workflow
@@ -83,8 +85,10 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     ensure_collector_agent(registry)
     ensure_title_curator_agent(registry)
     ensure_evidence_extractor_agent(registry)
+    ensure_event_extractor_agent(registry)
     ensure_raw_collection_workflow(registry)
     ensure_evidence_extraction_workflow(registry)
+    ensure_event_extraction_workflow(registry)
     # Schedule rows are runtime configuration owned by PostgreSQL/Control Panel.
     # Startup only validates them; new environments use the explicit seed command.
     validate_schedules()
