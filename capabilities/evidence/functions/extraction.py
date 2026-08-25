@@ -11,6 +11,10 @@ from agno.run import RunContext
 from agno.workflow import StepInput, StepOutput
 from pydantic import ValidationError
 
+from capabilities.evidence.internal.artifacts import (
+    load_published_evidence_artifact,
+    persist_evidence_identity_bindings,
+)
 from capabilities.evidence.internal.client import get_evidence_categories, post_publication
 from capabilities.evidence.internal.models import (
     EvidenceAnalysisRequest,
@@ -18,6 +22,7 @@ from capabilities.evidence.internal.models import (
     EvidenceCategoryDefinition,
     EvidenceExtractionDraft,
     EvidenceExtractionIdle,
+    EvidenceIdentityBindings,
     EvidencePublicationItem,
     EvidencePublicationResult,
     EvidenceSetPublicationResponse,
@@ -174,38 +179,30 @@ def validate_evidence_analysis(step_input: StepInput, run_context: RunContext) -
 def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -> EvidencePublicationResult | None:
     if not path.exists():
         return None
-    manifest = json.loads(path.read_text(encoding="utf-8"))
-    prepared_path = path.parent / "prepared.json"
     try:
-        frozen = PreparedEvidencePublication.model_validate_json(prepared_path.read_text(encoding="utf-8"))
-    except (OSError, ValidationError) as exc:
-        raise ValueError("published Evidence Artifact prepared payload is invalid") from exc
+        artifact = load_published_evidence_artifact(path)
+    except ValueError as exc:
+        raise ValueError("published Evidence Artifact is invalid") from exc
+    manifest = artifact.manifest
+    frozen = artifact.prepared
     if (
         frozen.prepared_raw != publication.prepared_raw
         or frozen.raw_evidence.publication_key != publication.raw_evidence.publication_key
     ):
         raise ValueError("published Evidence Artifact source identity conflict")
-    evidence_ids = manifest.get("evidence_ids")
-    if (
-        manifest.get("schema") != "evidence_extraction_manifest.v4"
-        or manifest.get("publication_key") != frozen.raw_evidence.publication_key
-        or manifest.get("document_sha256") != frozen.prepared_raw.document_sha256
-        or manifest.get("evidence_count") != len(frozen.evidences)
-        or not isinstance(evidence_ids, list)
-        or len(evidence_ids) != len(frozen.evidences)
-    ):
+    schema = manifest.get("schema")
+    if schema not in {"evidence_extraction_manifest.v4", "evidence_extraction_manifest.v5"}:
         raise ValueError("published Evidence Artifact identity conflict")
-    try:
-        response = EvidenceSetPublicationResponse(
-            raw_evidence_id=manifest.get("raw_evidence_id"),
-            ids=evidence_ids,
-        )
-    except ValidationError as exc:
-        raise ValueError("published Evidence Artifact contains invalid formal identities") from exc
+    if schema == "evidence_extraction_manifest.v5":
+        if (
+            manifest.get("artifacts") != {"prepared": "prepared.json", "bindings": "bindings.json"}
+            or artifact.bindings is None
+        ):
+            raise ValueError("published Evidence Artifact identity conflict")
     checkpoint = advance_checkpoint(frozen.prepared_raw)
     return EvidencePublicationResult(
-        raw_evidence_id=response.raw_evidence_id,
-        evidence_ids=response.ids,
+        raw_evidence_id=artifact.identities.raw_evidence_id,
+        evidence_ids=artifact.identities.ids,
         evidence_count=len(frozen.evidences),
         artifact_manifest_path=str(path),
         checkpoint=checkpoint,
@@ -255,6 +252,8 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
         raise ValueError("Raw Evidence identity mismatch between publication responses")
     if len(evidence_response.ids) != len(publication.evidences):
         raise ValueError("Evidence identity count mismatch in publication response")
+    if evidence_response.items is not None and len(evidence_response.items) != len(publication.evidences):
+        raise ValueError("Evidence identity mapping count mismatch in publication response")
 
     for name in ("prepared.json",):
         source = pending / name
@@ -264,8 +263,21 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
                 raise ValueError(f"immutable Evidence Artifact conflict: {name}")
         else:
             write_json(target, json.loads(source.read_text(encoding="utf-8")))
+    artifacts = {"prepared": "prepared.json"}
+    manifest_schema = "evidence_extraction_manifest.v4"
+    if evidence_response.items is not None:
+        bindings = EvidenceIdentityBindings(
+            publication_key=publication_key,
+            raw_evidence_id=raw_id,
+            document_sha256=publication.prepared_raw.document_sha256,
+            evidence_count=len(publication.evidences),
+            items=evidence_response.items,
+        )
+        persist_evidence_identity_bindings(final_root, bindings)
+        artifacts["bindings"] = "bindings.json"
+        manifest_schema = "evidence_extraction_manifest.v5"
     manifest = {
-        "schema": "evidence_extraction_manifest.v4",
+        "schema": manifest_schema,
         "publication_key": publication_key,
         "raw_evidence_id": raw_id,
         "collection_id": publication.prepared_raw.collection_id,
@@ -273,7 +285,7 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
         "document_sha256": publication.prepared_raw.document_sha256,
         "evidence_count": len(publication.evidences),
         "evidence_ids": evidence_response.ids,
-        "artifacts": {"prepared": "prepared.json"},
+        "artifacts": artifacts,
     }
     write_json(final_manifest, manifest)
     shutil.rmtree(pending, ignore_errors=True)
