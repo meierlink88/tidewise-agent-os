@@ -10,7 +10,8 @@ URL path through the existing `raw_text` field.
 
 AgentOS owns the stable `publication_key` used for retries but does not create formal Raw Evidence or Evidence IDs.
 Data Service returns `id` from Raw Evidence Publication; AgentOS passes that exact value as `raw_evidence_id` to
-Evidence Publication, then records the returned unordered `ids` set without assigning business order.
+Evidence Publication. The complete Evidence response retains the unordered `ids` compatibility set and returns
+`items[{input_index,id}]`, where `input_index` identifies the matching item in the current request.
 
 ## Runtime shape
 
@@ -77,8 +78,9 @@ runs continue from the file checkpoint.
   details and limitations of the same thing remain together. Statement, forecast, opinion, intention, negation,
   condition, quantity, time range, and uncertainty modality must be preserved.
 - The second publication uses only the `id` returned by the first response. Its response must repeat that identity and
-  return exactly one unique formal Evidence ID per submitted item. The returned IDs are deterministic but unordered;
-  AgentOS never zips them back to input positions.
+  return exactly one unique formal Evidence ID per submitted item. AgentOS treats `ids` as an unordered compatibility
+  set and uses only the complete zero-based `items[{input_index,id}]` mapping to associate formal identities with the
+  prepared Evidence list. Missing, duplicate, out-of-range, or contradictory mappings fail before checkpoint advance.
 - Raw Evidence `raw_text` is the environment-neutral `/{bucket}/{object_key}` path recorded by Raw Collection, never
   the article body or a Base URL.
 - Browser access is `environment MinIO Base URL + raw_text`; Data Service does not proxy the object.
@@ -89,12 +91,18 @@ runs continue from the file checkpoint.
   retry after either successful remote phase repeats the same immutable payload and consumes the same formal IDs.
 - The first prepared publication payload is frozen under `.pending`; retries reuse it even if a later Agent run emits
   different semantics, so an unknown remote outcome can never be retried with drifted content.
-- New frozen publications use `prepared_evidence_publication.v4`; new manifests use
-  `evidence_extraction_manifest.v4`, are keyed locally by the SHA-256 of `publication_key`, and record the formal Raw
-  Evidence ID plus the complete returned `evidence_ids` set. Historical v1/v2/v3 manifests and pre-cutover pending
-  directories remain untouched and are not replayed by this change.
-- A completed v4 manifest and its frozen `prepared.json` are the recovery truth if the process stops before checkpoint
-  advancement; later Agent output cannot change the completed publication or prevent that checkpoint from advancing.
+- New frozen publications continue to use `prepared_evidence_publication.v4`. A mapped publication writes immutable
+  `evidence_identity_bindings.v1`, then completes `evidence_extraction_manifest.v5` last. The binding records the Raw
+  Evidence identity, publication identity, document digest, Evidence count, and every request index-to-ID association.
+- During mixed-version rollout, a legacy response without `items` remains readable and completes the existing v4
+  manifest without inventing a mapping. A completed v4 or v5 manifest and its frozen `prepared.json` remain recovery
+  truth; a v5 recovery additionally validates its binding Artifact before advancing the checkpoint.
+- Historical v4 manifests are never overwritten. `python -m scripts.reconcile_evidence_bindings` explicitly appends a
+  binding beside eligible history: a one-item set is uniquely resolved locally, while a multi-item set is replayed as
+  the exact frozen Evidence Publication payload so Data Service can return the authoritative mapping. The operation is
+  idempotent, never invokes the Agent, and exits unsuccessfully when any Artifact remains ineligible.
+- Other domains consume resolved Evidence through the public Evidence capability reader, which returns the formal ID,
+  Raw Evidence ID, summary, and 5W1H semantic content. They do not join Artifact files or infer identity order.
 - Keywords contain 1 to 5 unique values, each at most 5 characters.
 - Article publication time never substitutes for Evidence fact time.
 - `split_order`, `layer_type`, all Evidence `source_*`/`source_*_core` fields, `expression_fingerprint`,

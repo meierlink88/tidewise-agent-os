@@ -245,19 +245,89 @@ class RawEvidencePublicationResponse(BaseModel):
     id: RawEvidenceID
 
 
+class EvidencePublicationResponseItem(BaseModel):
+    """Formal Evidence identity associated with one current request position."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_index: int = Field(ge=0)
+    id: EvidenceID
+
+
 class EvidenceSetPublicationResponse(BaseModel):
-    """Formal identities returned for one unordered, complete Evidence set."""
+    """Formal identities returned for one complete Evidence set."""
 
     model_config = ConfigDict(extra="forbid")
 
     raw_evidence_id: RawEvidenceID
     ids: list[EvidenceID] = Field(min_length=1)
+    items: list[EvidencePublicationResponseItem] | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def validate_unique_ids(self) -> "EvidenceSetPublicationResponse":
         if len(set(self.ids)) != len(self.ids):
             raise ValueError("Evidence identities must be unique")
+        if self.items is not None:
+            indexes = [item.input_index for item in self.items]
+            item_ids = [item.id for item in self.items]
+            if indexes != list(range(len(self.items))):
+                raise ValueError("Evidence response indexes must cover the request in order")
+            if len(set(item_ids)) != len(item_ids):
+                raise ValueError("Evidence response item identities must be unique")
+            if set(item_ids) != set(self.ids):
+                raise ValueError("Evidence response items must match the complete identity set")
         return self
+
+
+class EvidenceIdentityBindings(BaseModel):
+    """Immutable local association between prepared Evidence positions and formal identities."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["evidence_identity_bindings.v1"] = "evidence_identity_bindings.v1"
+    publication_key: str = Field(min_length=1, max_length=128)
+    raw_evidence_id: RawEvidenceID
+    document_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    evidence_count: int = Field(ge=1)
+    items: list[EvidencePublicationResponseItem] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_complete_mapping(self) -> "EvidenceIdentityBindings":
+        indexes = [item.input_index for item in self.items]
+        ids = [item.id for item in self.items]
+        if len(self.items) != self.evidence_count or indexes != list(range(self.evidence_count)):
+            raise ValueError("Evidence identity bindings must cover every prepared Evidence")
+        if len(set(ids)) != len(ids):
+            raise ValueError("Evidence identity bindings must contain unique identities")
+        return self
+
+
+class ResolvedEvidence(AtomicEvidenceDraft):
+    """One locally prepared Evidence resolved to its formal Data identity."""
+
+    id: EvidenceID
+    raw_evidence_id: RawEvidenceID
+
+
+class EvidenceBindingReconciliationIssue(BaseModel):
+    """One historical Artifact that cannot be safely resolved."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_manifest_path: str
+    reason: str
+
+
+class EvidenceBindingReconciliationResult(BaseModel):
+    """Operator-visible outcome of one explicit historical reconciliation pass."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["evidence_binding_reconciliation.v1"] = "evidence_binding_reconciliation.v1"
+    already_bound: int = Field(default=0, ge=0)
+    locally_bound: int = Field(default=0, ge=0)
+    remotely_bound: int = Field(default=0, ge=0)
+    ineligible: list[EvidenceBindingReconciliationIssue] = Field(default_factory=list)
 
 
 class EvidencePublicationResult(BaseModel):

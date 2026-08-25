@@ -35,6 +35,7 @@ from capabilities.collection.internal.models import (
     TitleCurationDecision,
     TitleCurationDraft,
 )
+from capabilities.evidence import read_resolved_evidences, reconcile_evidence_bindings
 from capabilities.evidence.functions import (
     prepare_evidence_analysis,
     prepare_raw_document,
@@ -48,6 +49,7 @@ from capabilities.evidence.internal.models import (
     EvidenceExtractionDraft,
     EvidenceExtractionIdle,
     EvidencePublicationResult,
+    EvidenceSetPublicationResponse,
     PreparedEvidencePublication,
     PreparedRawDocument,
     RawEvidenceEnrichment,
@@ -387,6 +389,19 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             fixture,
         )
 
+    def test_provider_evidence_publication_response_fixture_preserves_request_mapping(self) -> None:
+        fixture = json.loads(
+            (Path(__file__).parent / "fixtures" / "evidence-publication-response.v1.json").read_text(encoding="utf-8")
+        )
+
+        response = EvidenceSetPublicationResponse.model_validate(fixture["result"])
+
+        self.assertEqual(response.ids, sorted(response.ids))
+        self.assertIsNotNone(response.items)
+        assert response.items is not None
+        self.assertEqual([item.input_index for item in response.items], [0, 1])
+        self.assertEqual([item.id for item in response.items], [response.ids[1], response.ids[0]])
+
     def test_atomic_evidence_rejects_summary_overflow_and_invalid_semantic_shape(self) -> None:
         semantic = {
             "who": None,
@@ -573,7 +588,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(read_checkpoint().manifest_offset, 0)
         self.assertEqual(list((evidence_artifact_root() / "documents").glob("*/manifest.json")), [])
 
-    async def test_multi_evidence_ids_remain_an_unordered_complete_set(self) -> None:
+    async def test_multi_evidence_response_persists_request_indexed_bindings(self) -> None:
         self._publish_raw_fixture()
         publication = self._validated(self._prepared())
         second = publication.evidences[0].model_copy(deep=True)
@@ -591,16 +606,191 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             "capabilities.evidence.functions.extraction.post_publication",
             side_effect=[
                 {"id": raw_evidence_id},
-                {"raw_evidence_id": raw_evidence_id, "ids": evidence_ids},
+                {
+                    "raw_evidence_id": raw_evidence_id,
+                    "ids": sorted(evidence_ids),
+                    "items": [
+                        {"input_index": 0, "id": evidence_ids[0]},
+                        {"input_index": 1, "id": evidence_ids[1]},
+                    ],
+                },
             ],
         ):
             output = await publish_evidences(step_input)
 
         result = EvidencePublicationResult.model_validate(output.content)
         manifest = json.loads(Path(result.artifact_manifest_path).read_text(encoding="utf-8"))
-        self.assertEqual(result.evidence_ids, evidence_ids)
-        self.assertEqual(manifest["evidence_ids"], evidence_ids)
-        self.assertNotIn("evidences", manifest)
+        bindings = json.loads(
+            (Path(result.artifact_manifest_path).parent / "bindings.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(result.evidence_ids, sorted(evidence_ids))
+        self.assertEqual(manifest["schema"], "evidence_extraction_manifest.v5")
+        self.assertEqual(manifest["evidence_ids"], sorted(evidence_ids))
+        self.assertEqual(manifest["artifacts"], {"bindings": "bindings.json", "prepared": "prepared.json"})
+        self.assertEqual(
+            bindings,
+            {
+                "schema_version": "evidence_identity_bindings.v1",
+                "publication_key": publication.raw_evidence.publication_key,
+                "raw_evidence_id": raw_evidence_id,
+                "document_sha256": publication.prepared_raw.document_sha256,
+                "evidence_count": 2,
+                "items": [
+                    {"input_index": 0, "id": evidence_ids[0]},
+                    {"input_index": 1, "id": evidence_ids[1]},
+                ],
+            },
+        )
+
+        checkpoint_path().unlink()
+        with patch("capabilities.evidence.functions.extraction.post_publication") as repeated:
+            recovered = await publish_evidences(step_input)
+
+        repeated.assert_not_called()
+        self.assertEqual(
+            EvidencePublicationResult.model_validate(recovered.content).evidence_ids,
+            sorted(evidence_ids),
+        )
+        self.assertEqual(read_checkpoint().manifest_offset, publication.prepared_raw.next_manifest_offset)
+
+    async def test_public_capability_resolves_formal_ids_with_matching_local_semantics(self) -> None:
+        self._publish_raw_fixture()
+        publication = self._validated(self._prepared())
+        second = publication.evidences[0].model_copy(deep=True)
+        second.summary = "示例公司公告合同期限为三年"
+        second.semantic.what = "公告服务器订单合同期限为三年"
+        publication.evidences.append(second)
+        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        first_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        second_id = "EVD15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        step_input = StepInput(previous_step_outputs={"validate-evidence-analysis": StepOutput(content=publication)})
+        with patch(
+            "capabilities.evidence.functions.extraction.post_publication",
+            side_effect=[
+                {"id": raw_evidence_id},
+                {
+                    "raw_evidence_id": raw_evidence_id,
+                    "ids": sorted([first_id, second_id]),
+                    "items": [
+                        {"input_index": 0, "id": first_id},
+                        {"input_index": 1, "id": second_id},
+                    ],
+                },
+            ],
+        ):
+            output = await publish_evidences(step_input)
+
+        resolved = read_resolved_evidences(
+            EvidencePublicationResult.model_validate(output.content).artifact_manifest_path
+        )
+
+        self.assertEqual([item.id for item in resolved], [first_id, second_id])
+        self.assertEqual([item.raw_evidence_id for item in resolved], [raw_evidence_id, raw_evidence_id])
+        self.assertEqual([item.summary for item in resolved], [item.summary for item in publication.evidences])
+        self.assertEqual(
+            [item.semantic.what for item in resolved],
+            [item.semantic.what for item in publication.evidences],
+        )
+
+    async def test_reconciliation_replays_frozen_multi_evidence_and_preserves_legacy_manifest(self) -> None:
+        self._publish_raw_fixture()
+        publication = self._validated(self._prepared())
+        second = publication.evidences[0].model_copy(deep=True)
+        second.summary = "示例公司公告合同期限为三年"
+        second.semantic.what = "公告服务器订单合同期限为三年"
+        publication.evidences.append(second)
+        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        first_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        second_id = "EVD15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        sorted_ids = sorted([first_id, second_id])
+        step_input = StepInput(previous_step_outputs={"validate-evidence-analysis": StepOutput(content=publication)})
+        with patch(
+            "capabilities.evidence.functions.extraction.post_publication",
+            side_effect=[
+                {"id": raw_evidence_id},
+                {"raw_evidence_id": raw_evidence_id, "ids": sorted_ids},
+            ],
+        ):
+            output = await publish_evidences(step_input)
+
+        manifest_path = Path(EvidencePublicationResult.model_validate(output.content).artifact_manifest_path)
+        original_manifest = manifest_path.read_bytes()
+        with patch(
+            "capabilities.evidence.functions.reconciliation.post_publication",
+            return_value={
+                "raw_evidence_id": raw_evidence_id,
+                "ids": sorted_ids,
+                "items": [
+                    {"input_index": 0, "id": first_id},
+                    {"input_index": 1, "id": second_id},
+                ],
+            },
+        ) as replayed:
+            result = reconcile_evidence_bindings()
+
+        self.assertEqual(result.remotely_bound, 1)
+        self.assertEqual(result.locally_bound, 0)
+        self.assertEqual(result.already_bound, 0)
+        self.assertEqual(result.ineligible, [])
+        replayed.assert_called_once_with(
+            "evidence-publications",
+            {
+                "raw_evidence_id": raw_evidence_id,
+                "evidences": [item.model_dump(mode="json") for item in publication.evidences],
+            },
+        )
+        self.assertEqual(manifest_path.read_bytes(), original_manifest)
+        self.assertEqual([item.id for item in read_resolved_evidences(manifest_path)], [first_id, second_id])
+
+        with patch("capabilities.evidence.functions.reconciliation.post_publication") as repeated:
+            repeated_result = reconcile_evidence_bindings()
+        repeated.assert_not_called()
+        self.assertEqual(repeated_result.already_bound, 1)
+        self.assertEqual(repeated_result.remotely_bound, 0)
+
+    async def test_reconciliation_maps_single_evidence_locally_without_remote_call(self) -> None:
+        self._publish_raw_fixture()
+        publication = self._validated(self._prepared())
+        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        step_input = StepInput(previous_step_outputs={"validate-evidence-analysis": StepOutput(content=publication)})
+        with patch(
+            "capabilities.evidence.functions.extraction.post_publication",
+            side_effect=[
+                {"id": raw_evidence_id},
+                {"raw_evidence_id": raw_evidence_id, "ids": [evidence_id]},
+            ],
+        ):
+            output = await publish_evidences(step_input)
+
+        manifest_path = Path(EvidencePublicationResult.model_validate(output.content).artifact_manifest_path)
+        with patch("capabilities.evidence.functions.reconciliation.post_publication") as remote:
+            result = reconcile_evidence_bindings()
+
+        remote.assert_not_called()
+        self.assertEqual(result.locally_bound, 1)
+        self.assertEqual(result.remotely_bound, 0)
+        self.assertEqual(result.ineligible, [])
+        resolved = read_resolved_evidences(manifest_path)
+        self.assertEqual(len(resolved), 1)
+        self.assertEqual(resolved[0].id, evidence_id)
+        self.assertEqual(resolved[0].semantic, publication.evidences[0].semantic)
+
+    def test_reconciliation_reports_malformed_history_without_aborting_the_pass(self) -> None:
+        manifest_path = evidence_artifact_root() / "documents" / "malformed" / "manifest.json"
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text("[]\n", encoding="utf-8")
+
+        with patch("capabilities.evidence.functions.reconciliation.post_publication") as remote:
+            result = reconcile_evidence_bindings()
+
+        remote.assert_not_called()
+        self.assertEqual(result.already_bound, 0)
+        self.assertEqual(result.locally_bound, 0)
+        self.assertEqual(result.remotely_bound, 0)
+        self.assertEqual(len(result.ineligible), 1)
+        self.assertEqual(result.ineligible[0].artifact_manifest_path, str(manifest_path))
+        self.assertEqual(result.ineligible[0].reason, "historical Evidence Artifact is invalid")
 
     async def test_duplicate_response_ids_fail_with_matching_evidence_count(self) -> None:
         self._publish_raw_fixture()
@@ -623,6 +813,68 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             await publish_evidences(step_input)
 
         self.assertEqual(read_checkpoint().manifest_offset, 0)
+
+    async def test_invalid_request_indexed_mappings_fail_before_checkpoint_or_manifest(self) -> None:
+        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        first_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        second_id = "EVD15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        other_id = "EVDec95a292-d513-5aa6-a54c-a9e3926add1a"
+        cases = {
+            "missing index": {
+                "raw_evidence_id": raw_evidence_id,
+                "ids": [first_id],
+                "items": [{"input_index": 0, "id": first_id}],
+            },
+            "duplicate index": {
+                "raw_evidence_id": raw_evidence_id,
+                "ids": [first_id, second_id],
+                "items": [
+                    {"input_index": 0, "id": first_id},
+                    {"input_index": 0, "id": second_id},
+                ],
+            },
+            "out of range index": {
+                "raw_evidence_id": raw_evidence_id,
+                "ids": [first_id, second_id],
+                "items": [
+                    {"input_index": 0, "id": first_id},
+                    {"input_index": 2, "id": second_id},
+                ],
+            },
+            "identity set disagreement": {
+                "raw_evidence_id": raw_evidence_id,
+                "ids": [first_id, second_id],
+                "items": [
+                    {"input_index": 0, "id": first_id},
+                    {"input_index": 1, "id": other_id},
+                ],
+            },
+        }
+
+        for name, evidence_response in cases.items():
+            with self.subTest(name=name):
+                shutil.rmtree(os.environ["COLLECTOR_ARTIFACT_ROOT"], ignore_errors=True)
+                shutil.rmtree(os.environ["EVIDENCE_ARTIFACT_ROOT"], ignore_errors=True)
+                self._publish_raw_fixture()
+                publication = self._validated(self._prepared())
+                second = publication.evidences[0].model_copy(deep=True)
+                second.summary = "示例公司公告合同期限为三年"
+                second.semantic.what = "公告服务器订单合同期限为三年"
+                publication.evidences.append(second)
+                step_input = StepInput(
+                    previous_step_outputs={"validate-evidence-analysis": StepOutput(content=publication)}
+                )
+                with (
+                    patch(
+                        "capabilities.evidence.functions.extraction.post_publication",
+                        side_effect=[{"id": raw_evidence_id}, evidence_response],
+                    ),
+                    self.assertRaises(ValueError),
+                ):
+                    await publish_evidences(step_input)
+
+                self.assertEqual(read_checkpoint().manifest_offset, 0)
+                self.assertEqual(list((evidence_artifact_root() / "documents").glob("*/manifest.json")), [])
 
     async def test_duplicate_ids_in_final_manifest_fail_closed_before_checkpoint_recovery(self) -> None:
         self._publish_raw_fixture()
@@ -655,7 +907,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("capabilities.evidence.functions.extraction.post_publication") as repeated,
-            self.assertRaisesRegex(ValueError, "invalid formal identities"),
+            self.assertRaisesRegex(ValueError, "published Evidence Artifact"),
         ):
             await publish_evidences(step_input)
 
