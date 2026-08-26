@@ -89,6 +89,14 @@ load_active_source_snapshot()
 ' >/dev/null || fail source-snapshot "authenticated complete Source Snapshot is unavailable or invalid"
 pass internal-data-service-and-source-snapshot
 
+reason_ready_url="${REASON_SERVICE_BASE_URL:?REASON_SERVICE_BASE_URL is required}"
+reason_ready_url="${reason_ready_url%/}/readyz"
+docker run --rm --network tidewise-uat --entrypoint curl "$agentos_image" \
+  -fsS --connect-timeout 5 --max-time 15 "$reason_ready_url" >/dev/null \
+  || fail internal-reasoning-server "${REASON_SERVICE_BASE_URL} is unavailable from tidewise-uat"
+: "${REASON_SERVICE_TOKEN:?REASON_SERVICE_TOKEN is required}"
+pass internal-reasoning-server
+
 minio_health_url="${MINIO_ENDPOINT:?MINIO_ENDPOINT is required}"
 minio_health_url="${minio_health_url%/}/minio/health/live"
 docker run --rm --network tidewise-uat --entrypoint curl "$agentos_image" \

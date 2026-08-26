@@ -20,6 +20,9 @@ RAW_COLLECTION_SCHEDULE_PROMPT = (
 EVIDENCE_EXTRACTION_SCHEDULE_NAME = "evidence-extraction-every-10-minutes"
 EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT = "/workflows/evidence-extraction/runs"
 EVIDENCE_EXTRACTION_SCHEDULE_PROMPT = "处理所有尚未提取的 Raw Document"
+EVENT_EXTRACTION_SCHEDULE_NAME = "event-extraction-every-minute"
+EVENT_EXTRACTION_SCHEDULE_ENDPOINT = "/workflows/event-extraction/runs"
+EVENT_EXTRACTION_SCHEDULE_PROMPT = "处理所有已发布且尚未提炼 Event 的 Evidence"
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,14 @@ def schedule_definitions() -> tuple[ScheduleDefinition, ...]:
                 endpoint=EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
                 payload={"message": EVIDENCE_EXTRACTION_SCHEDULE_PROMPT},
                 description="Every 10 minutes: extract and publish all indexed, unprocessed Evidence.",
+                timezone="Asia/Shanghai",
+            ),
+            ScheduleDefinition(
+                name=EVENT_EXTRACTION_SCHEDULE_NAME,
+                cron="* * * * *",
+                endpoint=EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
+                payload={"message": EVENT_EXTRACTION_SCHEDULE_PROMPT},
+                description="Every minute: extract mapped local Evidence into Event Candidates.",
                 timezone="Asia/Shanghai",
             ),
         ]

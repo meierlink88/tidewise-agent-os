@@ -27,6 +27,13 @@ manifest:
       - "按 5W1H 提炼原子 Evidence 的 summary 与 semantic"
       - "提炼这篇材料的关键词和可核验证据"
 
+  event-extractor:
+    description: "按主体、现实动作、直接对象、阶段和发生时点，将同批 Atomic Evidence 提炼为单一动作 Event Candidate。"
+    quick_prompts:
+      - "将这批 Evidence 提炼为 Event Candidate"
+      - "识别同批 Evidence 中描述同一现实动作的内容"
+      - "标记不能安全提炼 Event 的 Evidence"
+
   local-ping:
     description: "不调用模型的本地运行时健康检查。"
     quick_prompts:
@@ -41,6 +48,11 @@ manifest:
     description: "增量读取 Raw Collection Manifest 索引，冻结分类目录，并发布唯一分类的 Raw Evidence 和原子 Evidence。"
     quick_prompts:
       - "处理所有尚未提取的 Raw Document"
+
+  event-extraction:
+    description: "增量读取本地已映射 Evidence，冻结提炼结果，并逐 Candidate 可靠提交 Reasoning Server。"
+    quick_prompts:
+      - "处理所有已发布且尚未提炼 Event 的 Evidence"
 
   deployment-check:
     description: "检查 Tidewise AgentOS 的数据库、MCP、组件和调度配置。"
