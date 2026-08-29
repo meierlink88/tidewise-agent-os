@@ -76,6 +76,6 @@ class CollectionChannel(BaseModel):
 
 
 class ChannelCatalog(Protocol):
-    """Read interface consumed by collection Tool façades."""
+    """Read interface consumed by deterministic collection Functions."""
 
     def list_enabled(self, channel_type: ChannelType) -> list[CollectionChannel]: ...

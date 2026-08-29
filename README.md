@@ -73,8 +73,8 @@ Control Plane 的 Studio 中编辑并发布 Instructions；`raw-collection` 每�
 与 `lookback_hours`；Workflow 冻结本次通道快照，并使用同一截止时间确定性并行执行三类采集能力。
 
 `raw-collection` 首次启动时也会创建一个 Studio 发布版本。Workflow 编排可在 Studio
-中创建新版本并发布；步骤使用的 Agent 工具和自定义 Function 实现在 Git 中维护。共享采集
-采集实现集中在 `capabilities/collection/`，Evidence 实现集中在 `capabilities/evidence/`，Event Candidate
+中创建新版本并发布；步骤使用的 Agent 和自定义 Function 实现在 Git 中维护。采集
+实现集中在 `capabilities/collection/`，Evidence 实现集中在 `capabilities/evidence/`，Event Candidate
 提炼与交接集中在 `capabilities/event/`；每个领域只以 `tools/`、`functions/`、`internal/` 组织，不属于某个 Agent 或 Workflow 私有。
 采集 Workflow Executor 使用 Agno 异步运行接口，所有外部通道使用异步 HTTP；Tool Batch、
 Artifact 构建和发布的文件操作会卸载到工作线程，因此单 Worker 运行采集时不会阻塞其他业务
@@ -99,14 +99,14 @@ Agent 或 Workflow。
 的 `raw_text` 保存 `/{bucket}/{object_key}`，例如 `/raw-evidence/documents/2026/08/15/<sha256>.md`，不保存环境
 Base URL。浏览器使用 MinIO 对外 Base URL 与该路径直接拼接。
 
-采集 Agent 不负责调用通道，只输出严格查询计划。Workflow 在 Planner 前使用 `DATA_SERVICE_TOKEN`
-从 Data Service 读取一次完整 active Source Snapshot，并为本次运行冻结。确定性 Function 每次各执行一次
-`web_fetch`、`api_fetch`、`rss_fetch` 共享实现。三个 Tool 门面仍在 Registry 中可见，用于独立验证。
+采集 Agent 不负责调用通道，只输出严格查询计划。Planner 完成后，确定性 Function 使用
+`DATA_SERVICE_TOKEN` 从 Data Service 读取一次完整 active Source Snapshot，生成统一 UTC 截止时间，
+并固定并行执行 Web Search、API 和 RSS 三类采集组。这三类能力不向 Agent Registry 注册为 Tool。
 Web Search 最多启用一个，API 与 RSS 会有界并发执行全部启用 Source；动态 RSS/Atom Source 使用
 `generic_rss` Adapter。`priority=1` 表示最高优先级。
 
 Source 的创建、启停、Endpoint、Provider Key、配置与持久化由 Data Service 独占管理；AgentOS 不再创建、
-Seed、CRUD 或读取本地 `collection_channels`。Snapshot 获取或完整性校验失败时，Workflow 在准备阶段
+Seed、CRUD 或读取本地 `collection_channels`。Snapshot 获取或完整性校验失败时，Workflow 在采集阶段
 fail closed，不使用部分数据、缓存或旧表兜底。当前服务信任边界内 `app_key` 由 Data Snapshot 明文提供，
 但不会返回给模型、日志或 Artifact。
 

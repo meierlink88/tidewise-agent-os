@@ -146,7 +146,7 @@ class ToolBatchReceipt(BaseModel):
 
 
 class ChannelFetchReceipt(BaseModel):
-    """One channel outcome returned inside a Tool façade receipt."""
+    """One channel outcome returned inside an acquisition-group receipt."""
 
     channel_code: str
     outcome: Literal["succeeded", "failed"]
@@ -157,9 +157,9 @@ class ChannelFetchReceipt(BaseModel):
 
 
 class FetchReceipt(BaseModel):
-    """Compact aggregate receipt returned by a database-driven Tool façade."""
+    """Compact aggregate receipt returned by one deterministic acquisition group."""
 
-    tool: Literal["web_fetch", "api_fetch", "rss_fetch"]
+    channel_group: Literal["web_search", "api", "rss"]
     outcome: Literal["succeeded", "partial", "failed", "no_channels"]
     query: str
     requested_after: datetime
