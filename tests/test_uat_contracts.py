@@ -87,6 +87,7 @@ class UatIngressContractTest(TestCase):
             compose,
         )
         self.assertIn("EVENT_ARTIFACT_ROOT: /app/data/event", compose)
+        self.assertIn("INVESTMENT_ARTIFACT_ROOT: /app/data/investment", compose)
         self.assertIn("NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}", workflow)
         self.assertIn("NEO4J_URI: ${{ vars.NEO4J_URI }}", workflow)
         self.assertIn("GRAPHITI_EMBEDDING_API_KEY: ${{ secrets.GRAPHITI_EMBEDDING_API_KEY }}", workflow)

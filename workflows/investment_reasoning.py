@@ -18,10 +18,10 @@ from capabilities.investment.functions import (
 from db import get_postgres_db
 
 INVESTMENT_REASONING_WORKFLOW_ID = "investment-reasoning"
-INVESTMENT_REASONING_CONTRACT_VERSION = 3
+INVESTMENT_REASONING_CONTRACT_VERSION = 4
 INVESTMENT_REASONING_DESCRIPTION = (
     "Freezes the Schedule Event window, analyzes geopolitical and macro impacts in sequence, "
-    "then loads candidate industry topology for bounded node transmission and audited conclusions."
+    "then loads candidate industry topology for bounded node transmission and emits an immutable conclusion Artifact."
 )
 
 
@@ -77,7 +77,7 @@ def _seed_workflow(reasoner: Agent, reviewer: Agent) -> Workflow:
             ),
             Step(
                 name="review-and-finalize",
-                executor=review_and_finalize,
+                executor=review_and_finalize,  # type: ignore[arg-type]
                 max_retries=0,
                 human_review=_fail_fast_review(),
                 strict_input_validation=True,

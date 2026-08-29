@@ -2,14 +2,17 @@
 
 import json
 import os
+import tempfile
 import unittest
 from contextlib import ExitStack
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from agno.agent import Agent
+from agno.run import RunContext
 from agno.workflow import Step, StepInput, StepOutput, Workflow
 from pydantic import ValidationError
 
@@ -43,6 +46,7 @@ from capabilities.investment import (
     InvestmentAnalysisRequest,
     InvestmentAnalysisResult,
     InvestmentAssessment,
+    InvestmentConclusionArtifact,
     InvestmentReasoningInput,
     LayerAnalysisContext,
     LayerAnalysisResult,
@@ -67,6 +71,7 @@ from capabilities.investment.functions import (
 from capabilities.investment.internal.context import InvestmentContextBuilder
 from capabilities.investment.internal.engine import InvestmentReasoningEngine
 from capabilities.investment.internal.local_runtime import LocalInvestmentWorkflowRuntime
+from capabilities.investment.internal.storage import write_conclusion_artifact
 from sematica.graphiti.investment import GraphitiInvestmentReader
 from workflows.investment_reasoning import (
     INVESTMENT_REASONING_CONTRACT_VERSION,
@@ -855,7 +860,7 @@ class InvestmentWorkflowShapeTest(unittest.TestCase):
     def test_http_natural_language_contract_is_owned_by_prepare_not_workflow_input_schema(self) -> None:
         workflow = _seed_workflow(cast(Agent, object()), cast(Agent, object()))
 
-        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 3)
+        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 4)
         self.assertIsNone(workflow.input_schema)
         self.assertIs(cast(list[Step], workflow.steps)[0].executor, prepare_investment_context)
 
@@ -1027,6 +1032,22 @@ class _LayeredRuntime:
 
 
 class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.environment = patch.dict(
+            os.environ,
+            {"INVESTMENT_ARTIFACT_ROOT": str(Path(self.temporary.name) / "investment")},
+        )
+        self.environment.start()
+
+    def tearDown(self) -> None:
+        self.environment.stop()
+        self.temporary.cleanup()
+
+    @staticmethod
+    def _run_context(run_id: str) -> RunContext:
+        return RunContext(run_id=run_id, session_id="investment-session", dependencies={})
+
     @staticmethod
     def _base_context() -> InvestmentAnalysisContext:
         ordinary = FactSnapshot(
@@ -1189,7 +1210,8 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         configure_investment_workflow_runtime(SimpleNamespace(review=reviewer))
         try:
             output = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)})
+                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                self._run_context("run-hard-gate"),
             )
         finally:
             configure_investment_workflow_runtime(None)
@@ -1218,7 +1240,8 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         configure_investment_workflow_runtime(SimpleNamespace(review=reviewer))
         try:
             output = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)})
+                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                self._run_context("run-review-rejection"),
             )
         finally:
             configure_investment_workflow_runtime(None)
@@ -1255,7 +1278,8 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
                 configure_investment_workflow_runtime(SimpleNamespace(review=reviewer))
                 try:
                     await review_and_finalize(
-                        StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)})
+                        StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                        self._run_context(f"run-{label.lower()}"),
                     )
                 finally:
                     configure_investment_workflow_runtime(None)
@@ -1366,7 +1390,8 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         configure_investment_workflow_runtime(runtime)
         try:
             output = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)})
+                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                self._run_context("run-upper-layer-mechanism"),
             )
         finally:
             configure_investment_workflow_runtime(None)
@@ -1381,6 +1406,35 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn(fixture.mechanism.uuid, fact_nodes)
         macro_node = next(node for node in result.reasoning_tree if node.node_id == macro_claim.claim_id)
         self.assertIn(fixture.mechanism.uuid, macro_node.parent_ids)
+
+    async def test_final_result_is_an_idempotent_standalone_artifact(self) -> None:
+        state = self._finalization_state()
+        context = self._run_context("run-artifact-idempotency")
+        configure_investment_workflow_runtime(SimpleNamespace(review=AsyncMock()))
+        try:
+            first = await review_and_finalize(
+                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                context,
+            )
+            second = await review_and_finalize(
+                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                context,
+            )
+        finally:
+            configure_investment_workflow_runtime(None)
+
+        artifact = cast(InvestmentConclusionArtifact, first.content)
+        self.assertEqual(second.content, artifact)
+        self.assertEqual(artifact.schema_version, "investment-conclusion-artifact/v1")
+        self.assertEqual(artifact.workflow_run_id, context.run_id)
+        self.assertEqual(artifact.conclusion_status, "INSUFFICIENT_EVIDENCE")
+        path = Path(artifact.artifact_path)
+        self.assertTrue(path.is_file())
+        self.assertEqual(InvestmentConclusionArtifact.model_validate_json(path.read_text()), artifact)
+        encoded = json.loads(path.read_text())
+        self.assertNotIn("step_results", encoded)
+        with self.assertRaisesRegex(ValueError, "identity conflict"):
+            write_conclusion_artifact(artifact.model_copy(update={"question": "冲突命题"}))
 
     def test_company_layer_is_rejected_by_the_current_input_contract(self) -> None:
         with self.assertRaises(ValidationError):

@@ -4,7 +4,7 @@
 
 `investment-reasoning` 是一条由 Schedule 触发的固定分层投研推理链。它读取指定时间窗内已经完成 Event 分析的 Event、Variable Signal Fact 和标准锚点，从地缘政治开始，依次推导宏观经济与产业链影响，最终给出产业链及其标准节点的升温、降温、分化、无显著变化或证据不足结论。
 
-Event 进入 Graphiti 前后的分类、锚点匹配和直接 Signal Fact 构建属于 `event-extraction`。本 Workflow 不重新提取 Event，不修改 Event、Fact 或 Signal，也不把未审核的中间推导写回 Graphiti。Agno PostgreSQL 保存 Workflow 运行状态、各阶段结果和最终结果。
+Event 进入 Graphiti 前后的分类、锚点匹配和直接 Signal Fact 构建属于 `event-extraction`。本 Workflow 不重新提取 Event，不修改 Event、Fact 或 Signal，也不把未审核的中间推导写回 Graphiti。Agno PostgreSQL 保存 Workflow 运行状态和各 Step 结果；完成审核的产品结论独立保存为 Investment Conclusion Artifact。
 
 ## 冻结边界
 
@@ -113,6 +113,14 @@ review-and-finalize
 - 每条产业链及全部节点的短、中、长期趋势；
 - Event → Signal Fact → 上层结论 → 机制 Fact/拓扑边 → 节点结论的完整推理树；
 - 机会候选、风险点、假设、失效条件和限制。
+
+`review-and-finalize` 以 Agno `workflow_run_id` 作为幂等身份，原子写入：
+
+```text
+data/investment/conclusions/<workflow_run_id>.json
+```
+
+该 JSON 是 Workflow 的产品输出，同时作为最终 Step `content`返回。它包含命题、决策时间、一句话结论、分层结论、节点趋势、推理树、Reviewer 结果、限制和上下文指纹；不包含 Agno `step_results`、重复的全量上下文或隐藏思维链。同一 `workflow_run_id` 重试只能接受完全相同的 Artifact，内容冲突必须失败，不得覆盖。Data Service 发布留待后续独立工序。
 
 ## 分层结论与根谱
 
