@@ -1,1 +1,1 @@
-"""Investment reasoning capabilities owned by the Reasoning Server."""
+"""Investment reasoning capabilities owned by AgentOS's semantic layer."""

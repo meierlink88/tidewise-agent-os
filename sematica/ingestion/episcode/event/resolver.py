@@ -134,13 +134,24 @@ class EventResolver:
                     comparison.same_occurrence_time,
                 )
             )
+            plausible_same_occurrence = (
+                sum(
+                    (
+                        comparison.same_actor,
+                        comparison.same_action,
+                        comparison.same_object,
+                        comparison.same_occurrence_time,
+                    )
+                )
+                >= 2
+            )
             if comparison.decision == "SAME_EVENT":
                 consistent = all_identity_dimensions_match and not comparison.material_conflicts
                 if consistent:
                     same_ids.add(item.id)
-                else:
+                elif plausible_same_occurrence:
                     review_ids.add(item.id)
-            elif comparison.decision in {"NEEDS_REVIEW", "SAME_EVENT_REVISION"}:
+            elif comparison.decision in {"NEEDS_REVIEW", "SAME_EVENT_REVISION"} and plausible_same_occurrence:
                 review_ids.add(item.id)
             elif all_identity_dimensions_match and not comparison.material_conflicts:
                 review_ids.add(item.id)
@@ -234,14 +245,14 @@ class EventResolver:
             )
 
         history = await self._history.retrieve(submission.event)
-        if outcome := await self._evaluate_history(submission.event, history):
-            return EventResolution(outcome)
+        if historical_outcome := await self._evaluate_history(submission.event, history):
+            return EventResolution(historical_outcome)
 
         # A second recall immediately before the external write closes the
         # single-worker queue race between initial comparison and publication.
         final_history = await self._history.retrieve(submission.event)
-        if outcome := await self._evaluate_history(submission.event, final_history):
-            return EventResolution(outcome)
+        if final_outcome := await self._evaluate_history(submission.event, final_history):
+            return EventResolution(final_outcome)
 
         decision = "RELATED_BUT_DISTINCT" if history or final_history else "NEW_EVENT"
         if on_publication_started is not None:

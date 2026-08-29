@@ -21,8 +21,10 @@ from capabilities.event.internal.models import (
     EventExtractionDraft,
     EventExtractionLease,
     EventExtractionResult,
-    EventSubmissionJournal,
+    EventPublicationJournal,
+    EventSignalJournal,
     FrozenEventExtractionBatch,
+    LegacyEventExtractionResult,
 )
 from capabilities.evidence import read_resolved_evidences
 
@@ -141,8 +143,16 @@ def _processed_ids() -> set[str]:
     processed: set[str] = set()
     for path in sorted((event_artifact_root() / "batches").glob("*/manifest.json")):
         try:
-            result = EventExtractionResult.model_validate_json(path.read_text(encoding="utf-8"))
-        except (OSError, ValidationError) as exc:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            version = payload.get("schema_version") if isinstance(payload, dict) else None
+            result: LegacyEventExtractionResult | EventExtractionResult
+            if version == "event_extraction_result.v1":
+                result = LegacyEventExtractionResult.model_validate(payload)
+            elif version == "event_extraction_result.v2":
+                result = EventExtractionResult.model_validate(payload)
+            else:
+                raise ValueError("unsupported completed Event extraction schema")
+        except (OSError, ValidationError, ValueError, TypeError) as exc:
             raise ValueError("completed Event extraction Artifact is invalid") from exc
         processed.update(result.evidence_ids)
     return processed
@@ -257,22 +267,42 @@ def load_draft(batch_id: str) -> EventExtractionDraft:
         raise ValueError("frozen Event extraction draft is invalid") from exc
 
 
-def load_journal(batch_id: str) -> EventSubmissionJournal:
-    path = pending_directory(batch_id) / "submissions.json"
+def load_publication_journal(batch_id: str) -> EventPublicationJournal:
+    path = pending_directory(batch_id) / "publications.json"
     if not path.exists():
-        return EventSubmissionJournal(batch_id=batch_id, submissions=[])
+        return EventPublicationJournal(batch_id=batch_id, publications=[])
     try:
-        journal = EventSubmissionJournal.model_validate_json(path.read_text(encoding="utf-8"))
+        journal = EventPublicationJournal.model_validate_json(path.read_text(encoding="utf-8"))
     except (OSError, ValidationError) as exc:
-        raise ValueError("Event submission journal is invalid") from exc
+        raise ValueError("Event publication journal is invalid") from exc
     if journal.batch_id != batch_id:
-        raise ValueError("Event submission journal batch identity conflict")
+        raise ValueError("Event publication journal batch identity conflict")
     return journal
 
 
-def write_journal(journal: EventSubmissionJournal) -> None:
+def write_publication_journal(journal: EventPublicationJournal) -> None:
     _atomic_write_json(
-        pending_directory(journal.batch_id) / "submissions.json",
+        pending_directory(journal.batch_id) / "publications.json",
+        journal.model_dump(mode="json"),
+    )
+
+
+def load_signal_journal(batch_id: str) -> EventSignalJournal:
+    path = pending_directory(batch_id) / "signals.json"
+    if not path.exists():
+        return EventSignalJournal(batch_id=batch_id, signals=[])
+    try:
+        journal = EventSignalJournal.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        raise ValueError("Event signal journal is invalid") from exc
+    if journal.batch_id != batch_id:
+        raise ValueError("Event signal journal batch identity conflict")
+    return journal
+
+
+def write_signal_journal(journal: EventSignalJournal) -> None:
+    _atomic_write_json(
+        pending_directory(journal.batch_id) / "signals.json",
         journal.model_dump(mode="json"),
     )
 

@@ -1,4 +1,4 @@
-"""Strict local and Reasoning Server contracts for Event extraction."""
+"""Strict contracts for the local Event extraction Workflow."""
 
 from datetime import UTC, datetime
 from typing import Annotated, Literal
@@ -104,7 +104,7 @@ class EventExtractionBusy(BaseModel):
 
 
 class EventSemantic(BaseModel):
-    """Event identity semantics accepted by Reasoning Server."""
+    """Normalized semantics used by the Event identity gate."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -184,7 +184,7 @@ class EventCandidate(BaseModel):
 
 
 class EventCandidateSubmission(BaseModel):
-    """Exact request body sent to Reasoning Server."""
+    """One Candidate and its authoritative Evidence support."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -226,52 +226,121 @@ class EventExtractionDraft(BaseModel):
     needs_review: list[EventDisposition]
 
 
-class EventCandidateAcceptance(BaseModel):
-    """Reliable acceptance returned by Reasoning Server."""
+class PublishedEvent(BaseModel):
+    """Formal Data Event available to Graphiti and Signal construction."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    submission_id: str = Field(min_length=1)
-    status: Literal["ACCEPTED"]
-    status_url: str = Field(min_length=1)
-    replayed: bool
+    id: str = Field(pattern=r"^EVT[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+    event: EventCandidate
 
 
-class EventSubmissionRecord(EventCandidateAcceptance):
-    """One durably journaled Candidate handoff."""
+class EventPublicationRecord(BaseModel):
+    """Durable outcome of local resolution, Data publication and Graphiti projection."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     candidate_key: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision: Literal["SAME_EVENT", "NEW_EVENT", "RELATED_BUT_DISTINCT", "NEEDS_REVIEW"]
+    publication_started: bool = False
+    event_id: str | None
+    event_created: bool
+    evidence_link_result: Literal["CREATED", "IGNORED", "NOT_ATTEMPTED"]
+    graph_projection_status: Literal["SUCCEEDED", "IGNORED", "NOT_ATTEMPTED"]
+    reason_codes: list[str]
+    matched_event_ids: list[str]
+    episode_uuid: str | None = None
+    published_event: PublishedEvent | None = None
 
 
-class EventSubmissionJournal(BaseModel):
-    """Crash-safe journal written after each accepted Candidate."""
+class EventPublicationJournal(BaseModel):
+    """Crash-safe journal written after each irreversible Event side effect."""
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["event_submission_journal.v1"] = "event_submission_journal.v1"
+    schema_version: Literal["event_publication_journal.v1"] = "event_publication_journal.v1"
     batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
-    submissions: list[EventSubmissionRecord]
+    publications: list[EventPublicationRecord]
 
     @model_validator(mode="after")
-    def require_unique_candidate_keys(self) -> "EventSubmissionJournal":
-        keys = [item.candidate_key for item in self.submissions]
+    def require_unique_candidate_keys(self) -> "EventPublicationJournal":
+        keys = [item.candidate_key for item in self.publications]
         if len(keys) != len(set(keys)):
-            raise ValueError("Event submission journal Candidate keys must be unique")
+            raise ValueError("Event publication journal Candidate keys must be unique")
         return self
 
 
-class EventExtractionResult(BaseModel):
-    """Terminal local handoff result for one frozen batch."""
+class EventSignalRecord(BaseModel):
+    """Terminal Signal construction outcome for one newly published Event."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal["event_extraction_result.v1"] = "event_extraction_result.v1"
+    event_id: str
+    status: Literal["SUCCEEDED", "NO_SIGNAL", "NO_SUPPORTED_ANCHOR", "NEEDS_REVIEW"]
+    signal_fact_uuids: list[str]
+    reason_codes: list[str] = Field(default_factory=list)
+
+
+class EventSignalJournal(BaseModel):
+    """Crash-safe Signal outcomes for a frozen Event batch."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["event_signal_journal.v1"] = "event_signal_journal.v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    signals: list[EventSignalRecord]
+
+    @model_validator(mode="after")
+    def require_unique_event_ids(self) -> "EventSignalJournal":
+        event_ids = [item.event_id for item in self.signals]
+        if len(event_ids) != len(set(event_ids)):
+            raise ValueError("Event signal journal Event IDs must be unique")
+        return self
+
+
+class LegacyEventExtractionResult(BaseModel):
+    """Read-only v1 manifest contract retained for already completed batches."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["event_extraction_result.v1"]
     batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence_ids: list[EvidenceID] = Field(min_length=1, max_length=50)
     candidate_count: int = Field(ge=0)
     no_event_count: int = Field(ge=0)
     needs_review_count: int = Field(ge=0)
     submission_ids: list[str]
+
+    @field_validator("evidence_ids")
+    @classmethod
+    def require_unique_evidence_ids(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("completed Event Evidence IDs must be unique")
+        return values
+
+
+class EventExtractionResult(BaseModel):
+    """Terminal local result for the complete three-stage Event Workflow."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["event_extraction_result.v2"] = "event_extraction_result.v2"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    evidence_ids: list[EvidenceID] = Field(min_length=1, max_length=50)
+    candidate_count: int = Field(ge=0)
+    no_event_count: int = Field(ge=0)
+    needs_review_count: int = Field(ge=0)
+    published_event_ids: list[str]
+    duplicate_event_count: int = Field(ge=0)
+    review_event_count: int = Field(ge=0)
+    signal_fact_uuids: list[str]
+
+    @field_validator("evidence_ids")
+    @classmethod
+    def require_unique_evidence_ids(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("completed Event Evidence IDs must be unique")
+        return values
 
 
 class EventExtractionIdle(BaseModel):

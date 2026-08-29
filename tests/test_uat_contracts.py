@@ -74,19 +74,29 @@ class UatIngressContractTest(TestCase):
         self.assertIn('if [ ! -s "$current_sha" ]; then', deploy)
         self.assertIn("python -m scripts.seed_schedules", deploy)
         self.assertIn(
-            "REASON_SERVICE_BASE_URL: ${REASON_SERVICE_BASE_URL:?REASON_SERVICE_BASE_URL is required}",
+            "NEO4J_URI: ${NEO4J_URI:?NEO4J_URI is required}",
             compose,
         )
         self.assertIn(
-            "REASON_SERVICE_TOKEN: ${REASON_SERVICE_TOKEN:?REASON_SERVICE_TOKEN is required}",
+            "NEO4J_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}",
+            compose,
+        )
+        self.assertNotIn("GRAPHITI_LLM_", compose)
+        self.assertIn(
+            "GRAPHITI_EMBEDDING_API_KEY: ${GRAPHITI_EMBEDDING_API_KEY:?GRAPHITI_EMBEDDING_API_KEY is required}",
             compose,
         )
         self.assertIn("EVENT_ARTIFACT_ROOT: /app/data/event", compose)
-        self.assertIn("REASON_SERVICE_TOKEN: ${{ secrets.REASON_SERVICE_TOKEN }}", workflow)
-        self.assertIn("REASON_SERVICE_BASE_URL: ${{ vars.REASON_SERVICE_BASE_URL }}", workflow)
+        self.assertIn("NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}", workflow)
+        self.assertIn("NEO4J_URI: ${{ vars.NEO4J_URI }}", workflow)
+        self.assertIn("GRAPHITI_EMBEDDING_API_KEY: ${{ secrets.GRAPHITI_EMBEDDING_API_KEY }}", workflow)
         self.assertIn("EVENT_EXTRACTION_BATCH_SIZE: ${{ vars.EVENT_EXTRACTION_BATCH_SIZE || '50' }}", workflow)
         self.assertIn('"EVENT_EXTRACTION_BATCH_SIZE",', workflow)
-        self.assertIn("internal-reasoning-server", preflight)
+        self.assertIn("driver.verify_connectivity()", preflight)
+        self.assertIn("-m sematica.graphiti.readiness", preflight)
+        self.assertIn("internal-neo4j-and-graphiti-embedding", preflight)
+        self.assertNotIn("REASON_SERVICE", compose)
+        self.assertNotIn("REASON_SERVICE", workflow)
         self.assertIn(
             'session.call_tool("get_agentos_config", {})', (REPOSITORY_ROOT / "scripts/smoke_uat.py").read_text()
         )

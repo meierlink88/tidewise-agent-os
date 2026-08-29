@@ -19,7 +19,7 @@ _RUNTIME_CONTRACT = """Event Extractor runtime contract version 1:
 - Partition every Evidence ID exactly once across candidates, no_event, and needs_review.
 - Merge only the same core actor, real-world action, direct object, stage, and compatible occurrence time.
 - Treat wording, source, and supplementary detail as non-identity differences.
-- Return one atomic Reasoning Server Event Candidate per real-world action.
+- Return one atomic Event Candidate per real-world action.
 - Never query history, call tools, publish, or invent a formal Evidence ID.
 """
 

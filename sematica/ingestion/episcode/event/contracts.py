@@ -111,38 +111,6 @@ class EventCandidateRequest(BaseModel):
         return values
 
 
-class EventCandidateAcceptance(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    submission_id: str
-    status: Literal["ACCEPTED"]
-    status_url: str
-    replayed: bool
-
-
-class DecisionSummary(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    reason_codes: list[str]
-    matched_event_ids: list[str]
-
-
-class EventCandidateStatus(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    submission_id: str
-    status: Literal[
-        "ACCEPTED", "RESOLVING", "PUBLISHING", "PROJECTING", "SUCCEEDED", "NEEDS_REVIEW", "FAILED_RETRYING", "FAILED"
-    ]
-    decision: Decision | None
-    event_id: str | None
-    event_created: bool
-    evidence_link_result: Literal["NOT_ATTEMPTED", "CREATED", "IGNORED"]
-    graph_projection_status: Literal["NOT_ATTEMPTED", "SUCCEEDED", "IGNORED"]
-    decision_summary: DecisionSummary | None
-    accepted_at: datetime
-    completed_at: datetime | None
-    attempt_count: int = Field(ge=0)
-    last_error: str | None
-
-
 class EventResolutionOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     decision: Decision

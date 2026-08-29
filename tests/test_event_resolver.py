@@ -1,0 +1,109 @@
+"""Behavior tests for the five-dimensional Event identity gate."""
+
+import unittest
+from unittest.mock import AsyncMock
+
+from sematica.ingestion.episcode.event.contracts import (
+    AtomicityAssessment,
+    EventCandidateDTO,
+    HistoricalEvent,
+    PairComparison,
+)
+from sematica.ingestion.episcode.event.resolver import EventResolver
+
+
+def _event(*, actor: str, action: str, object_: str, announced_at: str) -> EventCandidateDTO:
+    return EventCandidateDTO.model_validate(
+        {
+            "title": f"{actor}{action}{object_}",
+            "summary": f"{actor}{action}{object_}",
+            "semantic": {
+                "actors": [actor],
+                "action": action,
+                "objects": [object_],
+                "stage": "ANNOUNCED",
+                "jurisdictions": [],
+                "effective_at": None,
+                "time_precision": "DAY",
+            },
+            "modality": "FACT",
+            "occurred_at": None,
+            "announced_at": announced_at,
+        }
+    )
+
+
+class EventResolverTest(unittest.IsolatedAsyncioTestCase):
+    async def test_unrelated_uncertain_comparison_cannot_block_a_new_event(self) -> None:
+        candidate = _event(
+            actor="央行", action="发布货币政策报告", object_="适度宽松政策", announced_at="2026-08-29T00:00:00Z"
+        )
+        unrelated = HistoricalEvent(
+            id="EVT15bec7e3-998c-4434-aa5d-29712c4c67cf",
+            event=_event(
+                actor="某公司", action="签署销售合同", object_="交换芯片", announced_at="2026-08-16T00:00:00Z"
+            ),
+        )
+        published = HistoricalEvent(id="EVT5cb71bef-5b1d-4995-add0-7408eaa2be15", event=candidate)
+        history = AsyncMock()
+        history.retrieve.return_value = [unrelated]
+        comparator = AsyncMock()
+        comparator.assess_atomicity.return_value = AtomicityAssessment(
+            atomic=True,
+            reason_codes=["SINGLE_ACTION"],
+            summary="one action",
+        )
+        comparator.compare.return_value = PairComparison(
+            decision="NEEDS_REVIEW",
+            same_actor=False,
+            same_action=False,
+            same_object=False,
+            same_stage=True,
+            same_occurrence_time=False,
+            material_conflicts=[],
+            reason_codes=["DIFFERENT_ACTOR", "DIFFERENT_ACTION", "DIFFERENT_OBJECT"],
+            summary="unrelated",
+        )
+        publisher = AsyncMock()
+        publisher.publish.return_value = published
+        submission = type("Submission", (), {"event": candidate})()
+
+        result = await EventResolver(history, comparator, publisher).resolve(submission)
+
+        self.assertEqual(result.outcome.decision, "RELATED_BUT_DISTINCT")
+        self.assertEqual(result.outcome.event_id, published.id)
+        publisher.publish.assert_awaited_once()
+
+    async def test_started_publication_retries_the_idempotent_data_write_without_history(self) -> None:
+        candidate = _event(
+            actor="央行",
+            action="发布货币政策报告",
+            object_="适度宽松政策",
+            announced_at="2026-08-29T00:00:00Z",
+        )
+        published = HistoricalEvent(id="EVT5cb71bef-5b1d-4995-add0-7408eaa2be15", event=candidate)
+        history = AsyncMock()
+        comparator = AsyncMock()
+        publisher = AsyncMock()
+        publisher.publish.return_value = published
+        submission = type(
+            "Submission",
+            (),
+            {
+                "event": candidate,
+                "publication_started": True,
+                "pending_decision": "NEW_EVENT",
+            },
+        )()
+
+        result = await EventResolver(history, comparator, publisher).resolve(submission)
+
+        self.assertEqual(result.outcome.decision, "NEW_EVENT")
+        self.assertEqual(result.outcome.event_id, published.id)
+        publisher.publish.assert_awaited_once_with(submission)
+        history.retrieve.assert_not_awaited()
+        comparator.assess_atomicity.assert_not_awaited()
+
+
+if __name__ == "__main__":
+    unittest.main()

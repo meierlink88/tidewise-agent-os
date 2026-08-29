@@ -26,10 +26,11 @@ from capabilities.collection.functions import (
 )
 from capabilities.event import EventExtractionBatch, EventExtractionDraft, EventExtractionResult
 from capabilities.event.functions import (
+    construct_event_signals,
     event_batch_requires_analysis,
     freeze_event_analysis,
     prepare_event_batch,
-    submit_event_candidates,
+    publish_event_candidates,
 )
 from capabilities.evidence import (
     EvidenceAnalysisRequest,
@@ -104,7 +105,8 @@ registry = TidewiseRegistry(
         prepare_event_batch,
         event_batch_requires_analysis,
         freeze_event_analysis,
-        submit_event_candidates,
+        publish_event_candidates,
+        construct_event_signals,
     ],
     agents=[tidewise_assistant],
 )

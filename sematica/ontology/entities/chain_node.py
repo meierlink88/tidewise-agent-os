@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import Field, PositiveInt
+from pydantic import BaseModel, Field, PositiveInt
 
 from sematica.ontology.entities.base import TidewiseEntity, TidewiseEntityLink
 from sematica.ontology.enums import ContextualStage, ReviewStatus
@@ -76,7 +76,7 @@ class ChainNodeDependsOn(_ChainScopedTopologyLink):
 
 
 ENTITY_TYPES = {"ChainNode": ChainNode}
-EDGE_TYPES = {
+EDGE_TYPES: dict[str, type[BaseModel]] = {
     "ChainNodeBelongsToIndustryChain": ChainNodeBelongsToIndustryChain,
     "ChainNodeInputTo": ChainNodeInputTo,
     "ChainNodeIsComponentOf": ChainNodeIsComponentOf,

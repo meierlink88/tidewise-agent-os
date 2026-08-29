@@ -28,24 +28,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ENV_FILE = REPO_ROOT / ".runtime" / "graphiti.env"
 ENV_KEY = re.compile(r"^[A-Z][A-Z0-9_]*$")
 GRAPHITI_GROUP_ID = "neo4j"
-REASON_SERVICE_ENV_KEYS = frozenset(
-    {
-        "REASON_API_SERVICE_TOKEN",
-        "REASON_STATE_PATH",
-        "REASON_WORKER_POLL_INTERVAL_SECONDS",
-        "REASON_WORKER_BATCH_SIZE",
-        "TIDEWISE_DATA_BASE_URL",
-        "TIDEWISE_DATA_SERVICE_TOKEN",
-    }
-)
 
 
 class ProjectionError(RuntimeError):
     """A fail-closed projection configuration or data-contract error."""
 
 
-class GraphitiProviderConfig(BaseModel):
-    """Provider values shared by authoritative projections and Episode ingestion."""
+class GraphitiStorageConfig(BaseModel):
+    """Neo4j and embedding values required when AgentOS injects its governed model."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
@@ -54,9 +44,6 @@ class GraphitiProviderConfig(BaseModel):
     neo4j_bolt_port: int = Field(alias="NEO4J_BOLT_PORT", ge=1, le=65535)
     neo4j_http_port: int = Field(alias="NEO4J_HTTP_PORT", ge=1, le=65535)
     neo4j_uri_override: AnyUrl | None = Field(default=None, alias="NEO4J_URI")
-    graphiti_llm_api_key: SecretStr = Field(alias="GRAPHITI_LLM_API_KEY")
-    graphiti_llm_base_url: AnyHttpUrl = Field(alias="GRAPHITI_LLM_BASE_URL")
-    graphiti_llm_model: str = Field(alias="GRAPHITI_LLM_MODEL", min_length=1)
     graphiti_embedding_api_key: SecretStr = Field(alias="GRAPHITI_EMBEDDING_API_KEY")
     graphiti_embedding_base_url: AnyHttpUrl = Field(alias="GRAPHITI_EMBEDDING_BASE_URL")
     graphiti_embedding_model: str = Field(alias="GRAPHITI_EMBEDDING_MODEL", min_length=1)
@@ -64,7 +51,6 @@ class GraphitiProviderConfig(BaseModel):
 
     @field_validator(
         "neo4j_password",
-        "graphiti_llm_api_key",
         "graphiti_embedding_api_key",
     )
     @classmethod
@@ -78,6 +64,21 @@ class GraphitiProviderConfig(BaseModel):
         if self.neo4j_uri_override is not None:
             return str(self.neo4j_uri_override).rstrip("/")
         return f"bolt://127.0.0.1:{self.neo4j_bolt_port}"
+
+
+class GraphitiProviderConfig(GraphitiStorageConfig):
+    """Legacy standalone projection config with its own Graphiti LLM provider."""
+
+    graphiti_llm_api_key: SecretStr = Field(alias="GRAPHITI_LLM_API_KEY")
+    graphiti_llm_base_url: AnyHttpUrl = Field(alias="GRAPHITI_LLM_BASE_URL")
+    graphiti_llm_model: str = Field(alias="GRAPHITI_LLM_MODEL", min_length=1)
+
+    @field_validator("graphiti_llm_api_key")
+    @classmethod
+    def llm_secret_must_not_be_blank(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().strip():
+            raise ValueError("secret must not be blank")
+        return value
 
 
 class RuntimeConfig(GraphitiProviderConfig):
@@ -119,7 +120,7 @@ def load_config(path: Path | None = None) -> RuntimeConfig:
 
     values = _parse_env(path or DEFAULT_ENV_FILE)
     declared = {field.alias for field in RuntimeConfig.model_fields.values()}
-    unknown = set(values).difference(declared, REASON_SERVICE_ENV_KEYS)
+    unknown = set(values).difference(declared)
     if unknown:
         raise ProjectionError(f"invalid runtime fields: {', '.join(sorted(unknown))}")
     try:
@@ -134,12 +135,28 @@ def load_graphiti_config(path: Path | None = None) -> GraphitiProviderConfig:
 
     values = _parse_env(path or DEFAULT_ENV_FILE)
     declared = {field.alias for field in GraphitiProviderConfig.model_fields.values()}
-    known = {field.alias for field in RuntimeConfig.model_fields.values()}.union(REASON_SERVICE_ENV_KEYS)
+    known = {field.alias for field in RuntimeConfig.model_fields.values()}
     unknown = set(values).difference(known)
     if unknown:
         raise ProjectionError(f"invalid runtime fields: {', '.join(sorted(unknown))}")
     try:
         return GraphitiProviderConfig.model_validate({key: value for key, value in values.items() if key in declared})
+    except ValidationError as exc:
+        fields = sorted({str(item["loc"][0]) for item in exc.errors()})
+        raise ProjectionError(f"invalid runtime fields: {', '.join(fields)}") from None
+
+
+def load_graphiti_storage_config(path: Path | None = None) -> GraphitiStorageConfig:
+    """Load AgentOS Graphiti storage without requiring a second LLM configuration."""
+
+    values = _parse_env(path or DEFAULT_ENV_FILE)
+    declared = {field.alias for field in GraphitiStorageConfig.model_fields.values()}
+    known = {field.alias for field in RuntimeConfig.model_fields.values()}
+    unknown = set(values).difference(known)
+    if unknown:
+        raise ProjectionError(f"invalid runtime fields: {', '.join(sorted(unknown))}")
+    try:
+        return GraphitiStorageConfig.model_validate({key: value for key, value in values.items() if key in declared})
     except ValidationError as exc:
         fields = sorted({str(item["loc"][0]) for item in exc.errors()})
         raise ProjectionError(f"invalid runtime fields: {', '.join(fields)}") from None
@@ -178,27 +195,48 @@ class DeepSeekCompatibleClient(OpenAIGenericClient):
         return normalized
 
 
-def create_graphiti(config: GraphitiProviderConfig) -> Graphiti:
+class ProviderCompatibleOpenAIEmbedder(OpenAIEmbedder):
+    """Keep Graphiti batch embedding within the configured provider's limit."""
+
+    async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+        embeddings: list[list[float]] = []
+        for offset in range(0, len(input_data_list), 10):
+            embeddings.extend(await super().create_batch(input_data_list[offset : offset + 10]))
+        return embeddings
+
+
+def create_graphiti(
+    config: GraphitiStorageConfig,
+    *,
+    llm_client=None,
+    cross_encoder=None,
+) -> Graphiti:
     """Compose pinned Graphiti with the configured Neo4j, LLM and embedder providers."""
 
-    llm_config = LLMConfig(
-        api_key=config.graphiti_llm_api_key.get_secret_value(),
-        base_url=str(config.graphiti_llm_base_url).rstrip("/"),
-        model=config.graphiti_llm_model,
-        small_model=config.graphiti_llm_model,
-        temperature=0,
-        max_tokens=8192,
-    )
+    llm_config = None
+    if llm_client is None or cross_encoder is None:
+        if not isinstance(config, GraphitiProviderConfig):
+            raise ProjectionError("standalone Graphiti requires an explicit LLM provider configuration")
+        llm_config = LLMConfig(
+            api_key=config.graphiti_llm_api_key.get_secret_value(),
+            base_url=str(config.graphiti_llm_base_url).rstrip("/"),
+            model=config.graphiti_llm_model,
+            small_model=config.graphiti_llm_model,
+            temperature=0,
+            max_tokens=8192,
+        )
     return Graphiti(
         uri=config.neo4j_uri,
         user=config.neo4j_user,
         password=config.neo4j_password.get_secret_value(),
-        llm_client=DeepSeekCompatibleClient(
+        llm_client=llm_client
+        or DeepSeekCompatibleClient(
+            # The branch above guarantees the legacy standalone config exists.
             config=llm_config,
             max_tokens=8192,
             structured_output_mode="json_object",
         ),
-        embedder=OpenAIEmbedder(
+        embedder=ProviderCompatibleOpenAIEmbedder(
             OpenAIEmbedderConfig(
                 api_key=config.graphiti_embedding_api_key.get_secret_value(),
                 base_url=str(config.graphiti_embedding_base_url).rstrip("/"),
@@ -206,6 +244,6 @@ def create_graphiti(config: GraphitiProviderConfig) -> Graphiti:
                 embedding_dim=config.graphiti_embedding_dim,
             )
         ),
-        cross_encoder=OpenAIRerankerClient(config=llm_config),
+        cross_encoder=cross_encoder or OpenAIRerankerClient(config=llm_config),
         max_coroutines=2,
     )

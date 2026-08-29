@@ -13,7 +13,7 @@
 - Workflow：`deployment-check`，检查数据库、MCP、组件和调度状态。
 - Workflow：`raw-collection`，由 Agno Studio/PostgreSQL 管理编排版本，执行 Agent 采集、确定性去重和 manifest-last 发布。
 - Workflow：`evidence-extraction`，增量提取并发布 Atomic Evidence，回写正式 Evidence ID。
-- Workflow：`event-extraction`，冻结本地 Evidence 批次并逐 Candidate 交给 Reasoning Server。
+- Workflow：`event-extraction`，冻结本地 Evidence，发布去重后 Event，投影 Graphiti 并构建 Signal Fact。
 - API/MCP：`http://localhost:8000`、`http://localhost:8000/mcp`。
 
 ## 本地拓扑

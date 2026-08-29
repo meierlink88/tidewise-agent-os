@@ -50,7 +50,7 @@ manifest:
       - "处理所有尚未提取的 Raw Document"
 
   event-extraction:
-    description: "增量读取本地已映射 Evidence，冻结提炼结果，并逐 Candidate 可靠提交 Reasoning Server。"
+    description: "增量读取本地已映射 Evidence，提炼并去重 Event，投影 Graphiti 后构建变量信号。"
     quick_prompts:
       - "处理所有已发布且尚未提炼 Event 的 Evidence"
 

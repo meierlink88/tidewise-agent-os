@@ -298,39 +298,3 @@ class EventAnalysisOutcome(BaseModel):
     classification: EventClassification
     signal_fact_uuids: list[str]
     reason_codes: list[str]
-
-
-class EventAnalysisAcceptance(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    analysis_id: str
-    event_id: str
-    replayed: bool
-
-
-class EventAnalysisStatus(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    analysis_id: str
-    event_id: str
-    status: Literal[
-        "PENDING",
-        "CLASSIFYING",
-        "GROUNDING",
-        "EXTRACTING",
-        "VALIDATING",
-        "PROJECTING",
-        "SUCCEEDED",
-        "NO_SIGNAL",
-        "NO_SUPPORTED_ANCHOR",
-        "NEEDS_REVIEW",
-        "FAILED_RETRYING",
-        "FAILED",
-    ]
-    classification: EventClassification | None
-    signal_fact_uuids: list[str]
-    reason_codes: list[str]
-    attempt_count: int
-    accepted_at: datetime
-    completed_at: datetime | None
-    last_error: str | None

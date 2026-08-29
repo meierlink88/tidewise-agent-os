@@ -33,7 +33,7 @@ SNI and certificate verification without depending on unsupported public-IP NAT 
 - RDS has no public endpoint. Its allowlist/security group permits PostgreSQL `5432` only from the ECS private address.
 - The AgentOS role owns only `agent_os_uat`; `DB_SSLMODE=require` is mandatory.
 - Data Service has no host port. AgentOS calls `http://data:9011` through `tidewise-uat` using a service token.
-- AgentOS submits Event Candidates to the internal Reasoning Server URL through `tidewise-uat` using a separate bearer token.
+- AgentOS resolves Event Candidates locally and connects directly to the existing Graphiti Neo4j through `tidewise-uat`.
 - AgentOS runs as UID/GID `10002:10002`, read-only root filesystem, dropped Linux capabilities, and `no-new-privileges`.
 - Docker does not publish `9081` on a public interface. Existing Nginx `443` is the only public AgentOS ingress.
 - JWT authorization remains mandatory. MCP OAuth is enabled only with an HTTPS issuer.
@@ -107,7 +107,10 @@ Environment or repository Variables:
 - `RDS_HOST` — Huawei RDS private hostname
 - `MINIO_ENDPOINT` — MinIO S3 API URL reachable from containers, including `http://` or `https://`
 - `RAW_EVIDENCE_PUBLIC_BASE_URL` — browser-facing MinIO Base URL; deployment verifies a canary through it
-- `REASON_SERVICE_BASE_URL` — internal Reasoning Server URL reachable from `tidewise-uat`
+- `NEO4J_URI` — Bolt URI of the existing UAT Graphiti Neo4j reachable from `tidewise-uat`
+- `NEO4J_USER` — Neo4j runtime user; defaults to `neo4j`
+- `GRAPHITI_EMBEDDING_BASE_URL`, `GRAPHITI_EMBEDDING_MODEL`, `GRAPHITI_EMBEDDING_DIM`
+  — embedding provider configuration used by the in-process Graphiti SDK
 - `EVENT_EXTRACTION_BATCH_SIZE` — optional `1..50` Event extraction batch size; defaults to `50`
 - `CONTROL_PLANE_JWT_VERIFICATION_KEY` — PEM public key generated for the UAT OS connection in Agno Control Plane
 
@@ -115,7 +118,8 @@ Secrets:
 
 - `SWR_USERNAME`, `SWR_PASSWORD` — push credentials
 - `SWR_PULL_USERNAME`, `SWR_PULL_PASSWORD` — ECS read-only credentials
-- `AGENTOS_DB_PASSWORD`, `DEEPSEEK_API_KEY`, `DATA_SERVICE_TOKEN`, `REASON_SERVICE_TOKEN`
+- `AGENTOS_DB_PASSWORD`, `DEEPSEEK_API_KEY`, `DATA_SERVICE_TOKEN`, `NEO4J_PASSWORD`
+- `GRAPHITI_EMBEDDING_API_KEY`
 - `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`
 - `JWT_JWKS_BASE64`
 - optional `MCP_CONNECT_SECRET`, `AGENTOS_MCP_SIGNING_KEY`
