@@ -15,13 +15,14 @@ start a second HTTP service or own a separate worker process.
 
 ## Stage 1: extract Event Candidates
 
-AgentOS reads resolved Evidence from local published Artifacts. A deterministic Function claims at most one batch and
-freezes its exact Evidence input. The Event Extractor Agent groups Evidence that represents the same real-world action
-and returns one strict partition of:
+AgentOS reads only `data/event/evidence-queue/pending/*.json`; it never scans all historical Evidence manifests.
+Each queue item points to one immutable published Evidence Artifact. A deterministic Function claims at most one
+batch, moves its queue items to `processing/<batch-id>/`, resolves their formal content, and freezes the exact input.
+The Event Extractor Agent groups Evidence that represents the same real-world action and returns one strict partition
+of:
 
 - atomic Event Candidates;
-- `NO_EVENT` Evidence;
-- `NEEDS_REVIEW` Evidence.
+- `NO_EVENT` Evidence.
 
 Two Events have the same identity only when their actor, real-world action, direct object, event stage, and occurrence
 time identify the same occurrence. Wording, reporting source, and supplementary detail do not create a new Event.
@@ -33,7 +34,8 @@ For every frozen Candidate, deterministic code performs bounded historical recal
 applies the five-dimensional identity gate, and uses the configured semantic comparator only for plausible matches.
 
 - `SAME_EVENT` is terminal and performs no Data or graph write.
-- `NEEDS_REVIEW` is terminal and performs no Data or graph write.
+- `FAILED` is terminal when an atomic Candidate or historical identity cannot be established safely; it performs no
+  Data or graph write and moves the Candidate's Evidence to the failed queue.
 - `NEW_EVENT` and `RELATED_BUT_DISTINCT` publish to Data Service with a deterministic idempotency key.
 - A formal Data Event is projected through Graphiti's native `add_episode`, which extracts entities, `MENTIONS`, and
   ordinary Facts.
@@ -51,9 +53,9 @@ pipeline:
 2. retrieves existing graph anchors and Variables without creating ontology entities;
 3. selects only Variable/anchor pairs directly supported by the Event;
 4. generates direction, magnitude, impact timing, mechanism, assumptions, invalidation conditions, and confidence;
-5. independently reviews the proposal and writes accepted `SIGNAL_ON` Facts.
+5. validates the proposal deterministically and writes accepted `SIGNAL_ON` Facts.
 
-Duplicate or review Events never run Signal construction. Signal outcomes are journaled per Event so a retry skips
+Duplicate or failed Events never run Signal construction. Signal outcomes are journaled per Event so a retry skips
 completed analysis.
 
 ## Model and Graphiti integration
@@ -68,7 +70,10 @@ algorithms; they do not fork or modify Graphiti source code.
 
 ## Recovery and idempotency
 
-- One pending batch is resumed before new Evidence is selected.
+- Evidence publication creates one idempotent queue item before its own checkpoint advances.
+- One processing batch is resumed before new pending Evidence is selected.
+- Successful and `NO_EVENT` Evidence move to `completed`; unresolved Candidate Evidence moves to `failed`.
+- PostgreSQL stores Agno Workflow runs and schedules, but does not own this business queue state.
 - Batch input and Agent output are immutable after freezing.
 - A stable Candidate key is derived from the normalized Event and sorted Evidence IDs.
 - Data publication uses a stable submission identity.
@@ -83,7 +88,7 @@ A representative real-Evidence validation must demonstrate:
 - an atomic Event is extracted and published once;
 - one Event Episode is created with `episode_kind=EVENT` and its Data Event identity;
 - Graphiti creates ordinary Facts and `MENTIONS` from the Event;
-- supported Variable/anchor pairs create reviewed Signal Facts;
+- supported Variable/anchor pairs create validated Signal Facts;
 - replaying the exact same Event Candidate returns `SAME_EVENT` and leaves Episode, `MENTIONS`, ordinary Fact, and
   Signal Fact counts unchanged;
 - a crash after publication intent, Data publication, or an Episode write with a lost acknowledgement resumes the

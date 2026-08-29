@@ -17,7 +17,7 @@ from capabilities.event.functions import (
 from db import get_postgres_db
 
 EVENT_EXTRACTION_WORKFLOW_ID = "event-extraction"
-EVENT_EXTRACTION_CONTRACT_VERSION = 3
+EVENT_EXTRACTION_CONTRACT_VERSION = 5
 
 
 def _fail_fast_review() -> HumanReview:

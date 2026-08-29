@@ -34,6 +34,27 @@ def _event(*, actor: str, action: str, object_: str, announced_at: str) -> Event
 
 
 class EventResolverTest(unittest.IsolatedAsyncioTestCase):
+    async def test_non_atomic_candidate_fails_without_human_review_or_publication(self) -> None:
+        candidate = _event(
+            actor="央行", action="发布报告并降息", object_="货币政策", announced_at="2026-08-29T00:00:00Z"
+        )
+        history = AsyncMock()
+        comparator = AsyncMock()
+        comparator.assess_atomicity.return_value = AtomicityAssessment(
+            atomic=False,
+            reason_codes=["MULTIPLE_ACTIONS"],
+            summary="multiple actions",
+        )
+        publisher = AsyncMock()
+        submission = type("Submission", (), {"event": candidate})()
+
+        result = await EventResolver(history, comparator, publisher).resolve(submission)
+
+        self.assertEqual(result.outcome.decision, "FAILED")
+        self.assertEqual(result.outcome.reason_codes, ["MULTIPLE_ACTIONS"])
+        history.retrieve.assert_not_awaited()
+        publisher.publish.assert_not_awaited()
+
     async def test_unrelated_uncertain_comparison_cannot_block_a_new_event(self) -> None:
         candidate = _event(
             actor="央行", action="发布货币政策报告", object_="适度宽松政策", announced_at="2026-08-29T00:00:00Z"

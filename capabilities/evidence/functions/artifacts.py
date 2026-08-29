@@ -12,7 +12,16 @@ def read_resolved_evidences(manifest_path: str | Path) -> list[ResolvedEvidence]
     """Resolve one published Evidence Artifact without exposing its file-join contract."""
     artifact = load_published_evidence_artifact(manifest_path)
     if artifact.bindings is None:
-        raise ValueError("published Evidence Artifact has no formal identity bindings")
+        if len(artifact.identities.ids) != 1 or len(artifact.prepared.evidences) != 1:
+            raise ValueError("published Evidence Artifact has no formal identity bindings")
+        return [
+            ResolvedEvidence(
+                id=artifact.identities.ids[0],
+                raw_evidence_id=artifact.identities.raw_evidence_id,
+                summary=artifact.prepared.evidences[0].summary,
+                semantic=artifact.prepared.evidences[0].semantic,
+            )
+        ]
     return [
         ResolvedEvidence(
             id=binding.id,

@@ -93,7 +93,7 @@ class EventResolver:
         exact_ids = {item.id for item in history if same_occurrence(candidate, item.event)}
         if len(exact_ids) > 1:
             return EventResolutionOutcome(
-                decision="NEEDS_REVIEW",
+                decision="FAILED",
                 event_id=None,
                 event_created=False,
                 evidence_link_result="NOT_ATTEMPTED",
@@ -160,7 +160,7 @@ class EventResolver:
         if len(same_ids) > 1 or (same_ids and review_ids):
             matched = sorted(same_ids | review_ids)
             return EventResolutionOutcome(
-                decision="NEEDS_REVIEW",
+                decision="FAILED",
                 event_id=None,
                 event_created=False,
                 evidence_link_result="NOT_ATTEMPTED",
@@ -181,7 +181,7 @@ class EventResolver:
             )
         if review_ids:
             return EventResolutionOutcome(
-                decision="NEEDS_REVIEW",
+                decision="FAILED",
                 event_id=None,
                 event_created=False,
                 evidence_link_result="NOT_ATTEMPTED",
@@ -234,7 +234,7 @@ class EventResolver:
         if not atomicity.atomic:
             return EventResolution(
                 EventResolutionOutcome(
-                    decision="NEEDS_REVIEW",
+                    decision="FAILED",
                     event_id=None,
                     event_created=False,
                     evidence_link_result="NOT_ATTEMPTED",

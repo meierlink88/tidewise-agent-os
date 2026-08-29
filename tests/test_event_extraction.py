@@ -35,6 +35,7 @@ from capabilities.event.functions import (
     publish_event_candidates,
 )
 from capabilities.event.internal.local_runtime import LocalEventWorkflowRuntime
+from capabilities.event.internal.queue import enqueue_evidence_artifact, queue_counts
 from capabilities.evidence import ResolvedEvidence
 from sematica.ingestion.episcode.event.contracts import AtomicityAssessment, HistoricalEvent
 from sematica.ingestion.episcode.event.resolver import EventResolver
@@ -81,9 +82,9 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         root = Path(self.temporary.name)
         self.evidence_root = root / "evidence"
         self.event_root = root / "event"
-        manifest = self.evidence_root / "documents" / "published" / "manifest.json"
-        manifest.parent.mkdir(parents=True)
-        manifest.write_text("{}\n", encoding="utf-8")
+        self.evidence_manifest = self.evidence_root / "documents" / "published" / "manifest.json"
+        self.evidence_manifest.parent.mkdir(parents=True)
+        self.evidence_manifest.write_text("{}\n", encoding="utf-8")
         self.environment = patch.dict(
             os.environ,
             {
@@ -154,19 +155,22 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         return EventExtractionDraft(
             candidates=[{"event": base_event, "evidence_ids": ids} for ids in evidence_sets],
             no_event=[],
-            needs_review=[],
         )
 
     def _prepare(self) -> EventExtractionBatch:
         with patch(
-            "capabilities.event.internal.storage.read_resolved_evidences",
+            "capabilities.event.internal.queue.read_resolved_evidences",
             return_value=self._evidences(),
         ):
+            enqueue_evidence_artifact(
+                str(self.evidence_manifest),
+                [item.id for item in self._evidences()],
+            )
             output = prepare_event_batch(StepInput(input="处理未提炼 Evidence"))
         self.assertFalse(output.stop)
         return EventExtractionBatch.model_validate(output.content)
 
-    def _freeze(self, batch: EventExtractionBatch, draft: EventExtractionDraft) -> None:
+    def _freeze(self, batch: EventExtractionBatch, draft: EventExtractionDraft) -> EventExtractionDraft:
         output = freeze_event_analysis(
             StepInput(
                 previous_step_outputs={
@@ -175,7 +179,9 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
                 }
             )
         )
-        self.assertEqual(EventExtractionDraft.model_validate(output.content), draft)
+        self.assertEqual(EventExtractionBatch.model_validate(output.content), batch)
+        frozen = json.loads((self.event_root / ".pending" / batch.batch_id / "draft.json").read_text())
+        return EventExtractionDraft.model_validate(frozen)
 
     def test_freezes_one_grouped_candidate_and_partitions_every_evidence(self) -> None:
         batch = self._prepare()
@@ -192,21 +198,115 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         frozen = json.loads((self.event_root / ".pending" / batch.batch_id / "draft.json").read_text())
         self.assertEqual(frozen, draft.model_dump(mode="json"))
 
-    def test_rejects_agent_output_that_does_not_partition_the_frozen_batch(self) -> None:
+    def test_missing_agent_assignment_becomes_no_event(self) -> None:
         batch = self._prepare()
         draft = self._draft().model_copy(deep=True)
         draft.candidates[0].evidence_ids = [self.FIRST_ID]
 
-        with self.assertRaisesRegex(ValueError, "partition"):
-            self._freeze(batch, draft)
+        self._freeze(batch, draft)
+        frozen = EventExtractionDraft.model_validate_json(
+            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
+        )
+        self.assertEqual(frozen.candidates[0].evidence_ids, [self.FIRST_ID])
+        self.assertEqual(
+            [(item.evidence_id, item.reason) for item in frozen.no_event],
+            [(self.SECOND_ID, "unassigned_by_model")],
+        )
+
+    def test_candidate_wins_over_duplicate_no_event_assignment(self) -> None:
+        batch = self._prepare()
+        payload = self._draft().model_dump(mode="json")
+        payload["no_event"] = [
+            {"evidence_id": self.FIRST_ID, "reason": "duplicate_of_other_candidate"},
+            {"evidence_id": self.SECOND_ID, "reason": "duplicate_of_other_candidate"},
+        ]
+
+        self._freeze(batch, EventExtractionDraft.model_validate(payload))
+        frozen = EventExtractionDraft.model_validate_json(
+            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
+        )
+        self.assertEqual(frozen.candidates[0].evidence_ids, [self.FIRST_ID, self.SECOND_ID])
+        self.assertEqual(frozen.no_event, [])
+
+    def test_timeless_agent_candidate_becomes_no_event_without_failing_batch(self) -> None:
+        batch = self._prepare()
+        payload = self._draft().model_dump(mode="json")
+        payload["candidates"][0]["event"]["announced_at"] = None
+        output = freeze_event_analysis(
+            StepInput(
+                previous_step_outputs={
+                    "prepare-event-batch": StepOutput(content=batch),
+                    "analyze-event-batch": StepOutput(content=payload),
+                }
+            )
+        )
+
+        self.assertEqual(EventExtractionBatch.model_validate(output.content), batch)
+        frozen = EventExtractionDraft.model_validate_json(
+            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
+        )
+        self.assertEqual(frozen.candidates, [])
+        self.assertEqual(
+            [(item.evidence_id, item.reason) for item in frozen.no_event],
+            [(self.FIRST_ID, "missing_reliable_time"), (self.SECOND_ID, "missing_reliable_time")],
+        )
+
+    def test_incomplete_candidate_semantics_becomes_no_event_without_failing_batch(self) -> None:
+        batch = self._prepare()
+        payload = self._draft().model_dump(mode="json")
+        payload["candidates"][0]["event"]["semantic"]["actors"] = []
+        output = freeze_event_analysis(
+            StepInput(
+                previous_step_outputs={
+                    "prepare-event-batch": StepOutput(content=batch),
+                    "analyze-event-batch": StepOutput(content=payload),
+                }
+            )
+        )
+
+        self.assertEqual(EventExtractionBatch.model_validate(output.content), batch)
+        frozen = EventExtractionDraft.model_validate_json(
+            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
+        )
+        self.assertEqual(frozen.candidates, [])
+        self.assertEqual(
+            [(item.evidence_id, item.reason) for item in frozen.no_event],
+            [(self.FIRST_ID, "invalid_event_semantics"), (self.SECOND_ID, "invalid_event_semantics")],
+        )
+
+    def test_missing_nullable_semantic_fields_are_defaulted_without_losing_candidate(self) -> None:
+        batch = self._prepare()
+        payload = self._draft().model_dump(mode="json")
+        del payload["candidates"][0]["event"]["semantic"]["effective_at"]
+        del payload["candidates"][0]["event"]["semantic"]["time_precision"]
+        freeze_event_analysis(
+            StepInput(
+                previous_step_outputs={
+                    "prepare-event-batch": StepOutput(content=batch),
+                    "analyze-event-batch": StepOutput(content=payload),
+                }
+            )
+        )
+
+        frozen = EventExtractionDraft.model_validate_json(
+            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
+        )
+        self.assertEqual(len(frozen.candidates), 1)
+        self.assertIsNone(frozen.candidates[0].event.semantic.effective_at)
+        self.assertEqual(frozen.candidates[0].event.semantic.time_precision, "UNKNOWN")
+
+    def test_stage_output_can_carry_batch_to_downstream_steps(self) -> None:
+        batch = self._prepare()
+
+        self.assertTrue(
+            event_batch_requires_analysis(
+                StepInput(previous_step_outputs={"extract-event-candidates": StepOutput(content=batch)})
+            )
+        )
 
     def test_concurrent_schedule_callback_stops_without_reprocessing_pending_batch(self) -> None:
         batch = self._prepare()
-        with patch(
-            "capabilities.event.internal.storage.read_resolved_evidences",
-            return_value=self._evidences(),
-        ):
-            concurrent = prepare_event_batch(StepInput(input="concurrent"))
+        concurrent = prepare_event_batch(StepInput(input="concurrent"))
 
         self.assertTrue(concurrent.stop)
         self.assertEqual(concurrent.content.status, "busy")
@@ -224,53 +324,18 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(resumed.lease_id, batch.lease_id)
         self.assertTrue(resumed.needs_analysis)
 
-    def test_completed_v1_manifest_is_validated_and_remains_processed(self) -> None:
-        manifest = self.event_root / "batches" / ("a" * 64) / "manifest.json"
-        manifest.parent.mkdir(parents=True)
-        manifest.write_text(
-            json.dumps(
-                {
-                    "schema_version": "event_extraction_result.v1",
-                    "batch_id": "a" * 64,
-                    "evidence_ids": [self.FIRST_ID, self.SECOND_ID],
-                    "candidate_count": 1,
-                    "no_event_count": 0,
-                    "needs_review_count": 0,
-                    "submission_ids": ["legacy-submission"],
-                }
-            ),
-            encoding="utf-8",
-        )
+    def test_claim_moves_pending_evidence_to_processing(self) -> None:
+        batch = self._prepare()
 
-        with patch(
-            "capabilities.event.internal.storage.read_resolved_evidences",
-            return_value=self._evidences(),
-        ):
-            idle = prepare_event_batch(StepInput(input="again"))
+        self.assertEqual(queue_counts(), {"pending": 0, "processing": 2, "completed": 0, "failed": 0})
+        self.assertTrue((self.event_root / "evidence-queue" / "processing" / batch.batch_id).is_dir())
 
-        self.assertTrue(idle.stop)
+    def test_malformed_pending_queue_item_fails_closed(self) -> None:
+        pending = self.event_root / "evidence-queue" / "pending" / f"{self.FIRST_ID}.json"
+        pending.parent.mkdir(parents=True)
+        pending.write_text("{}\n", encoding="utf-8")
 
-    def test_malformed_completed_manifest_never_silently_marks_evidence_processed(self) -> None:
-        manifest = self.event_root / "batches" / ("a" * 64) / "manifest.json"
-        manifest.parent.mkdir(parents=True)
-        manifest.write_text(
-            json.dumps(
-                {
-                    "schema_version": "event_extraction_result.v2",
-                    "batch_id": "a" * 64,
-                    "evidence_ids": [self.FIRST_ID, self.FIRST_ID],
-                }
-            ),
-            encoding="utf-8",
-        )
-
-        with (
-            patch(
-                "capabilities.event.internal.storage.read_resolved_evidences",
-                return_value=self._evidences(),
-            ),
-            self.assertRaisesRegex(ValueError, "completed Event extraction Artifact is invalid"),
-        ):
+        with self.assertRaisesRegex(ValueError, "queue item is invalid"):
             prepare_event_batch(StepInput(input="again"))
 
     async def test_publishes_and_analyzes_each_candidate_then_does_not_select_evidence_again(self) -> None:
@@ -324,12 +389,9 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.runtime.publish.await_count, 2)
         self.assertEqual(self.runtime.construct_signals.await_count, 2)
 
-        with patch(
-            "capabilities.event.internal.storage.read_resolved_evidences",
-            return_value=self._evidences(),
-        ):
-            idle = prepare_event_batch(StepInput(input="again"))
+        idle = prepare_event_batch(StepInput(input="again"))
         self.assertTrue(idle.stop)
+        self.assertEqual(queue_counts(), {"pending": 0, "processing": 0, "completed": 2, "failed": 0})
 
     async def test_duplicate_event_is_terminal_without_projection_or_signal_analysis(self) -> None:
         batch = self._prepare()
@@ -372,6 +434,41 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tracer.counts, graph_counts_before)
         publisher.publish.assert_not_awaited()
         configure_event_workflow_runtime(self.runtime)
+
+    async def test_unresolved_candidate_moves_its_evidence_to_failed(self) -> None:
+        batch = self._prepare()
+        self._freeze(batch, self._draft())
+
+        async def fail_resolution(candidate, candidate_key, *, existing, checkpoint):
+            del candidate, existing, checkpoint
+            return EventPublicationRecord(
+                candidate_key=candidate_key,
+                decision="FAILED",
+                event_id=None,
+                event_created=False,
+                evidence_link_result="NOT_ATTEMPTED",
+                graph_projection_status="NOT_ATTEMPTED",
+                reason_codes=["EVENT_IDENTITY_UNCERTAIN"],
+                matched_event_ids=[],
+            )
+
+        self.runtime.publish.side_effect = fail_resolution
+        published = await publish_event_candidates(
+            StepInput(previous_step_outputs={"prepare-event-batch": StepOutput(content=batch)})
+        )
+        output = await construct_event_signals(
+            StepInput(
+                previous_step_outputs={
+                    "prepare-event-batch": StepOutput(content=batch),
+                    "publish-event-candidates": published,
+                }
+            )
+        )
+
+        result = EventExtractionResult.model_validate(output.content)
+        self.assertEqual(result.failed_candidate_count, 1)
+        self.assertEqual(result.failed_evidence_ids, [self.FIRST_ID, self.SECOND_ID])
+        self.assertEqual(queue_counts(), {"pending": 0, "processing": 0, "completed": 0, "failed": 2})
 
     async def test_publication_intent_is_checkpointed_before_the_data_write(self) -> None:
         runtime = object.__new__(LocalEventWorkflowRuntime)
@@ -548,12 +645,14 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(raised.exception.__suppress_context__)
         self.assertIn("error_types=ConnectionError", logs.output[0])
 
-    async def test_no_event_and_needs_review_are_terminal_without_posting(self) -> None:
+    async def test_no_event_is_terminal_without_posting(self) -> None:
         batch = self._prepare()
         draft = EventExtractionDraft(
             candidates=[],
-            no_event=[{"evidence_id": self.FIRST_ID, "reason": "not_a_real_world_action"}],
-            needs_review=[{"evidence_id": self.SECOND_ID, "reason": "compound_atomic_evidence"}],
+            no_event=[
+                {"evidence_id": self.FIRST_ID, "reason": "not_a_real_world_action"},
+                {"evidence_id": self.SECOND_ID, "reason": "compound_atomic_evidence"},
+            ],
         )
         self._freeze(batch, draft)
 
@@ -572,8 +671,8 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.runtime.publish.assert_not_awaited()
         result = EventExtractionResult.model_validate(output.content)
         self.assertEqual(result.candidate_count, 0)
-        self.assertEqual(result.no_event_count, 1)
-        self.assertEqual(result.needs_review_count, 1)
+        self.assertEqual(result.no_event_count, 2)
+        self.assertEqual(result.failed_candidate_count, 0)
 
     def test_agent_and_workflow_round_trip_with_conditional_analysis(self) -> None:
         agent = build_event_extractor_agent()
@@ -660,10 +759,14 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(agent, "arun", new=controlled_agent),
             patch(
-                "capabilities.event.internal.storage.read_resolved_evidences",
+                "capabilities.event.internal.queue.read_resolved_evidences",
                 return_value=self._evidences(),
             ),
         ):
+            enqueue_evidence_artifact(
+                str(self.evidence_manifest),
+                [item.id for item in self._evidences()],
+            )
             response = await workflow.arun(
                 input="处理所有已发布且尚未提炼 Event 的 Evidence",
                 run_id="run-event-workflow",

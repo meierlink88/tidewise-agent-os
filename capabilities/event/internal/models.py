@@ -28,6 +28,24 @@ class EventEvidenceInput(BaseModel):
     semantic: EvidenceSemantic
 
 
+class EventEvidenceQueueItem(BaseModel):
+    """One formal Evidence waiting for Event extraction."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["event_evidence_queue_item.v1"] = "event_evidence_queue_item.v1"
+    evidence_id: EvidenceID
+    artifact_manifest_path: str = Field(min_length=1)
+    created_at: datetime
+
+    @field_validator("created_at")
+    @classmethod
+    def require_utc_created_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value):
+            raise ValueError("Event Evidence queue created_at must use UTC")
+        return value
+
+
 class FrozenEventExtractionBatch(BaseModel):
     """Immutable semantic input selected before an Event extraction run."""
 
@@ -223,7 +241,6 @@ class EventExtractionDraft(BaseModel):
 
     candidates: list[EventCandidateSubmission]
     no_event: list[EventDisposition]
-    needs_review: list[EventDisposition]
 
 
 class PublishedEvent(BaseModel):
@@ -241,7 +258,7 @@ class EventPublicationRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     candidate_key: str = Field(pattern=r"^[0-9a-f]{64}$")
-    decision: Literal["SAME_EVENT", "NEW_EVENT", "RELATED_BUT_DISTINCT", "NEEDS_REVIEW"]
+    decision: Literal["SAME_EVENT", "NEW_EVENT", "RELATED_BUT_DISTINCT", "FAILED"]
     publication_started: bool = False
     event_id: str | None
     event_created: bool
@@ -276,7 +293,7 @@ class EventSignalRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     event_id: str
-    status: Literal["SUCCEEDED", "NO_SIGNAL", "NO_SUPPORTED_ANCHOR", "NEEDS_REVIEW"]
+    status: Literal["SUCCEEDED", "NO_SIGNAL", "NO_SUPPORTED_ANCHOR"]
     signal_fact_uuids: list[str]
     reason_codes: list[str] = Field(default_factory=list)
 
@@ -319,12 +336,12 @@ class LegacyEventExtractionResult(BaseModel):
         return values
 
 
-class EventExtractionResult(BaseModel):
-    """Terminal local result for the complete three-stage Event Workflow."""
+class LegacyEventExtractionResultV2(BaseModel):
+    """Read-only v2 manifest contract retained for compatibility."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal["event_extraction_result.v2"] = "event_extraction_result.v2"
+    schema_version: Literal["event_extraction_result.v2"]
     batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence_ids: list[EvidenceID] = Field(min_length=1, max_length=50)
     candidate_count: int = Field(ge=0)
@@ -335,12 +352,42 @@ class EventExtractionResult(BaseModel):
     review_event_count: int = Field(ge=0)
     signal_fact_uuids: list[str]
 
+
+class EventExtractionResult(BaseModel):
+    """Terminal local result for the complete three-stage Event Workflow."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["event_extraction_result.v3"] = "event_extraction_result.v3"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    evidence_ids: list[EvidenceID] = Field(min_length=1, max_length=50)
+    candidate_count: int = Field(ge=0)
+    no_event_count: int = Field(ge=0)
+    published_event_ids: list[str]
+    duplicate_event_count: int = Field(ge=0)
+    failed_candidate_count: int = Field(ge=0)
+    failed_evidence_ids: list[EvidenceID]
+    signal_fact_uuids: list[str]
+
     @field_validator("evidence_ids")
     @classmethod
     def require_unique_evidence_ids(cls, values: list[str]) -> list[str]:
         if len(values) != len(set(values)):
             raise ValueError("completed Event Evidence IDs must be unique")
         return values
+
+    @field_validator("failed_evidence_ids")
+    @classmethod
+    def require_unique_failed_evidence_ids(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("failed Event Evidence IDs must be unique")
+        return values
+
+    @model_validator(mode="after")
+    def failed_evidences_belong_to_batch(self) -> "EventExtractionResult":
+        if not set(self.failed_evidence_ids) <= set(self.evidence_ids):
+            raise ValueError("failed Event Evidence IDs must belong to the completed batch")
+        return self
 
 
 class EventExtractionIdle(BaseModel):

@@ -294,7 +294,7 @@ class SignalCritique(BaseModel):
 class EventAnalysisOutcome(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    status: Literal["SUCCEEDED", "NO_SIGNAL", "NO_SUPPORTED_ANCHOR", "NEEDS_REVIEW"]
+    status: Literal["SUCCEEDED", "NO_SIGNAL", "NO_SUPPORTED_ANCHOR"]
     classification: EventClassification
     signal_fact_uuids: list[str]
     reason_codes: list[str]

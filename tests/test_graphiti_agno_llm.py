@@ -15,6 +15,10 @@ class StructuredAnswer(BaseModel):
     answer: str
 
 
+class StructuredTags(BaseModel):
+    tags: list[str]
+
+
 class AgnoGraphitiLLMTest(unittest.IsolatedAsyncioTestCase):
     async def test_uses_registered_agno_model_for_graphiti_structured_output(self) -> None:
         model = AsyncMock()
@@ -31,7 +35,7 @@ class AgnoGraphitiLLMTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, {"answer": "ok"})
         call = model.aresponse.await_args
         self.assertEqual([item.role for item in call.kwargs["messages"]], ["system", "user", "system"])
-        self.assertIsNone(call.kwargs["response_format"])
+        self.assertEqual(call.kwargs["response_format"], {"type": "json_object"})
         self.assertIn("Return exactly one JSON object", call.kwargs["messages"][-1].content)
 
     async def test_rejects_unstructured_or_schema_invalid_model_output(self) -> None:
@@ -65,6 +69,24 @@ class AgnoGraphitiLLMTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, {"answer": "corrected"})
         correction = model.aresponse.await_args_list[1].kwargs["messages"][-1]
         self.assertIn("not a data instance", correction.content)
+
+    async def test_correction_names_only_safe_schema_validation_issues(self) -> None:
+        model = AsyncMock()
+        model.id = "registered-deepseek"
+        model.aresponse.side_effect = [
+            ModelResponse(content='{"tags":"macro"}'),
+            ModelResponse(content='{"tags":["macro"]}'),
+        ]
+        client = AgnoGraphitiLLM(model)
+
+        result = await client._generate_response(
+            [Message(role="user", content="question")],
+            response_model=StructuredTags,
+        )
+
+        self.assertEqual(result, {"tags": ["macro"]})
+        correction = model.aresponse.await_args_list[1].kwargs["messages"][-1]
+        self.assertIn("tags: list_type", correction.content)
 
     async def test_applies_the_lower_configured_or_per_call_token_cap_without_mutating_registry_model(self) -> None:
         class Model:
