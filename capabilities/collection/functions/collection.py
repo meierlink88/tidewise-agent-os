@@ -4,13 +4,14 @@ import asyncio
 import json
 import re
 import unicodedata
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
 from agno.run import RunContext
 from agno.workflow import StepInput, StepOutput
 
-from capabilities.collection.internal.acquisition import execute_fetch
+from capabilities.collection.internal.acquisition import execute_channel_group
 from capabilities.collection.internal.artifacts import build_artifact_set, publish_artifact_set
 from capabilities.collection.internal.buffer import read_tool_batches, write_title_curation
 from capabilities.collection.internal.channels.models import ChannelType
@@ -45,23 +46,14 @@ def request_from_input(value: Any) -> CollectionRequest:
 
 
 async def prepare_collection_context(step_input: StepInput, run_context: RunContext) -> StepOutput:
-    """Validate input and freeze one channel/cutoff snapshot before Agent planning."""
+    """Validate input and expose only the collection objective to Agent planning."""
+    del run_context
     request = request_from_input(step_input.input)
-    channels = await asyncio.to_thread(load_active_source_snapshot)
-    dependencies = dict(run_context.dependencies or {})
-    dependencies.update(
-        {
-            "collector_objective": request.objective,
-            "collector_cutoff": datetime.now(UTC).isoformat(),
-            "collection_channel_snapshot": tuple(item.model_copy(deep=True) for item in channels),
-        }
-    )
-    run_context.dependencies = dependencies
     return StepOutput(content=request.objective)
 
 
 async def execute_collection_channels_step(step_input: StepInput, run_context: RunContext) -> StepOutput:
-    """Execute all three acquisition façades exactly once from the frozen run snapshot."""
+    """Freeze one acquisition context and execute all three channel groups exactly once."""
     output = step_input.get_step_output("plan-collection-query")
     content = output.content if output is not None else step_input.get_last_step_content()
     if content is None:
@@ -72,16 +64,28 @@ async def execute_collection_channels_step(step_input: StepInput, run_context: R
         plan = CollectionQueryPlan.model_validate_json(content)
     else:
         plan = CollectionQueryPlan.model_validate(content)
+
+    channels = await asyncio.to_thread(load_active_source_snapshot)
+    execution_dependencies = dict(run_context.dependencies or {})
+    execution_dependencies.update(
+        {
+            "collector_cutoff": datetime.now(UTC).isoformat(),
+            "collection_channel_snapshot": tuple(item.model_copy(deep=True) for item in channels),
+        }
+    )
+    acquisition_context = replace(run_context, dependencies=execution_dependencies)
     responses = await asyncio.gather(
-        execute_fetch("web_fetch", ChannelType.WEB_SEARCH, plan.query, run_context, plan.lookback_hours),
-        execute_fetch("api_fetch", ChannelType.API, plan.query, run_context, plan.lookback_hours),
-        execute_fetch("rss_fetch", ChannelType.RSS, plan.query, run_context, plan.lookback_hours),
+        execute_channel_group(
+            "web_search", ChannelType.WEB_SEARCH, plan.query, acquisition_context, plan.lookback_hours
+        ),
+        execute_channel_group("api", ChannelType.API, plan.query, acquisition_context, plan.lookback_hours),
+        execute_channel_group("rss", ChannelType.RSS, plan.query, acquisition_context, plan.lookback_hours),
     )
     receipts: list[FetchReceipt] = []
     for response in responses:
         decoded = json.loads(response)
         if "error" in decoded:
-            raise ValueError("collection Tool façade rejected the deterministic request")
+            raise ValueError("collection channel group rejected the deterministic request")
         receipts.append(FetchReceipt.model_validate(decoded))
     return StepOutput(
         content={"plan": plan.model_dump(mode="json"), "receipts": [item.model_dump(mode="json") for item in receipts]}
@@ -140,7 +144,7 @@ async def validate_title_curation(step_input: StepInput, run_context: RunContext
 
 
 async def build_artifact_step(step_input: StepInput, run_context: RunContext) -> StepOutput:
-    """Build the complete pending Artifact set from run-scoped Tool Batches."""
+    """Build the complete pending Artifact set from run-scoped acquisition batches."""
     request = request_from_input(step_input.input)
     prepared = await asyncio.to_thread(build_artifact_set, run_context.run_id, request)
     return StepOutput(content=prepared)

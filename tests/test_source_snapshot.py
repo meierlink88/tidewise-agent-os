@@ -364,7 +364,7 @@ class SourceSnapshotWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.thread.join(timeout=2)
         self.temporary.cleanup()
 
-    async def test_raw_collection_preparation_freezes_exactly_one_remote_snapshot_before_planning(self) -> None:
+    async def test_raw_collection_acquisition_loads_one_snapshot_without_cross_step_state(self) -> None:
         class EmptyAdapter:
             async def fetch(self, channel: object, request: object) -> list[object]:
                 del channel, request
@@ -392,7 +392,7 @@ class SourceSnapshotWorkflowTest(unittest.IsolatedAsyncioTestCase):
             },
         ):
             output = await prepare_collection_context(step_input, context)
-            _SnapshotHandler.body = b"not-a-snapshot"
+            self.assertEqual(len(_SnapshotHandler.requests), 0)
             execution = await execute_collection_channels_step(
                 StepInput(
                     previous_step_outputs={
@@ -410,9 +410,8 @@ class SourceSnapshotWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(dependencies)
         assert dependencies is not None
         self.assertEqual(dependencies["kept"], "value")
-        snapshot = dependencies["collection_channel_snapshot"]
-        self.assertIsInstance(snapshot, tuple)
-        self.assertEqual([channel.code for channel in snapshot], ["cls_telegraph", "bocha"])
+        self.assertNotIn("collection_channel_snapshot", dependencies)
+        self.assertNotIn("collector_cutoff", dependencies)
         execution_content = cast(dict[str, object], execution.content)
         receipts = cast(list[dict[str, object]], execution_content["receipts"])
         self.assertEqual([receipt["outcome"] for receipt in receipts], ["succeeded", "succeeded", "no_channels"])

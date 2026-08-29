@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 from agno.run import RunContext
 
+from capabilities.collection.internal.acquisition import execute_channel_group
 from capabilities.collection.internal.adapters.base import FetchRequest
 from capabilities.collection.internal.adapters.registry import ADAPTERS
 from capabilities.collection.internal.adapters.rss import GenericRssAdapter
@@ -22,7 +23,6 @@ from capabilities.collection.internal.channels.models import (
     OwnershipType,
 )
 from capabilities.collection.internal.models import Candidate, FetchReceipt, SourceLevel
-from capabilities.collection.tools import api_fetch, rss_fetch, web_fetch
 
 
 class _Catalog:
@@ -96,7 +96,7 @@ def _channel(
     )
 
 
-class CollectionChannelToolTest(unittest.IsolatedAsyncioTestCase):
+class CollectionChannelFunctionTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.environment = patch.dict(
@@ -128,10 +128,16 @@ class CollectionChannelToolTest(unittest.IsolatedAsyncioTestCase):
         channel = _channel("bocha", ChannelType.WEB_SEARCH, "bocha")
         adapter = _Adapter()
 
-        response = await web_fetch("中国宏观经济", self._context([channel], {"bocha": adapter}, "run-web"), 48)
+        response = await execute_channel_group(
+            "web_search",
+            ChannelType.WEB_SEARCH,
+            "中国宏观经济",
+            self._context([channel], {"bocha": adapter}, "run-web"),
+            48,
+        )
 
         receipt = FetchReceipt.model_validate_json(response)
-        self.assertEqual(receipt.tool, "web_fetch")
+        self.assertEqual(receipt.channel_group, "web_search")
         self.assertEqual(receipt.outcome, "succeeded")
         self.assertEqual(receipt.requested_after, datetime(2026, 8, 10, 10, tzinfo=UTC))
         self.assertEqual(receipt.requested_before, datetime(2026, 8, 12, 10, tzinfo=UTC))
@@ -145,16 +151,24 @@ class CollectionChannelToolTest(unittest.IsolatedAsyncioTestCase):
             _channel("tavily", ChannelType.WEB_SEARCH, "tavily"),
         ]
 
-        response = await web_fetch(
+        response = await execute_channel_group(
+            "web_search",
+            ChannelType.WEB_SEARCH,
             "中国宏观经济",
             self._context(channels, {"bocha": _Adapter(), "tavily": _Adapter()}, "run-invalid-web"),
             48,
         )
 
-        self.assertEqual(json.loads(response), {"tool": "web_fetch", "error": "invalid_channel_catalog"})
+        self.assertEqual(json.loads(response), {"channel_group": "web_search", "error": "invalid_channel_catalog"})
 
     async def test_fetch_returns_no_channels_without_writing_a_batch(self) -> None:
-        response = await rss_fetch("政治经济", self._context([], {}, "run-no-rss"), 48)
+        response = await execute_channel_group(
+            "rss",
+            ChannelType.RSS,
+            "政治经济",
+            self._context([], {}, "run-no-rss"),
+            48,
+        )
 
         receipt = FetchReceipt.model_validate_json(response)
         self.assertEqual(receipt.outcome, "no_channels")
@@ -174,7 +188,7 @@ class CollectionChannelToolTest(unittest.IsolatedAsyncioTestCase):
         )
 
         started = asyncio.get_running_loop().time()
-        response = await api_fetch("产业政策", context, 24)
+        response = await execute_channel_group("api", ChannelType.API, "产业政策", context, 24)
         elapsed = asyncio.get_running_loop().time() - started
 
         receipt = FetchReceipt.model_validate_json(response)
@@ -198,7 +212,7 @@ class CollectionChannelToolTest(unittest.IsolatedAsyncioTestCase):
 
         with patch.dict(os.environ, {"COLLECTOR_CHANNEL_CONCURRENCY": "1"}):
             started = asyncio.get_running_loop().time()
-            response = await api_fetch("产业政策", context, 48)
+            response = await execute_channel_group("api", ChannelType.API, "产业政策", context, 48)
             elapsed = asyncio.get_running_loop().time() - started
 
         self.assertEqual(FetchReceipt.model_validate_json(response).outcome, "succeeded")
@@ -221,7 +235,9 @@ class CollectionChannelToolTest(unittest.IsolatedAsyncioTestCase):
         ]
         adapter = _Adapter()
 
-        response = await rss_fetch(
+        response = await execute_channel_group(
+            "rss",
+            ChannelType.RSS,
             "政治经济",
             self._context(channels, {"generic_rss": adapter}, "run-rss"),
             48,

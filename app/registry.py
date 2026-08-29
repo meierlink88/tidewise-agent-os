@@ -24,7 +24,6 @@ from capabilities.collection.functions import (
     publish_collection_step,
     validate_title_curation,
 )
-from capabilities.collection.tools import COLLECTION_TOOLS
 from capabilities.event import EventExtractionBatch, EventExtractionDraft, EventExtractionResult
 from capabilities.event.functions import (
     event_batch_requires_analysis,
@@ -73,7 +72,6 @@ class TidewiseRegistry(Registry):
 
 registry = TidewiseRegistry(
     name="Tidewise AgentOS Registry",
-    tools=COLLECTION_TOOLS,
     models=[default_model()],
     dbs=[get_postgres_db()],
     schemas=[

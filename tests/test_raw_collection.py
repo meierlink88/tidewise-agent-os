@@ -19,6 +19,7 @@ from pydantic import ValidationError
 
 from agents.raw_collector import LoadedCollectorAgent, load_collector_agent
 from agents.title_curator import LoadedTitleCuratorAgent, ensure_title_curator_agent, load_title_curator_agent
+from app.registry import registry
 from capabilities.collection.functions import (
     build_artifact_step,
     execute_collection_channels_step,
@@ -45,7 +46,6 @@ from capabilities.collection.internal.models import (
     TitleCurationDraft,
     TitleCurationRequest,
 )
-from capabilities.collection.tools import COLLECTION_TOOLS
 from workflows.raw_collection import RAW_COLLECTION_CONTRACT_VERSION, _seed_workflow, ensure_raw_collection_workflow
 
 
@@ -102,7 +102,7 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValidationError):
             request_from_input('{"objective":"采集最近6小时A股政策","time_window_hours":6}')
 
-    def test_network_tools_and_workflow_executors_are_async(self) -> None:
+    def test_collection_acquisition_is_only_exposed_as_workflow_functions(self) -> None:
         workflow_executors = [
             prepare_collection_context,
             execute_collection_channels_step,
@@ -111,11 +111,11 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             build_artifact_step,
             publish_collection_step,
         ]
-        self.assertEqual([tool.__name__ for tool in COLLECTION_TOOLS], ["web_fetch", "api_fetch", "rss_fetch"])
-        self.assertTrue(all(inspect.iscoroutinefunction(tool) for tool in COLLECTION_TOOLS))
+        registered_tool_names = {getattr(tool, "__name__", "") for tool in registry.tools or []}
+        self.assertTrue({"web_fetch", "api_fetch", "rss_fetch"}.isdisjoint(registered_tool_names))
         self.assertTrue(all(inspect.iscoroutinefunction(executor) for executor in workflow_executors))
 
-    async def test_workflow_function_executes_all_facades_with_one_frozen_window(self) -> None:
+    async def test_workflow_function_executes_all_channel_groups_with_one_frozen_window(self) -> None:
         now = datetime(2026, 8, 12, 10, tzinfo=UTC)
         channels = [
             CollectionChannel(
@@ -177,8 +177,6 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
                 "collector_agent_component_id": "raw-collector",
                 "collector_agent_config_version": 7,
                 "collector_instructions_sha256": "a" * 64,
-                "collector_cutoff": now.isoformat(),
-                "collection_channel_snapshot": tuple(channels),
                 "collection_adapter_registry": {"bocha": Adapter(), "cls": Adapter()},
             },
         )
@@ -188,7 +186,15 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             }
         )
 
-        output = await execute_collection_channels_step(step_input, context)
+        with (
+            patch(
+                "capabilities.collection.functions.collection.load_active_source_snapshot",
+                return_value=tuple(channels),
+            ),
+            patch("capabilities.collection.functions.collection.datetime", wraps=datetime) as clock,
+        ):
+            clock.now.return_value = now
+            output = await execute_collection_channels_step(step_input, context)
 
         content = cast(dict[str, object], output.content)
         receipts = cast(list[dict[str, object]], content["receipts"])

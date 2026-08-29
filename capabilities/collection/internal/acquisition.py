@@ -1,4 +1,4 @@
-"""Shared deterministic acquisition core used by Workflow Functions and Tool façades."""
+"""Shared deterministic acquisition core used only by Workflow Functions."""
 
 import asyncio
 import json
@@ -6,7 +6,7 @@ import os
 import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Literal, cast
 
 from agno.run import RunContext
 
@@ -125,8 +125,8 @@ async def _persist_candidates_async(
     return await asyncio.to_thread(_persist_candidates, connector, request, run_context, candidates)
 
 
-async def execute_fetch(
-    tool: str,
+async def execute_channel_group(
+    channel_group: Literal["web_search", "api", "rss"],
     channel_type: ChannelType,
     query: str,
     run_context: RunContext,
@@ -137,10 +137,10 @@ async def execute_fetch(
         request = _request(query, lookback_hours, run_context)
         channels = await asyncio.to_thread(_catalog(run_context).list_enabled, channel_type)
         if channel_type == ChannelType.WEB_SEARCH and len(channels) > 1:
-            return json.dumps({"tool": tool, "error": "invalid_channel_catalog"})
+            return json.dumps({"channel_group": channel_group, "error": "invalid_channel_catalog"})
         if not channels:
             return FetchReceipt(
-                tool=tool,
+                channel_group=channel_group,
                 outcome="no_channels",
                 query=request.query,
                 requested_after=request.published_after,
@@ -177,7 +177,7 @@ async def execute_fetch(
         successes = sum(item.outcome == "succeeded" for item in receipts)
         outcome = "succeeded" if successes == len(receipts) else "failed" if successes == 0 else "partial"
         return FetchReceipt(
-            tool=tool,
+            channel_group=channel_group,
             outcome=outcome,
             query=request.query,
             requested_after=request.published_after,
@@ -185,4 +185,4 @@ async def execute_fetch(
             channels=receipts,
         ).model_dump_json()
     except (TypeError, ValueError):
-        return json.dumps({"tool": tool, "error": "invalid_request"})
+        return json.dumps({"channel_group": channel_group, "error": "invalid_request"})

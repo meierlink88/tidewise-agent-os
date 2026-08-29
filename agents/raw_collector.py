@@ -13,15 +13,15 @@ from capabilities.collection import CollectionQueryPlan
 from db import get_postgres_db
 
 COLLECTOR_AGENT_ID = "raw-collector"
-COLLECTOR_CONTRACT_VERSION = 9
+COLLECTOR_CONTRACT_VERSION = 10
 COLLECTOR_AGENT_NAME = "Collection Query Planner"
 _SEED_PROMPT = Path(__file__).with_name("raw_collector.seed.md")
-_RUNTIME_CONTRACT = """Raw Collection runtime contract version 9:
-- You are a semantic query planner and must not call acquisition Tools.
+_RUNTIME_CONTRACT = """Raw Collection runtime contract version 10:
+- You are a semantic query planner and do not execute acquisition channels.
 - Return exactly one CollectionQueryPlan with a focused Chinese query and integer lookback_hours.
 - Infer lookback_hours from the user's relative temporal requirement; default to 48 when no duration is stated.
 - Do not calculate absolute published_after or published_before timestamps.
-- The deterministic Workflow owns channel snapshots, all three acquisition façades, failure handling and publication.
+- The deterministic Workflow owns the channel snapshot, all three acquisition groups, failure handling and publication.
 """
 
 

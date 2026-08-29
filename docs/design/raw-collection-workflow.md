@@ -2,17 +2,18 @@
 
 ## Outcome
 
-Raw Collection uses an Agent for query planning and three stable Tool façades for acquisition, then deterministic
+Raw Collection uses an Agent for query planning and one deterministic Function for acquisition, then deterministic
 Workflow Functions build and publish immutable Artifacts:
 
 ```text
 CollectionRequest
-  -> prepare-collection-context      -> one complete frozen Data Source Snapshot
+  -> prepare-collection-context      -> validated objective only
   -> plan-collection-query           -> CollectionQueryPlan only
   -> execute-collection-channels
-       -> web_fetch implementation   -> one enabled Web Search channel
-       -> api_fetch implementation   -> all enabled API channels, bounded concurrent
-       -> rss_fetch implementation   -> all enabled RSS/Atom channels, bounded concurrent
+       -> freeze Source Snapshot and UTC cutoff
+       -> Web Search group           -> one enabled Web Search channel
+       -> API group                  -> all enabled API channels, bounded concurrent
+       -> RSS group                  -> all enabled RSS/Atom channels, bounded concurrent
   -> prepare-title-curation          -> candidate_id and title only
   -> curate-collection-titles        -> candidate_id and strict is_relevant boolean
   -> validate-title-curation         -> exact Candidate coverage
@@ -21,8 +22,9 @@ CollectionRequest
   -> CollectionResult
 ```
 
-The Workflow freezes an immutable enabled-channel snapshot before the Agent plans the query. Complete provider results
-go directly to the run-scoped Collection Buffer; the model never receives or reconstructs source content.
+The acquisition Function freezes one immutable enabled-channel snapshot and UTC cutoff after the Agent plans the query.
+Complete provider results go directly to the run-scoped Collection Buffer; the model never receives or reconstructs
+source content.
 
 Title Curator is a conservative binary pre-filter. Clearly relevant titles receive `is_relevant=true`; clearly
 irrelevant titles receive `false`; title-only ambiguity is retained as `true` so potentially important source material
@@ -30,7 +32,8 @@ is not discarded before full-text Evidence Extraction. The Agent does not genera
 
 ## Source Snapshot
 
-Data Service is the only Source management and persistence authority. Before every Raw Collection run, AgentOS calls
+Data Service is the only Source management and persistence authority. During every Raw Collection acquisition Step,
+AgentOS calls
 the versioned `GET /api/data/v1/source-snapshot` contract exactly once with its service token. The complete active
 Snapshot contains:
 
@@ -46,7 +49,7 @@ Snapshot contains:
 
 Priority 1 is highest. The consumer requires an active-only, unique and stably ordered complete Snapshot with at most
 one Web Search Source. Empty Snapshot is valid. AgentOS maps it onto the existing immutable Collection Channel execution
-model and freezes it before planning. Fetch, authorization, timeout, size or integrity failure aborts preparation;
+model and freezes it before channel execution. Fetch, authorization, timeout, size or integrity failure aborts acquisition;
 AgentOS never truncates, drops an item, uses a partial response, caches a previous response or falls back to its legacy
 table. The legacy table is retained only for rollback to an older image and is not read or mutated by current code.
 
@@ -72,9 +75,8 @@ contains a matching domain; otherwise they inherit the channel default.
 
 ## Time contract
 
-The Agent derives one integer `lookback_hours` from the objective, defaulting to 48. The Workflow captures one UTC
-`collector_cutoff` before model execution. The deterministic acquisition Function invokes all three shared
-implementations with the same plan and derives:
+The Agent derives one integer `lookback_hours` from the objective, defaulting to 48. The deterministic acquisition
+Function captures one UTC `collector_cutoff`, invokes all three channel groups with the same plan and derives:
 
 ```text
 published_before = collector_cutoff
@@ -100,9 +102,9 @@ their protocol supports it; deterministic Artifact construction always enforces 
 ## Invariants
 
 - The Agno Workflow Run ID is the only collection identity.
-- Every acquisition façade in one run uses the same frozen channel snapshot, cutoff and requested lookback.
-- `web_fetch` fails closed if the frozen Snapshot exposes more than one enabled Web Search Source.
-- `api_fetch` and `rss_fetch` execute enabled channels in stable priority/code order with bounded concurrency.
+- Every acquisition group in one run uses the same frozen channel snapshot, cutoff and requested lookback.
+- The Web Search group fails closed if the frozen Snapshot exposes more than one enabled Web Search Source.
+- The API and RSS groups execute enabled channels in stable priority/code order with bounded concurrency.
 - One provider failure does not discard successful sibling results; raw provider errors and keys never enter receipts or
   Artifacts.
 - Every Candidate preserves channel code, query, URL, original publisher, effective source level, direct content,
@@ -123,10 +125,10 @@ their protocol supports it; deterministic Artifact construction always enforces 
 
 ## Failure semantics
 
-- Missing provenance, cutoff, invalid query, or invalid lookback produces a stable safe Tool error and no write.
-- Source Snapshot fetch, authorization, timeout, size or integrity failure aborts the Workflow before planning.
+- Missing provenance, cutoff, invalid query, or invalid lookback produces a stable safe Function error and no write.
+- Source Snapshot fetch, authorization, timeout, size or integrity failure aborts the Workflow during acquisition.
 - Missing Adapter, provider timeout, invalid response, or request failure is isolated to that channel.
-- A façade with no enabled channels returns `no_channels`; sibling façades still execute.
+- An acquisition group with no enabled channels returns `no_channels`; sibling groups still execute.
 - If no Tool Batch exists after deterministic acquisition, Artifact construction fails rather than publishing false success.
 - Build or MinIO failure leaves the final manifest and manifest index unpublished; publication is idempotent for
   immutable matching local files and MinIO objects.
@@ -135,12 +137,12 @@ their protocol supports it; deterministic Artifact construction always enforces 
 
 ## Acceptance seam
 
-Acceptance is observed at the three Tool interfaces and the complete Workflow:
+Acceptance is observed at the acquisition Function interface and the complete Workflow:
 
 - the complete Data Source Snapshot selects the expected channels once per run;
 - Adapter payloads normalize to Candidate contracts;
 - concurrent fan-out isolates partial failure;
 - all Tool Batches share one exact interval;
 - Artifact metadata carries channel and source level;
-- Registry exposes only `web_fetch`, `api_fetch`, and `rss_fetch`;
+- Registry exposes no collection acquisition Tools;
 - REST, MCP, health and the full validation suite remain green.

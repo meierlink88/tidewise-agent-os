@@ -19,7 +19,7 @@ from capabilities.collection.functions import (
 from db import get_postgres_db
 
 RAW_COLLECTION_WORKFLOW_ID = "raw-collection"
-RAW_COLLECTION_CONTRACT_VERSION = 12
+RAW_COLLECTION_CONTRACT_VERSION = 13
 
 
 def _fail_fast_review() -> HumanReview:
