@@ -92,22 +92,22 @@ def _display_text(value: str, maximum: int) -> str:
 async def publish_raw_evidence(step_input: StepInput, run_context: RunContext) -> StepOutput:
     """Validate filtering, build immutable Raw Documents and publish the run."""
     request_output = step_input.get_step_output("collect-raw-evidence")
-    draft_output = step_input.get_step_output("filter-raw-evidence")
     if request_output is None or request_output.content is None:
         raise ValueError("Raw Evidence filter request is missing")
-    if draft_output is None or draft_output.content is None:
+    draft_content = step_input.previous_step_content
+    if draft_content is None:
         raise ValueError("Raw Evidence Filter output is missing")
     request = (
         request_output.content
         if isinstance(request_output.content, TitleCurationRequest)
         else TitleCurationRequest.model_validate(request_output.content)
     )
-    if isinstance(draft_output.content, TitleCurationDraft):
-        draft = draft_output.content
-    elif isinstance(draft_output.content, str):
-        draft = TitleCurationDraft.model_validate_json(draft_output.content)
+    if isinstance(draft_content, TitleCurationDraft):
+        draft = draft_content
+    elif isinstance(draft_content, str):
+        draft = TitleCurationDraft.model_validate_json(draft_content)
     else:
-        draft = TitleCurationDraft.model_validate(draft_output.content)
+        draft = TitleCurationDraft.model_validate(draft_content)
     expected = [item.candidate_id for item in request.candidates]
     actual = [item.candidate_id for item in draft.decisions]
     if len(actual) != len(set(actual)):

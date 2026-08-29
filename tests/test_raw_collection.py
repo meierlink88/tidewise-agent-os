@@ -507,9 +507,10 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         )
         validation_input = StepInput(
             input="采集政策",
+            previous_step_content=malformed,
             previous_step_outputs={
                 "collect-raw-evidence": prepared,
-                "filter-raw-evidence": StepOutput(content=malformed),
+                "FILTER-RAW-EVIDENCE": StepOutput(content=malformed),
             },
         )
         with self.assertRaisesRegex(ValueError, "coverage mismatch"):
@@ -529,9 +530,10 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         )
         duplicate_input = StepInput(
             input="采集政策",
+            previous_step_content=duplicate,
             previous_step_outputs={
                 "collect-raw-evidence": prepared,
-                "filter-raw-evidence": StepOutput(content=duplicate),
+                "RENAMED-FILTER-STEP": StepOutput(content=duplicate),
             },
         )
         with self.assertRaisesRegex(ValueError, "duplicate Candidate IDs"):
