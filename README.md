@@ -111,6 +111,18 @@ source .venv/bin/activate
 ./scripts/validate.sh
 ```
 
+Agno 主版本升级要求在新运行时提供流量前执行数据库迁移。本地先构建候选镜像，再停止
+AgentOS、运行幂等迁移并重新启动：
+
+```bash
+docker compose build agentos
+docker compose stop agentos
+docker compose run --rm --no-deps agentos python -m scripts.migrate_agno_db
+docker compose up -d agentos
+```
+
+迁移不会删除 Agno v2 的 legacy runs 数据；确认新版运行稳定前不执行 cleanup。
+
 新增组件时：
 
 - Agent 放在 `agents/<slug>.py`。

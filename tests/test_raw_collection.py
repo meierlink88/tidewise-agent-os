@@ -614,7 +614,7 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             ],
         )
         self.assertTrue(all(step.max_retries == 0 for step in steps))
-        self.assertTrue(all(str(step.on_error) == "fail" for step in steps))
+        self.assertTrue(all(str(step.human_review.on_error) == "OnError.fail" for step in steps))
 
     def test_workflow_agents_load_components_without_runtime_session_db(self) -> None:
         db = MagicMock()

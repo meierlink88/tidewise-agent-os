@@ -206,7 +206,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
     async def test_analysis_fetches_catalog_once_per_run_and_hides_ids_from_agent(self) -> None:
         self._publish_raw_fixture()
         prepared = self._prepared()
-        context = RunContext(run_id="run-catalog", session_id="session-catalog")
+        context = RunContext(run_id="run-catalog", session_id="session-catalog", dependencies={})
         step_input = StepInput(previous_step_outputs={"prepare-raw-document": StepOutput(content=prepared)})
 
         with patch(
@@ -228,7 +228,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
     async def test_invalid_catalog_fails_before_agent_analysis(self) -> None:
         self._publish_raw_fixture()
         prepared = self._prepared()
-        context = RunContext(run_id="run-invalid-catalog", session_id="session-invalid-catalog")
+        context = RunContext(run_id="run-invalid-catalog", session_id="session-invalid-catalog", dependencies={})
         step_input = StepInput(previous_step_outputs={"prepare-raw-document": StepOutput(content=prepared)})
         duplicate_code = {
             "categories": [
