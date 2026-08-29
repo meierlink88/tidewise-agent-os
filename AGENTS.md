@@ -39,7 +39,7 @@ AgentOS (app/main.py)
 ## 本地 Docker 约束
 
 - Compose 项目名必须保持 `agent-os`，服务名保持 `agentos` 和 `neo4j`，本地容器名保持
-  `agent-os` 和 `agent-os-neo4j`。
+  `agent-os-service` 和 `agent-os-neo4j`。
 - 复用外部网络 `tidewise-local` 和服务别名 `postgres:5432`。
 - 禁止在本仓库新增 PostgreSQL 服务；数据隔离使用数据库和角色完成。
 - Neo4j 必须复用显式命名的 `tidewise-reason_graphiti-neo4j-data` 与

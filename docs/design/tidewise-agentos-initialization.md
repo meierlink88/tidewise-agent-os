@@ -5,7 +5,7 @@
 把官方 AgentOS Docker 模板收敛为观潮家独立维护的运行时项目：
 
 - AgentOS API 与 Neo4j 由 Docker 启动，并归入独立 Docker Compose 项目 `agent-os`。
-- 本地服务名保持 `agentos` 和 `neo4j`，容器名固定为 `agent-os` 和 `agent-os-neo4j`。
+- 本地服务名保持 `agentos` 和 `neo4j`，容器名固定为 `agent-os-service` 和 `agent-os-neo4j`。
 - 复用 `tidewise-infra` 的 PostgreSQL 5432，不创建第二个 PostgreSQL 容器。
 - 使用独立数据库 `agent_os` 和最小权限登录角色 `agent_os_runtime`。
 - 默认模型为 DeepSeek V4 Flash，密钥只保存在被 Git 忽略的 `.env`。

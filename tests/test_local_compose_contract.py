@@ -17,7 +17,10 @@ class LocalComposeContractTest(TestCase):
             self.compose["services"]["agentos"]["depends_on"]["neo4j"]["condition"],
             "service_healthy",
         )
-        self.assertEqual(self.compose["services"]["agentos"]["container_name"], "agent-os")
+        self.assertEqual(
+            self.compose["services"]["agentos"]["container_name"],
+            "agent-os-service",
+        )
         self.assertEqual(self.compose["services"]["neo4j"]["container_name"], "agent-os-neo4j")
 
     def test_neo4j_reuses_the_existing_graph_volumes(self) -> None:

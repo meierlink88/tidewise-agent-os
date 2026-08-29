@@ -24,7 +24,7 @@ PostgreSQL，使用独立数据库 `agent_os`；Data Service 也通过该共享�
 
 ```text
 agent-os
-├── agent-os          # Agno AgentOS
+├── agent-os-service  # Agno AgentOS
 └── agent-os-neo4j    # Graphiti 图存储，复用历史数据卷
 
 tidewise-infra

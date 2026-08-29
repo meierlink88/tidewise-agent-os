@@ -27,7 +27,7 @@ services:
       - tidewise-local
 
   agentos:
-    container_name: agent-os
+    container_name: agent-os-service
     build:
       context: .
       dockerfile: Dockerfile
