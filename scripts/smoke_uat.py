@@ -49,7 +49,6 @@ async def _probe(token: str) -> None:
             "raw-collector",
             "evidence-extractor",
             "event-extractor",
-            "investment-planner",
             "investment-reasoner",
             "investment-reviewer",
         }

@@ -132,7 +132,16 @@ class ScheduleSeedTest(unittest.TestCase):
         self.assertEqual(event["if_exists"], "raise")
         investment = next(call for call in calls if call["endpoint"] == INVESTMENT_REASONING_SCHEDULE_ENDPOINT)
         self.assertEqual(investment["cron"], "30 7 * * *")
-        self.assertEqual(investment["payload"], {"message": INVESTMENT_REASONING_SCHEDULE_PROMPT})
+        self.assertEqual(
+            investment["payload"],
+            {
+                "message": {
+                    "question": INVESTMENT_REASONING_SCHEDULE_PROMPT,
+                    "event_window_hours": 48,
+                    "include_company": False,
+                }
+            },
+        )
         self.assertEqual(investment["timezone"], "Asia/Shanghai")
 
 

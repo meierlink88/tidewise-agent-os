@@ -1,4 +1,4 @@
-"""Five deterministic Workflow Functions for investment reasoning."""
+"""Five deterministic Workflow Functions for layered investment reasoning."""
 
 from __future__ import annotations
 
@@ -10,13 +10,14 @@ from agno.workflow import StepInput, StepOutput
 
 from capabilities.investment.internal.engine import InvestmentReasoningEngine
 from capabilities.investment.internal.models import (
-    AcceptedTransmission,
     Confidence,
-    InvestmentAnalysisPlan,
+    GeopoliticalAnalysisState,
+    IndustryAnalysisState,
     InvestmentAnalysisRequest,
     InvestmentAnalysisResult,
-    InvestmentDraftState,
-    InvestmentTransmissionState,
+    InvestmentReasoningInput,
+    LayerAnalysisResult,
+    MacroAnalysisState,
     PreparedInvestmentContext,
     ReviewResult,
     Trend,
@@ -35,13 +36,19 @@ def _content(step_input: StepInput, name: str, model: type[Any]) -> Any:
     return model.model_validate(output.content)
 
 
+def _reasoning_input(value: Any) -> InvestmentReasoningInput:
+    """Accept the new structured Schedule payload and legacy natural-language message."""
+
+    return InvestmentReasoningInput.model_validate(value)
+
+
 async def prepare_investment_context(step_input: StepInput, run_context: RunContext) -> StepOutput:
-    """Freeze decision time and retrieve the bounded Graphiti context."""
+    """Freeze decision time and retrieve only the shared Event/Signal base context."""
 
     del run_context
-    plan = _content(step_input, "plan-investment-analysis", InvestmentAnalysisPlan)
+    workflow_input = _reasoning_input(step_input.input)
     request = InvestmentAnalysisRequest(
-        **plan.model_dump(),
+        **workflow_input.model_dump(),
         decision_at=datetime.now(UTC),
         forward_horizon_days=1095,
         min_anchor_matches=1,
@@ -57,146 +64,176 @@ async def prepare_investment_context(step_input: StepInput, run_context: RunCont
     )
 
 
-async def reason_signal_transmissions(step_input: StepInput) -> StepOutput:
-    """Execute up to three LLM rounds while code enforces Signal-root lineage."""
+async def analyze_geopolitical_impact(step_input: StepInput) -> StepOutput:
+    """Analyze the frozen Events against the predefined geopolitical blueprint."""
 
     prepared = _content(step_input, "prepare-investment-context", PreparedInvestmentContext)
-    accepted: list[AcceptedTransmission] = []
-    rounds = 0
-    if any(chain.signal_root_node_ids for chain in prepared.context.chains):
-        for round_number in range(1, prepared.context.request.max_hops + 1):
-            batch = await investment_workflow_runtime().propagate(prepared.context, accepted, round_number=round_number)
-            rounds += 1
-            new_items = InvestmentReasoningEngine.validate_round(
-                prepared.context, accepted, batch, round_number=round_number
-            )
-            accepted.extend(new_items)
-            if not any(item.confidence != Confidence.LOW for item in new_items):
-                break
+    result = await investment_workflow_runtime().analyze_geopolitical(prepared)
+    return StepOutput(content=GeopoliticalAnalysisState(prepared=prepared, geopolitical=result))
+
+
+async def analyze_macro_impact(step_input: StepInput) -> StepOutput:
+    """Analyze macro anchors using Events, Signals, and accepted geopolitical claims."""
+
+    state = _content(step_input, "analyze-geopolitical-impact", GeopoliticalAnalysisState)
+    result = await investment_workflow_runtime().analyze_macro(state.prepared, state.geopolitical)
     return StepOutput(
-        content=InvestmentTransmissionState(
-            context=prepared.context,
-            context_fingerprint=prepared.context_fingerprint,
-            transmissions=accepted,
-            rounds_executed=rounds,
+        content=MacroAnalysisState(
+            prepared=state.prepared,
+            geopolitical=state.geopolitical,
+            macro=result,
         )
     )
 
 
-async def synthesize_investment_conclusion(step_input: StepInput) -> StepOutput:
-    """Ask the Reasoner for node conclusions, then normalize every unsupported horizon."""
+async def analyze_industry_impact(step_input: StepInput) -> StepOutput:
+    """Resolve industry candidates, load topology, propagate, and synthesize node trends."""
 
-    state = _content(step_input, "reason-signal-transmissions", InvestmentTransmissionState)
-    draft = await investment_workflow_runtime().synthesize(state.context, state.transmissions)
-    draft = InvestmentReasoningEngine.normalize_draft(state.context, state.transmissions, draft)
-    return StepOutput(content=InvestmentDraftState(**state.model_dump(), draft=draft))
+    state = _content(step_input, "analyze-macro-impact", MacroAnalysisState)
+    result = await investment_workflow_runtime().analyze_industry(
+        state.prepared,
+        state.geopolitical,
+        state.macro,
+    )
+    if isinstance(result, LayerAnalysisResult):
+        raise TypeError("investment runtime returned a layer result instead of IndustryAnalysisState")
+    return StepOutput(content=IndustryAnalysisState.model_validate(result))
 
 
-def _deterministic_issues(state: InvestmentDraftState) -> list[str]:
+def _deterministic_issues(state: IndustryAnalysisState) -> list[str]:
+    context = state.industry_context
+    eligible = context.eligible_signal_fact_ids
+    event_ids = {item.event_id for item in context.events}
     issues: list[str] = []
-    eligible = state.context.eligible_signal_fact_ids
+    all_claims = [*state.geopolitical.claims, *state.macro.claims, *state.industry.claims]
+    for claim in all_claims:
+        if not claim.root_signal_fact_ids or not set(claim.root_signal_fact_ids) <= eligible:
+            issues.append(f"CLAIM_WITHOUT_ACTIVE_SIGNAL_ROOT:{claim.claim_id}")
+        if not claim.root_event_ids or not set(claim.root_event_ids) <= event_ids:
+            issues.append(f"CLAIM_WITHOUT_SCOPED_EVENT_ROOT:{claim.claim_id}")
     for transmission in state.transmissions:
         if not transmission.root_signal_fact_ids or not set(transmission.root_signal_fact_ids) <= eligible:
-            issues.append("TRANSMISSION_WITHOUT_SIGNAL_ROOT")
+            issues.append(f"TRANSMISSION_WITHOUT_SIGNAL_ROOT:{transmission.transmission_id}")
     issues.extend(
         InvestmentReasoningEngine.directional_lineage_issues(
-            state.context,
+            context,
             state.transmissions,
             state.draft,
+            state.industry.claims,
         )
     )
     return list(dict.fromkeys(issues))
 
 
-def _has_directional_claims(state: InvestmentDraftState) -> bool:
-    return any(
-        trend != Trend.INSUFFICIENT_EVIDENCE
-        for chain in state.draft.chains
-        for node in chain.nodes
-        for trend in (node.short, node.medium, node.long)
+def _requires_semantic_review(state: IndustryAnalysisState) -> bool:
+    return bool(
+        state.geopolitical.claims
+        or state.macro.claims
+        or state.industry.claims
+        or state.transmissions
+        or any(
+            trend != Trend.INSUFFICIENT_EVIDENCE
+            for chain in state.draft.chains
+            for node in chain.nodes
+            for trend in (node.short, node.medium, node.long)
+        )
+    )
+
+
+def _safe_layer_result(result: LayerAnalysisResult, reason: str) -> LayerAnalysisResult:
+    return result.model_copy(
+        update={
+            "claims": [],
+            "supporting_facts": [],
+            "summary": f"{result.layer.value} 层结论未通过最终门禁，已安全降级为证据不足。",
+            "limitations": list(dict.fromkeys([*result.limitations, reason]))[:20],
+        }
     )
 
 
 async def review_and_finalize(step_input: StepInput) -> StepOutput:
-    """Apply hard gates before the Reviewer and return the persisted Workflow result."""
+    """Apply deterministic lineage gates, then let the Reviewer check supported conclusions."""
 
-    state = _content(step_input, "synthesize-investment-conclusion", InvestmentDraftState)
+    state = _content(step_input, "analyze-industry-impact", IndustryAnalysisState)
     draft = state.draft
+    geopolitical = state.geopolitical
+    macro = state.macro
+    industry = state.industry
+    transmissions = list(state.transmissions)
     hard_issues = _deterministic_issues(state)
     execution_issues = list(state.execution_issues)
     if hard_issues:
         draft = InvestmentReasoningEngine.safe_fallback_draft(
-            state.context,
+            state.industry_context,
             "DETERMINISTIC_GATE_SAFE_FALLBACK",
         )
+        geopolitical = _safe_layer_result(geopolitical, "DETERMINISTIC_GATE_SAFE_FALLBACK")
+        macro = _safe_layer_result(macro, "DETERMINISTIC_GATE_SAFE_FALLBACK")
+        industry = _safe_layer_result(industry, "DETERMINISTIC_GATE_SAFE_FALLBACK")
+        transmissions = []
         review = ReviewResult(
             accepted=True,
             confidence=Confidence.LOW,
             issue_codes=hard_issues[:30],
-            review_summary="确定性门禁拒绝方向结论，已降级为安全弃权。",
+            review_summary="确定性门禁拒绝了无完整谱系的方向结论，结果已降级为安全弃权。",
         )
         execution_issues.extend(hard_issues)
-    elif not _has_directional_claims(state):
+    elif not _requires_semantic_review(state):
         review = ReviewResult(
             accepted=True,
             confidence=Confidence.HIGH,
             issue_codes=[],
-            review_summary=("确定性门禁已确认所有节点均未作出方向性断言；当前结果是一次成功的证据不足弃权。"),
+            review_summary="所有产业链节点均未作无证据的方向断言；本次是成功的证据不足弃权。",
         )
     else:
-        review = await investment_workflow_runtime().review(state.context, state.transmissions, draft)
+        review = await investment_workflow_runtime().review(state)
         if not review.accepted:
             execution_issues.extend(review.issue_codes)
-            repaired = await investment_workflow_runtime().repair(
-                state.context,
-                state.transmissions,
-                draft,
-                review,
+            draft = InvestmentReasoningEngine.safe_fallback_draft(
+                state.industry_context,
+                "REVIEW_REJECTED_SAFE_FALLBACK",
             )
-            draft = InvestmentReasoningEngine.normalize_draft(state.context, state.transmissions, repaired)
-            repaired_state = state.model_copy(update={"draft": draft})
-            repair_issues = _deterministic_issues(repaired_state)
-            if repair_issues:
-                review = ReviewResult(
-                    accepted=False,
-                    confidence=Confidence.LOW,
-                    issue_codes=repair_issues,
-                    review_summary="修正后仍未通过确定性谱系门禁。",
-                )
-            else:
-                review = await investment_workflow_runtime().review(state.context, state.transmissions, draft)
-            if not review.accepted:
-                execution_issues.extend(review.issue_codes)
-                draft = InvestmentReasoningEngine.safe_fallback_draft(
-                    state.context,
-                    "REVIEW_REJECTED_SAFE_FALLBACK",
-                )
-                review = ReviewResult(
-                    accepted=True,
-                    confidence=Confidence.LOW,
-                    issue_codes=list(dict.fromkeys(execution_issues))[:30],
-                    review_summary="一次有界修正仍未通过审核，已降级为无方向性断言的安全弃权。",
-                )
+            review = ReviewResult(
+                accepted=True,
+                confidence=Confidence.LOW,
+                issue_codes=list(dict.fromkeys(execution_issues))[:30],
+                review_summary="审核未通过，已删除方向断言并降级为安全弃权。",
+            )
+            geopolitical = _safe_layer_result(geopolitical, "REVIEW_REJECTED_SAFE_FALLBACK")
+            macro = _safe_layer_result(macro, "REVIEW_REJECTED_SAFE_FALLBACK")
+            industry = _safe_layer_result(industry, "REVIEW_REJECTED_SAFE_FALLBACK")
+            transmissions = []
+
+    layer_results = [geopolitical, macro, industry]
     result = InvestmentAnalysisResult(
         executor="agentos-investment-reasoning-workflow",
-        status="SUCCEEDED" if review.accepted else "NEEDS_REVIEW",
-        context_fingerprint=state.context_fingerprint,
-        transmissions=state.transmissions,
+        status="SUCCEEDED",
+        context_fingerprint=state.prepared.context_fingerprint,
+        geopolitical=geopolitical,
+        macro=macro,
+        industry=industry,
+        transmissions=transmissions,
         draft=draft,
         review=review,
+        reasoning_tree=InvestmentReasoningEngine.build_reasoning_tree(
+            state.industry_context,
+            layer_results,
+            transmissions,
+            draft,
+        ),
         stage_metrics={
-            "events": len(state.context.events),
-            "facts": len(state.context.facts),
-            "eligible_signals": len(state.context.eligible_signal_fact_ids),
-            "chain_signal_roots": len(
-                {fact_id for chain in state.context.chains for fact_id in chain.signal_root_fact_ids}
-            ),
-            "chains": len(state.context.chains),
-            "nodes": sum(len(item.nodes) for item in state.context.chains),
-            "topology_edges": sum(len(item.edges) for item in state.context.chains),
+            "events": len(state.industry_context.events),
+            "facts": len(state.industry_context.facts),
+            "eligible_signals": len(state.industry_context.eligible_signal_fact_ids),
+            "geopolitical_claims": len(geopolitical.claims),
+            "macro_claims": len(macro.claims),
+            "industry_claims": len(industry.claims),
+            "chains": len(state.industry_context.chains),
+            "nodes": sum(len(item.nodes) for item in state.industry_context.chains),
+            "topology_edges": sum(len(item.edges) for item in state.industry_context.chains),
             "transmission_rounds": state.rounds_executed,
-            "accepted_transmissions": len(state.transmissions),
+            "accepted_transmissions": len(transmissions),
         },
         execution_issues=list(dict.fromkeys(execution_issues))[:100],
     )
-    return StepOutput(content=result, success=review.accepted)
+    return StepOutput(content=result, success=True)

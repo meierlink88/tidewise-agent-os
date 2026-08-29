@@ -12,7 +12,6 @@ from agno.utils.log import log_info
 
 from agents.event_extractor import ensure_event_extractor_agent
 from agents.evidence_extractor import ensure_evidence_extractor_agent
-from agents.investment_planner import ensure_investment_planner_agent
 from agents.investment_reasoner import ensure_investment_reasoner_agent, load_investment_reasoner_agent
 from agents.investment_reviewer import ensure_investment_reviewer_agent, load_investment_reviewer_agent
 from agents.raw_collector import ensure_collector_agent
@@ -95,7 +94,6 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     ensure_title_curator_agent(registry)
     ensure_evidence_extractor_agent(registry)
     ensure_event_extractor_agent(registry)
-    ensure_investment_planner_agent(registry)
     ensure_investment_reasoner_agent(registry)
     ensure_investment_reviewer_agent(registry)
     ensure_raw_collection_workflow(registry)

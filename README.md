@@ -9,13 +9,13 @@
 - Agent：`title-curator`，对采集标题做投研相关性判断，由 Raw Collection Workflow 调用。
 - Agent：`evidence-extractor`，从 Raw Evidence 提取 Atomic Evidence，由 Studio/PostgreSQL 管理。
 - Agent：`event-extractor`，按 5W1H 身份语义把同批 Evidence 提炼为 Event Candidate。
-- Agent：`investment-planner`、`investment-reasoner`、`investment-reviewer`，分别负责命题规划、Signal 传导/结论综合和结果审核。
+- Agent：`investment-reasoner`、`investment-reviewer`，分别负责分层影响/Signal 传导和最终谱系审核。
 - Workflow：`local-ping`，无模型依赖的运行时检查。
 - Workflow：`deployment-check`，检查数据库、MCP、组件和调度状态。
 - Workflow：`raw-collection`，由 Agno Studio/PostgreSQL 管理编排版本，执行 Agent 采集、确定性去重和 manifest-last 发布。
 - Workflow：`evidence-extraction`，增量提取并发布 Atomic Evidence，回写正式 Evidence ID。
 - Workflow：`event-extraction`，冻结本地 Evidence，发布去重后 Event，投影 Graphiti 并构建 Signal Fact。
-- Workflow：`investment-reasoning`，由 Schedule 命题触发，冻结 Graphiti 时间窗上下文，仅从有效 Signal Fact 启动产业链节点传导。
+- Workflow：`investment-reasoning`，由 Schedule 命题直接触发，按地缘政治→宏观经济→产业链及节点逐层推导，仅从有效 Signal 根形成方向结论。
 - API/MCP：`http://localhost:8000`、`http://localhost:8000/mcp`。
 
 ## 本地拓扑

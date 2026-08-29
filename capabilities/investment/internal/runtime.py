@@ -5,41 +5,40 @@ from __future__ import annotations
 from typing import Protocol
 
 from capabilities.investment.internal.models import (
-    AnalysisDraft,
+    IndustryAnalysisState,
     InvestmentAnalysisContext,
     InvestmentAnalysisRequest,
+    LayerAnalysisResult,
+    PreparedInvestmentContext,
     ReviewResult,
-    TransmissionBatch,
 )
 
 
 class InvestmentWorkflowRuntime(Protocol):
     async def prepare(self, request: InvestmentAnalysisRequest) -> InvestmentAnalysisContext: ...
 
-    async def propagate(
+    async def analyze_geopolitical(
         self,
-        context: InvestmentAnalysisContext,
-        accepted: list,
-        *,
-        round_number: int,
-    ) -> TransmissionBatch: ...
+        prepared: PreparedInvestmentContext,
+    ) -> LayerAnalysisResult: ...
 
-    async def synthesize(self, context: InvestmentAnalysisContext, transmissions: list) -> AnalysisDraft: ...
+    async def analyze_macro(
+        self,
+        prepared: PreparedInvestmentContext,
+        geopolitical: LayerAnalysisResult,
+    ) -> LayerAnalysisResult: ...
+
+    async def analyze_industry(
+        self,
+        prepared: PreparedInvestmentContext,
+        geopolitical: LayerAnalysisResult,
+        macro: LayerAnalysisResult,
+    ) -> IndustryAnalysisState: ...
 
     async def review(
         self,
-        context: InvestmentAnalysisContext,
-        transmissions: list,
-        draft: AnalysisDraft,
+        state: IndustryAnalysisState,
     ) -> ReviewResult: ...
-
-    async def repair(
-        self,
-        context: InvestmentAnalysisContext,
-        transmissions: list,
-        draft: AnalysisDraft,
-        review: ReviewResult,
-    ) -> AnalysisDraft: ...
 
     async def close(self) -> None: ...
 

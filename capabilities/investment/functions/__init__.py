@@ -1,15 +1,17 @@
 """Workflow Functions exposed by the investment capability."""
 
 from capabilities.investment.functions.reasoning import (
+    analyze_geopolitical_impact,
+    analyze_industry_impact,
+    analyze_macro_impact,
     prepare_investment_context,
-    reason_signal_transmissions,
     review_and_finalize,
-    synthesize_investment_conclusion,
 )
 
 __all__ = [
+    "analyze_geopolitical_impact",
+    "analyze_industry_impact",
+    "analyze_macro_impact",
     "prepare_investment_context",
-    "reason_signal_transmissions",
     "review_and_finalize",
-    "synthesize_investment_conclusion",
 ]

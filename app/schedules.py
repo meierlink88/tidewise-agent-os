@@ -26,8 +26,8 @@ EVENT_EXTRACTION_SCHEDULE_PROMPT = "处理所有已发布且尚未提炼 Event �
 INVESTMENT_REASONING_SCHEDULE_NAME = "investment-reasoning-daily"
 INVESTMENT_REASONING_SCHEDULE_ENDPOINT = "/workflows/investment-reasoning/runs"
 INVESTMENT_REASONING_SCHEDULE_PROMPT = (
-    "获取最近48小时全部Event，分析这些Event驱动了哪些产业链，"
-    "并对每条命中产业链的所有标准节点给出升温、降温、分化或证据不足的投研结论。"
+    "获取最近48小时全部Event，依次分析地缘政治、宏观经济、产业链及节点影响；"
+    "结合前层结论和本层变量信号，对命中产业链的标准节点给出升温、降温、分化或证据不足的投研结论。"
 )
 
 
@@ -119,7 +119,13 @@ def schedule_definitions() -> tuple[ScheduleDefinition, ...]:
                 name=INVESTMENT_REASONING_SCHEDULE_NAME,
                 cron="30 7 * * *",
                 endpoint=INVESTMENT_REASONING_SCHEDULE_ENDPOINT,
-                payload={"message": INVESTMENT_REASONING_SCHEDULE_PROMPT},
+                payload={
+                    "message": {
+                        "question": INVESTMENT_REASONING_SCHEDULE_PROMPT,
+                        "event_window_hours": 48,
+                        "include_company": False,
+                    }
+                },
                 description="Daily pre-market: reason from active Event Signal Facts into industry-chain node trends.",
                 timezone="Asia/Shanghai",
             ),

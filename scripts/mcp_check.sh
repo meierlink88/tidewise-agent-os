@@ -70,7 +70,6 @@ async def run_check(headers: dict | None, auth_note: str) -> None:
             required_agents = {
                 "event-extractor",
                 "evidence-extractor",
-                "investment-planner",
                 "investment-reasoner",
                 "investment-reviewer",
                 "raw-collector",

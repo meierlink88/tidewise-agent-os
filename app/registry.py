@@ -5,7 +5,6 @@ from agno.registry import Registry
 
 from agents.event_extractor import EVENT_EXTRACTOR_AGENT_ID, load_event_extractor_agent
 from agents.evidence_extractor import EVIDENCE_EXTRACTOR_AGENT_ID, load_evidence_extractor_agent
-from agents.investment_planner import INVESTMENT_PLANNER_AGENT_ID, load_investment_planner_agent
 from agents.investment_reasoner import INVESTMENT_REASONER_AGENT_ID, load_investment_reasoner_agent
 from agents.investment_reviewer import INVESTMENT_REVIEWER_AGENT_ID, load_investment_reviewer_agent
 from agents.raw_collector import COLLECTOR_AGENT_ID, load_collector_agent
@@ -49,21 +48,28 @@ from capabilities.evidence.functions import (
     validate_evidence_analysis,
 )
 from capabilities.investment import (
+    AcceptedImpactClaim,
     AnalysisDraft,
+    GeopoliticalAnalysisState,
+    IndustryAnalysisState,
     InvestmentAnalysisContext,
-    InvestmentAnalysisPlan,
     InvestmentAnalysisResult,
-    InvestmentDraftState,
-    InvestmentTransmissionState,
+    InvestmentReasoningInput,
+    LayerAnalysisContext,
+    LayerAnalysisResult,
+    LayerImpactBatch,
+    MacroAnalysisState,
     PreparedInvestmentContext,
+    ReasoningTraceNode,
     ReviewResult,
     TransmissionBatch,
 )
 from capabilities.investment.functions import (
+    analyze_geopolitical_impact,
+    analyze_industry_impact,
+    analyze_macro_impact,
     prepare_investment_context,
-    reason_signal_transmissions,
     review_and_finalize,
-    synthesize_investment_conclusion,
 )
 from db import get_postgres_db
 
@@ -88,8 +94,6 @@ class TidewiseRegistry(Registry):
             return load_evidence_extractor_agent(self)
         if agent_id == EVENT_EXTRACTOR_AGENT_ID:
             return load_event_extractor_agent(self)
-        if agent_id == INVESTMENT_PLANNER_AGENT_ID:
-            return load_investment_planner_agent(self)
         if agent_id == INVESTMENT_REASONER_AGENT_ID:
             return load_investment_reasoner_agent(self)
         if agent_id == INVESTMENT_REVIEWER_AGENT_ID:
@@ -115,13 +119,19 @@ registry = TidewiseRegistry(
         EventExtractionBatch,
         EventExtractionDraft,
         EventExtractionResult,
-        InvestmentAnalysisPlan,
+        InvestmentReasoningInput,
         InvestmentAnalysisContext,
         PreparedInvestmentContext,
+        ReasoningTraceNode,
+        LayerAnalysisContext,
+        LayerImpactBatch,
+        AcceptedImpactClaim,
+        LayerAnalysisResult,
+        GeopoliticalAnalysisState,
+        MacroAnalysisState,
+        IndustryAnalysisState,
         TransmissionBatch,
-        InvestmentTransmissionState,
         AnalysisDraft,
-        InvestmentDraftState,
         ReviewResult,
         InvestmentAnalysisResult,
     ],
@@ -143,8 +153,9 @@ registry = TidewiseRegistry(
         publish_event_candidates,
         construct_event_signals,
         prepare_investment_context,
-        reason_signal_transmissions,
-        synthesize_investment_conclusion,
+        analyze_geopolitical_impact,
+        analyze_macro_impact,
+        analyze_industry_impact,
         review_and_finalize,
     ],
     agents=[tidewise_assistant],
