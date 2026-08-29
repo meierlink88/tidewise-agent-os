@@ -13,8 +13,8 @@ from capabilities.collection import TitleCurationDraft
 from db import get_postgres_db
 
 TITLE_CURATOR_AGENT_ID = "title-curator"
-TITLE_CURATOR_CONTRACT_VERSION = 4
-TITLE_CURATOR_AGENT_NAME = "Collection Title Curator"
+TITLE_CURATOR_CONTRACT_VERSION = 6
+TITLE_CURATOR_AGENT_NAME = "Raw Evidence Filter"
 _SEED_PROMPT = Path(__file__).with_name("title_curator.seed.md")
 
 
@@ -37,6 +37,7 @@ def _seed_instructions() -> str:
 def _configure(agent: Agent) -> Agent:
     agent.db = get_postgres_db()
     agent.name = TITLE_CURATOR_AGENT_NAME
+    agent.description = "Filters collected material for political-economic and equity-research relevance."
     agent.instructions = _seed_instructions()
     agent.tools = []
     agent.retries = 0
@@ -59,7 +60,7 @@ def build_title_curator_agent() -> Agent:
         Agent(
             id=TITLE_CURATOR_AGENT_ID,
             name=TITLE_CURATOR_AGENT_NAME,
-            description="Title-only political-economic and equity-research relevance curator.",
+            description="Filters collected material for political-economic and equity-research relevance.",
             model=default_model(),
             instructions=_seed_instructions(),
         )

@@ -7,24 +7,18 @@ from agents.event_extractor import EVENT_EXTRACTOR_AGENT_ID, load_event_extracto
 from agents.evidence_extractor import EVIDENCE_EXTRACTOR_AGENT_ID, load_evidence_extractor_agent
 from agents.investment_reasoner import INVESTMENT_REASONER_AGENT_ID, load_investment_reasoner_agent
 from agents.investment_reviewer import INVESTMENT_REVIEWER_AGENT_ID, load_investment_reviewer_agent
-from agents.raw_collector import COLLECTOR_AGENT_ID, load_collector_agent
 from agents.tidewise_assistant import tidewise_assistant
 from agents.title_curator import TITLE_CURATOR_AGENT_ID, load_title_curator_agent
 from app.settings import default_model
 from capabilities.collection import (
-    CollectionQueryPlan,
     CollectionRequest,
     PreparedArtifactSet,
     TitleCurationDraft,
     TitleCurationRequest,
 )
 from capabilities.collection.functions import (
-    build_artifact_step,
-    execute_collection_channels_step,
-    prepare_collection_context,
-    prepare_title_curation,
-    publish_collection_step,
-    validate_title_curation,
+    collect_raw_evidence,
+    publish_raw_evidence,
 )
 from capabilities.event import EventExtractionBatch, EventExtractionDraft, EventExtractionResult
 from capabilities.event.functions import (
@@ -86,8 +80,6 @@ class TidewiseRegistry(Registry):
         code_defined = super().get_agent(agent_id)
         if code_defined is not None:
             return code_defined
-        if agent_id == COLLECTOR_AGENT_ID:
-            return load_collector_agent(self).agent
         if agent_id == TITLE_CURATOR_AGENT_ID:
             return load_title_curator_agent(self).agent
         if agent_id == EVIDENCE_EXTRACTOR_AGENT_ID:
@@ -107,7 +99,6 @@ registry = TidewiseRegistry(
     dbs=[get_postgres_db()],
     schemas=[
         CollectionRequest,
-        CollectionQueryPlan,
         TitleCurationRequest,
         TitleCurationDraft,
         PreparedArtifactSet,
@@ -137,12 +128,8 @@ registry = TidewiseRegistry(
     ],
     functions=[
         platform_identity,
-        prepare_collection_context,
-        execute_collection_channels_step,
-        prepare_title_curation,
-        validate_title_curation,
-        build_artifact_step,
-        publish_collection_step,
+        collect_raw_evidence,
+        publish_raw_evidence,
         prepare_raw_document,
         prepare_evidence_analysis,
         validate_evidence_analysis,

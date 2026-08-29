@@ -52,7 +52,7 @@ class _Adapter:
         if self.error is not None:
             raise self.error
         query = cast(str, getattr(request, "query"))
-        published_before = cast(datetime, getattr(request, "published_before"))
+        collected_at = datetime(2026, 8, 12, 10, tzinfo=UTC)
         return [
             Candidate(
                 candidate_id=f"candidate-{channel.code}",
@@ -63,8 +63,8 @@ class _Adapter:
                 content=f"{self.title}正文",
                 source_name=channel.name,
                 source_level=channel.default_source_level,
-                published_at=published_before,
-                collected_at=published_before,
+                published_at=collected_at,
+                collected_at=collected_at,
             )
         ]
 
@@ -115,10 +115,6 @@ class CollectionChannelFunctionTest(unittest.IsolatedAsyncioTestCase):
             run_id=run_id,
             session_id="session",
             dependencies={
-                "collector_agent_component_id": "raw-collector",
-                "collector_agent_config_version": 7,
-                "collector_instructions_sha256": "a" * 64,
-                "collector_cutoff": "2026-08-12T10:00:00+00:00",
                 "collection_channel_catalog": _Catalog(channels),
                 "collection_adapter_registry": adapters,
             },
@@ -133,14 +129,11 @@ class CollectionChannelFunctionTest(unittest.IsolatedAsyncioTestCase):
             ChannelType.WEB_SEARCH,
             "中国宏观经济",
             self._context([channel], {"bocha": adapter}, "run-web"),
-            48,
         )
 
         receipt = FetchReceipt.model_validate_json(response)
         self.assertEqual(receipt.channel_group, "web_search")
         self.assertEqual(receipt.outcome, "succeeded")
-        self.assertEqual(receipt.requested_after, datetime(2026, 8, 10, 10, tzinfo=UTC))
-        self.assertEqual(receipt.requested_before, datetime(2026, 8, 12, 10, tzinfo=UTC))
         self.assertEqual([item.channel_code for item in receipt.channels], ["bocha"])
         self.assertEqual(receipt.channels[0].result_count, 1)
         self.assertEqual(adapter.calls, 1)
@@ -156,7 +149,6 @@ class CollectionChannelFunctionTest(unittest.IsolatedAsyncioTestCase):
             ChannelType.WEB_SEARCH,
             "中国宏观经济",
             self._context(channels, {"bocha": _Adapter(), "tavily": _Adapter()}, "run-invalid-web"),
-            48,
         )
 
         self.assertEqual(json.loads(response), {"channel_group": "web_search", "error": "invalid_channel_catalog"})
@@ -167,7 +159,6 @@ class CollectionChannelFunctionTest(unittest.IsolatedAsyncioTestCase):
             ChannelType.RSS,
             "政治经济",
             self._context([], {}, "run-no-rss"),
-            48,
         )
 
         receipt = FetchReceipt.model_validate_json(response)
@@ -188,7 +179,7 @@ class CollectionChannelFunctionTest(unittest.IsolatedAsyncioTestCase):
         )
 
         started = asyncio.get_running_loop().time()
-        response = await execute_channel_group("api", ChannelType.API, "产业政策", context, 24)
+        response = await execute_channel_group("api", ChannelType.API, "产业政策", context)
         elapsed = asyncio.get_running_loop().time() - started
 
         receipt = FetchReceipt.model_validate_json(response)
@@ -212,7 +203,7 @@ class CollectionChannelFunctionTest(unittest.IsolatedAsyncioTestCase):
 
         with patch.dict(os.environ, {"COLLECTOR_CHANNEL_CONCURRENCY": "1"}):
             started = asyncio.get_running_loop().time()
-            response = await execute_channel_group("api", ChannelType.API, "产业政策", context, 48)
+            response = await execute_channel_group("api", ChannelType.API, "产业政策", context)
             elapsed = asyncio.get_running_loop().time() - started
 
         self.assertEqual(FetchReceipt.model_validate_json(response).outcome, "succeeded")
@@ -240,7 +231,6 @@ class CollectionChannelFunctionTest(unittest.IsolatedAsyncioTestCase):
             ChannelType.RSS,
             "政治经济",
             self._context(channels, {"generic_rss": adapter}, "run-rss"),
-            48,
         )
 
         receipt = FetchReceipt.model_validate_json(response)
@@ -252,11 +242,7 @@ class CollectionChannelFunctionTest(unittest.IsolatedAsyncioTestCase):
 class CollectionAdapterContractTest(unittest.IsolatedAsyncioTestCase):
     async def test_tavily_requests_plain_text_and_handles_null_raw_content(self) -> None:
         channel = _channel("tavily", ChannelType.WEB_SEARCH, "tavily").model_copy(update={"app_key": "database-key"})
-        request = FetchRequest(
-            query="A股公告",
-            published_after=datetime(2026, 8, 10, 10, tzinfo=UTC),
-            published_before=datetime(2026, 8, 12, 10, tzinfo=UTC),
-        )
+        request = FetchRequest(query="A股公告")
         payload = {
             "results": [
                 {
@@ -276,6 +262,8 @@ class CollectionAdapterContractTest(unittest.IsolatedAsyncioTestCase):
 
         assert request_mock.await_args is not None
         self.assertEqual(request_mock.await_args.args[1]["include_raw_content"], "text")
+        self.assertNotIn("time_range", request_mock.await_args.args[1])
+        self.assertNotIn("start_date", request_mock.await_args.args[1])
         self.assertEqual(candidates[0].content, "可读的纯文本正文")
 
     async def test_bocha_normalizes_results_and_resolves_source_level_by_host(self) -> None:
@@ -286,11 +274,7 @@ class CollectionAdapterContractTest(unittest.IsolatedAsyncioTestCase):
                 "default_source_level": SourceLevel.L3_MEDIA,
             }
         )
-        request = FetchRequest(
-            query="宏观政策",
-            published_after=datetime(2026, 8, 10, 10, tzinfo=UTC),
-            published_before=datetime(2026, 8, 12, 10, tzinfo=UTC),
-        )
+        request = FetchRequest(query="宏观政策")
         payload = {
             "data": {
                 "webPages": {
@@ -317,14 +301,11 @@ class CollectionAdapterContractTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(candidates[0].source_level, SourceLevel.L1_OFFICIAL)
         self.assertIsNotNone(request_mock.await_args)
         assert request_mock.await_args is not None
+        self.assertEqual(request_mock.await_args.args[1]["freshness"], "oneDay")
         self.assertEqual(request_mock.await_args.args[2]["Authorization"], "Bearer database-key")
 
     async def test_generic_rss_adapter_normalizes_rss_and_atom_sources(self) -> None:
-        request = FetchRequest(
-            query="政治经济",
-            published_after=datetime(2026, 8, 10, 10, tzinfo=UTC),
-            published_before=datetime(2026, 8, 12, 10, tzinfo=UTC),
-        )
+        request = FetchRequest(query="政治经济")
         rss = """<?xml version="1.0"?><rss version="2.0"><channel><item>
         <guid>rss-1</guid><title>宏观政策</title><link>https://example.com/rss-1</link>
         <description>政策正文</description><pubDate>Wed, 12 Aug 2026 09:00:00 GMT</pubDate>

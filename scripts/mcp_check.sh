@@ -72,7 +72,7 @@ async def run_check(headers: dict | None, auth_note: str) -> None:
                 "evidence-extractor",
                 "investment-reasoner",
                 "investment-reviewer",
-                "raw-collector",
+                "title-curator",
             }
             required_workflows = {
                 "event-extraction",

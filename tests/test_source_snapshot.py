@@ -9,15 +9,15 @@ import unittest
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import ClassVar, cast
+from typing import ClassVar
 from unittest.mock import patch
 from urllib.error import URLError
 
 from agno.run import RunContext
-from agno.workflow import StepInput, StepOutput
+from agno.workflow import StepInput
 
-from capabilities.collection.functions import execute_collection_channels_step, prepare_collection_context
-from capabilities.collection.internal.models import CollectionQueryPlan
+from capabilities.collection.functions import collect_raw_evidence
+from capabilities.collection.internal.models import TitleCurationRequest
 from capabilities.collection.internal.source_snapshot import DataServiceSourceSnapshotProvider
 
 _PROVIDER_FIXTURE = Path(__file__).parent / "fixtures" / "source-snapshot.v1.json"
@@ -375,9 +375,6 @@ class SourceSnapshotWorkflowTest(unittest.IsolatedAsyncioTestCase):
             session_id="session",
             dependencies={
                 "kept": "value",
-                "collector_agent_component_id": "raw-collector",
-                "collector_agent_config_version": 1,
-                "collector_instructions_sha256": "a" * 64,
                 "collection_adapter_registry": {"bocha": EmptyAdapter(), "cls": EmptyAdapter()},
             },
         )
@@ -391,28 +388,14 @@ class SourceSnapshotWorkflowTest(unittest.IsolatedAsyncioTestCase):
                 "COLLECTOR_ARTIFACT_ROOT": str(Path(self.temporary.name) / "collector"),
             },
         ):
-            output = await prepare_collection_context(step_input, context)
-            self.assertEqual(len(_SnapshotHandler.requests), 0)
-            execution = await execute_collection_channels_step(
-                StepInput(
-                    previous_step_outputs={
-                        "plan-collection-query": StepOutput(
-                            content=CollectionQueryPlan(query="政策信号", lookback_hours=48)
-                        )
-                    }
-                ),
-                context,
-            )
+            execution = await collect_raw_evidence(step_input, context)
 
-        self.assertEqual(output.content, "采集最近政策信号")
         self.assertEqual(len(_SnapshotHandler.requests), 1)
         dependencies = context.dependencies
         self.assertIsNotNone(dependencies)
         assert dependencies is not None
         self.assertEqual(dependencies["kept"], "value")
         self.assertNotIn("collection_channel_snapshot", dependencies)
-        self.assertNotIn("collector_cutoff", dependencies)
-        execution_content = cast(dict[str, object], execution.content)
-        receipts = cast(list[dict[str, object]], execution_content["receipts"])
-        self.assertEqual([receipt["outcome"] for receipt in receipts], ["succeeded", "succeeded", "no_channels"])
+        execution_content = TitleCurationRequest.model_validate(execution.content)
+        self.assertEqual(execution_content.candidates, [])
         self.assertEqual(len(_SnapshotHandler.requests), 1)

@@ -179,25 +179,12 @@ def build_artifact_set(
     if not batches:
         raise ValueError("collection Agent completed without any Tool Batch")
 
-    windows = {(batch.requested_after, batch.requested_before) for batch in batches}
-    if len(windows) != 1:
-        raise ValueError("Tool Batches disagree on collection time window")
-
-    provenance = {
-        (batch.agent_component_id, batch.agent_config_version, batch.instructions_sha256) for batch in batches
-    }
-    if len(provenance) != 1:
-        raise ValueError("Tool Batches disagree on Collector Agent version")
-    agent_component_id, agent_config_version, instructions_sha256 = provenance.pop()
-
     curation = read_title_curation(collection_id)
     decisions = {item.candidate_id: item for item in curation.decisions}
     if len(decisions) != len(curation.decisions):
         raise ValueError("validated title curation contains duplicate Candidate IDs")
 
     finished = (completed_at or datetime.now(UTC)).astimezone(UTC)
-    window_start = min(batch.requested_after for batch in batches).astimezone(UTC)
-    window_end = max(batch.requested_before for batch in batches).astimezone(UTC)
     root = artifact_root()
     staging = collection_staging_root(collection_id)
     legacy_index = root / "indexes" / "dedup-index.tsv"
@@ -236,9 +223,6 @@ def build_artifact_set(
         except ValueError:
             if disposition == "accepted":
                 disposition, reason = "invalid_result", "invalid_url"
-        effective_time = candidate.published_at or candidate.collected_at
-        if disposition == "accepted" and not (batch.requested_after <= effective_time <= batch.requested_before):
-            disposition, reason = "out_of_window", "published_at_outside_time_window"
         url_sha256 = _sha256(canonical_url) if canonical_url else ""
         if disposition == "accepted" and (url_sha256 in known_urls or url_sha256 in current_urls):
             disposition, reason = "known_url", "canonical_url_already_indexed"
@@ -278,8 +262,6 @@ def build_artifact_set(
                 "candidate_id": candidate.candidate_id,
                 "connector": candidate.connector,
                 "query": candidate.query,
-                "requested_after": batch.requested_after.isoformat(),
-                "requested_before": batch.requested_before.isoformat(),
                 "title": candidate.title,
                 "url": str(candidate.url),
                 "canonical_url": canonical_url or None,
@@ -307,8 +289,6 @@ def build_artifact_set(
         f"# Raw Collection {collection_id}",
         "",
         f"- outcome: {outcome}",
-        f"- window_start: {window_start.isoformat()}",
-        f"- window_end: {window_end.isoformat()}",
         f"- tool_batches: {len(batches)}",
     ]
     summary_lines.extend(f"- {key}: {value}" for key, value in sorted(candidate_counts.items()))
@@ -332,20 +312,11 @@ def build_artifact_set(
         "outcome": outcome,
         "objective_sha256": _sha256(request.objective),
         "objective_bytes": len(request.objective.encode("utf-8")),
-        "window_start": window_start.isoformat(),
-        "window_end": window_end.isoformat(),
-        "collector_agent": {
-            "component_id": agent_component_id,
-            "config_version": agent_config_version,
-            "instructions_sha256": instructions_sha256,
-        },
         "tool_batches": [
             {
                 "batch_id": batch.batch_id,
                 "connector": batch.connector,
                 "query": batch.query,
-                "requested_after": batch.requested_after.isoformat(),
-                "requested_before": batch.requested_before.isoformat(),
                 "result_count": len(batch.candidates),
             }
             for batch in batches

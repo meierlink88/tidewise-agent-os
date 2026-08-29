@@ -46,7 +46,7 @@ async def _probe(token: str) -> None:
         schedule_endpoints = [item["endpoint"] for item in schedules["data"]]
         required_agents = {
             "tidewise-assistant",
-            "raw-collector",
+            "title-curator",
             "evidence-extractor",
             "event-extractor",
             "investment-reasoner",

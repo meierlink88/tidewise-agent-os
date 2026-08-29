@@ -5,14 +5,13 @@
 ## 当前组件
 
 - Agent：`tidewise-assistant`，默认使用 DeepSeek V4 Flash。
-- Agent：`raw-collector`，由 Agno Studio/PostgreSQL 管理提示词版本，由 Workflow 调用。
-- Agent：`title-curator`，对采集标题做投研相关性判断，由 Raw Collection Workflow 调用。
+- Agent：`title-curator`（Raw Evidence Filter），对采集素材做投研相关性判断，由 Raw Collection Workflow 调用。
 - Agent：`evidence-extractor`，从 Raw Evidence 提取 Atomic Evidence，由 Studio/PostgreSQL 管理。
 - Agent：`event-extractor`，按 5W1H 身份语义把同批 Evidence 提炼为 Event Candidate。
 - Agent：`investment-reasoner`、`investment-reviewer`，分别负责分层影响/Signal 传导和最终谱系审核。
 - Workflow：`local-ping`，无模型依赖的运行时检查。
 - Workflow：`deployment-check`，检查数据库、MCP、组件和调度状态。
-- Workflow：`raw-collection`，由 Agno Studio/PostgreSQL 管理编排版本，执行 Agent 采集、确定性去重和 manifest-last 发布。
+- Workflow：`raw-collection`，由 Agno Studio/PostgreSQL 管理编排版本，执行采集、语义过滤、确定性去重和 manifest-last 发布。
 - Workflow：`evidence-extraction`，增量提取并发布 Atomic Evidence，回写正式 Evidence ID。
 - Workflow：`event-extraction`，冻结本地 Evidence，发布去重后 Event，投影 Graphiti 并构建 Signal Fact。
 - Workflow：`investment-reasoning`，由 Schedule 命题直接触发，按地缘政治→宏观经济→产业链及节点逐层推导，仅从有效 Signal 根形成方向结论。
@@ -69,10 +68,9 @@ docker compose rm -f agentos neo4j
 
 ## 采集提示词与数据
 
-`raw-collector` 首次启动时由 `agents/raw_collector.seed.md` 创建 Studio 发布版本。之后在 AgentOS
-Control Plane 的 Studio 中编辑并发布 Instructions；`raw-collection` 每次运行从 PostgreSQL
-加载当前发布版，无需重启容器。Agent 只把提示词的语义目标规划为 `query`
-与 `lookback_hours`；Workflow 冻结本次通道快照，并使用同一截止时间确定性并行执行三类采集能力。
+`raw-collection` 直接使用 Schedule message 作为采集 query，不再注册或运行 Query Planner Agent。
+Workflow 仅包含 `collect-raw-evidence`、`filter-raw-evidence` 和 `publish-raw-evidence` 三个业务步骤。
+`Raw Evidence Filter` 由 `agents/title_curator.py` 维护，结合标题、来源、发布时间和有界正文摘要排除非政经素材。
 
 `raw-collection` 首次启动时也会创建一个 Studio 发布版本。Workflow 编排可在 Studio
 中创建新版本并发布；步骤使用的 Agent 和自定义 Function 实现在 Git 中维护。采集
@@ -101,11 +99,11 @@ Agent 或 Workflow。
 的 `raw_text` 保存 `/{bucket}/{object_key}`，例如 `/raw-evidence/documents/2026/08/15/<sha256>.md`，不保存环境
 Base URL。浏览器使用 MinIO 对外 Base URL 与该路径直接拼接。
 
-采集 Agent 不负责调用通道，只输出严格查询计划。Planner 完成后，确定性 Function 使用
-`DATA_SERVICE_TOKEN` 从 Data Service 读取一次完整 active Source Snapshot，生成统一 UTC 截止时间，
-并固定并行执行 Web Search、API 和 RSS 三类采集组。这三类能力不向 Agent Registry 注册为 Tool。
+确定性 Function 使用 `DATA_SERVICE_TOKEN` 从 Data Service 读取一次完整 active Source Snapshot，
+并行执行 Web Search、API 和 RSS 三类采集组。这三类能力不向 Agent Registry 注册为 Tool。
 Web Search 最多启用一个，API 与 RSS 会有界并发执行全部启用 Source；动态 RSS/Atom Source 使用
-`generic_rss` Adapter。`priority=1` 表示最高优先级。
+`generic_rss` Adapter。`priority=1` 表示最高优先级。各通道取配置的最新 `max_results`，博查固定
+`freshness=oneDay`；采集发布不再按本地时间窗口淘汰 Candidate。
 
 Source 的创建、启停、Endpoint、Provider Key、配置与持久化由 Data Service 独占管理；AgentOS 不再创建、
 Seed、CRUD 或读取本地 `collection_channels`。Snapshot 获取或完整性校验失败时，Workflow 在采集阶段

@@ -35,11 +35,6 @@ def write_tool_batch(
     collection_id: str,
     connector: str,
     query: str,
-    requested_after: datetime,
-    requested_before: datetime,
-    agent_component_id: str,
-    agent_config_version: int,
-    instructions_sha256: str,
     candidates: list[Candidate],
 ) -> ToolBatch:
     """Persist one complete tool result and return its typed identity."""
@@ -48,11 +43,6 @@ def write_tool_batch(
         collection_id=collection_id,
         connector=connector,
         query=query,
-        requested_after=requested_after,
-        requested_before=requested_before,
-        agent_component_id=agent_component_id,
-        agent_config_version=agent_config_version,
-        instructions_sha256=instructions_sha256,
         collected_at=min((item.collected_at for item in candidates), default=datetime.now(UTC)),
         candidates=candidates,
     )
