@@ -38,13 +38,14 @@ AgentOS (app/main.py)
 
 ## 本地 Docker 约束
 
-- Compose 项目名必须保持 `tidewise-app`，服务名保持 `agentos`，本地容器名保持
-  `agent-os`。
+- Compose 项目名必须保持 `agent-os`，服务名保持 `agentos` 和 `neo4j`，本地容器名保持
+  `agent-os-service` 和 `agent-os-neo4j`。
 - 复用外部网络 `tidewise-local` 和服务别名 `postgres:5432`。
 - 禁止在本仓库新增 PostgreSQL 服务；数据隔离使用数据库和角色完成。
-- 只使用带服务名的生命周期命令：`docker compose up -d --build agentos`、`stop agentos`、`rm -f agentos`。
-- 禁止无范围执行 `docker compose down` 或 `--remove-orphans`，否则会影响同属
-  `tidewise-app` 分组的其他服务。
+- Neo4j 必须复用显式命名的 `tidewise-reason_graphiti-neo4j-data` 与
+  `tidewise-reason_graphiti-neo4j-logs` 卷；未经用户明确授权禁止删除。
+- 只使用带服务名的生命周期命令：`docker compose up -d --build agentos neo4j`、
+  `stop agentos neo4j`、`rm -f agentos neo4j`。禁止执行 `docker compose down -v`。
 
 ## 组件规则
 
@@ -111,7 +112,7 @@ source .venv/bin/activate
 ./scripts/format.sh
 ./scripts/validate.sh
 
-docker compose up -d --build agentos
+docker compose up -d --build agentos neo4j
 curl -sSf http://localhost:8000/health
 ./scripts/mcp_check.sh
 ```
