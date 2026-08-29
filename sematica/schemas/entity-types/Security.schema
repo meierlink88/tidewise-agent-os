@@ -1,0 +1,44 @@
+namespace Tidewise
+
+# DRAFT FOR REVIEW. Do not submit this file as the complete project Schema.
+Security(证券): EntityType
+    desc: 由发行主体发行并具有独立交易身份的股票、债券、基金份额或其他正式证券；不含发行企业、市场指数、期货合约、交易所、商品、产品或行业。
+    properties:
+        aliases(别名): Text
+            desc: 证券的正式名称变体、英文名称、交易简称或市场常用名称，用于识别同一证券。
+            constraint: NotNull, MultiValue
+            index: Text
+        ticker(证券代码): Text
+            desc: 证券在主要交易市场使用的规范交易代码。
+            constraint: NotNull
+            index: Text
+        symbol(交易标识): Text
+            desc: 证券在行情、交易或跨市场识别中使用的规范符号。
+            constraint: NotNull
+            index: Text
+        exchangeCode(交易场所代码): Text
+            desc: 证券主要挂牌或交易场所的规范代码。
+            constraint: NotNull
+            index: Text
+        marketBoard(上市板块): Text
+            desc: 证券在交易市场中所属的正式上市板块。
+            index: Text
+        securityType(证券类型): Text
+            desc: 证券按法律权利和交易形式划分的业务类型，如股票、债券或基金份额。
+            constraint: NotNull
+            index: Text
+        listDate(上市日期): Text
+            desc: 证券首次在主要交易市场正式挂牌交易的日期。
+        delistDate(退市日期): Text
+            desc: 证券终止在主要交易市场挂牌交易的日期。
+        listStatus(上市状态): Text
+            desc: 证券当前的上市、停牌、退市或其他正式交易状态。
+            constraint: NotNull
+            index: Text
+        currencyCode(交易货币代码): Text
+            desc: 证券主要报价和交易采用的规范货币代码。
+            constraint: NotNull
+            index: Text
+    relations:
+        issuedBy(发行主体): Tidewise.Company
+            desc: 依法发行并承担证券权利义务的企业主体。

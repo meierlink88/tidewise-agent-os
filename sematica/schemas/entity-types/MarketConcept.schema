@@ -1,0 +1,14 @@
+namespace Tidewise
+
+# REVIEWED ENTITYTYPE. Do not submit this file as the complete project Schema.
+MarketConcept(市场概念题材): EntityType
+    desc: 股票市场中用于归集共同产业逻辑、技术方向或商业主题的概念题材。
+    properties:
+        aliases(别名): Text
+            desc: 概念题材在市场数据源中的其他名称、简称或常用名称，用于识别同一概念。
+            constraint: NotNull, MultiValue
+            index: Text
+        definition(定义): Text
+            desc: 概念题材在股票市场中的业务含义及覆盖对象说明。
+            constraint: NotNull
+            index: TextAndVector

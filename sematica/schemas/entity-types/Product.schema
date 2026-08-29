@@ -1,0 +1,16 @@
+namespace Tidewise
+
+# DRAFT FOR REVIEW. Do not submit this file as the complete project Schema.
+Product(产品): EntityType
+    desc: 企业生产、销售、采购或被市场需求的可识别产品、产品族或商业化服务对象；不含生产工艺、产业链环节、大宗商品、企业、品牌或抽象概念。
+    properties:
+        aliases(别名): Text
+            desc: 产品的正式别名、商品名称、型号名称、英文名称或市场常用名称，用于识别同一产品。
+            constraint: NotNull, MultiValue
+            index: Text
+        productCategory(产品类别): Text
+            desc: 产品按功能、用途或市场定位归属的业务类别。
+            index: Text
+        specification(规格说明): Text
+            desc: 产品的型号、性能、组成、尺寸或其他可区分产品身份的规格说明。
+            index: TextAndVector

@@ -1,0 +1,14 @@
+namespace Tidewise
+
+# DRAFT FOR REVIEW. Do not submit this file as the complete project Schema.
+Commodity(大宗商品): EntityType
+    desc: 具有标准化品类、可形成公开或合同市场价格，并能以数量、质量等级和单位价格交易或交付的基础商品；不含品牌产品、证券、指数及期货合约。
+    properties:
+        aliases(别名): Text
+            desc: 大宗商品的正式别名、行业名称、英文名称或常用简称，用于识别同一商品品类。
+            constraint: NotNull, MultiValue
+            index: Text
+        commodityType(商品类型): Text
+            desc: 大宗商品所属的受控品类，如能源、金属、农产品或化工原料。
+            constraint: NotNull
+            index: Text

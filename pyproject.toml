@@ -9,8 +9,12 @@ authors = [{ name = "Tidewise" }]
 
 dependencies = [
   "agno[os,mcp,slack,pgvector,psycopg]==3.0.1",
+  "graphiti-core==0.29.3",
+  "httpx==0.28.1",
   "minio",
+  "neo4j==6.2.0",
   "openai",
+  "pydantic==2.13.4",
   "python-dotenv",
 ]
 
@@ -22,7 +26,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["agents*", "app*", "capabilities*", "db*", "evals*", "workflows*"]
+include = ["agents*", "app*", "capabilities*", "db*", "evals*", "sematica*", "workflows*"]
 namespaces = false
 
 [tool.ruff]
@@ -34,10 +38,11 @@ select = ["E", "F", "I", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
+"sematica/reasoning/investment/adapters.py" = ["E501"]
 
 [tool.mypy]
 check_untyped_defs = true
 no_implicit_optional = true
 warn_unused_configs = true
 plugins = ["pydantic.mypy"]
-exclude = [".venv*"]
+exclude = [".venv*", "sematica*"]

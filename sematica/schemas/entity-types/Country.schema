@@ -1,0 +1,24 @@
+namespace Tidewise
+
+# REVIEW FRAGMENT ONLY. Do not submit this file as the complete project Schema.
+Country(国家): EntityType
+    desc: 具有稳定国家身份和明确治理边界，并作为宏观经济、贸易、法律、政策或国际关系分析主体的国家级实体；不含地区、城市、跨国经济区域、联盟组织及政府机构。
+    properties:
+        aliases(别名): Text
+            desc: 国家的正式别名、历史名称、英文名称或常用名称，用于识别同一国家。
+            constraint: NotNull, MultiValue
+            index: Text
+        countryCode(国家代码): Text
+            desc: 国家的规范识别代码。
+            constraint: NotNull
+            index: Text
+        currencyCode(货币代码): Text
+            desc: 国家主要法定货币使用的规范货币代码。
+            constraint: NotNull
+            index: Text
+        region(所属区域): Text
+            desc: 国家所属或主要归属的地理区域及宏观分析区域。
+            index: Text
+    relations:
+        memberOf(成员归属): Tidewise.AllianceOrganization
+            desc: 国家作为正式成员加入并受其章程、规则或治理机制约束的联盟组织。

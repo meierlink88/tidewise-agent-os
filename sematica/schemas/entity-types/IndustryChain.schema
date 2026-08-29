@@ -1,0 +1,19 @@
+namespace Tidewise
+
+# REVIEWED ENTITYTYPE. Do not submit this file as the complete project Schema.
+IndustryChain(产业链): EntityType
+    desc: 隶属于某一行业，由多个产业链节点通过投入、组成、技术支撑或依赖形成的稳定业务结构；不含单一行业、企业、节点或临时传导路径。
+    properties:
+        aliases(别名): Text
+            desc: 产业链的正式别名、行业惯用名称或研究常用名称，用于识别同一产业链。
+            constraint: NotNull, MultiValue
+            index: Text
+        scope(范围): Text
+            desc: 产业链所覆盖的业务活动、关键环节及分析边界。
+            constraint: NotNull
+            index: TextAndVector
+    relations:
+        belongsToIndustry(所属行业): Tidewise.Industry
+            desc: 产业链在业务分类上所属的行业。
+        belongsToMarketConcept(所属概念题材): Tidewise.MarketConcept
+            desc: 产业链所属的股票市场概念题材；同一产业链可以属于多个概念题材。

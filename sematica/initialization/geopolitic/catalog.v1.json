@@ -1,0 +1,105 @@
+{
+  "catalog_version": "demo-geopolitic-rivalry/v1",
+  "published_at": "2026-08-26T12:00:00Z",
+  "items": [
+    {
+      "catalog_key": "china_us_strategic_technology_competition",
+      "name": "中美战略与科技竞争",
+      "name_en": "China–United States Strategic and Technology Competition",
+      "rivalry_type": "GEOPOLITICAL",
+      "description": "中国与美国围绕先进技术、产业政策、贸易规则、供应链安全及全球战略影响力展开的长期竞争。具体关税、制裁、出口管制和外交行动属于该蓝图下的 Event。",
+      "core_actors": "中国；美国",
+      "peripheral_actors": "欧盟；日本；韩国及其他关键技术和供应链参与方",
+      "influenced_regions": ["东亚", "北美", "西欧"],
+      "status": "ACTIVE"
+    },
+    {
+      "catalog_key": "taiwan_strait_security_cross_strait_relations",
+      "name": "台海安全与两岸关系",
+      "name_en": "Taiwan Strait Security and Cross-Strait Relations",
+      "rivalry_type": "GEOPOLITICAL",
+      "description": "围绕台海安全、两岸关系和外部力量介入形成的长期地缘安全议题。军演、政策表态、军售及航运扰动属于该蓝图下的 Event。",
+      "core_actors": "中国大陆；台湾地区",
+      "peripheral_actors": "美国；日本及其他相关方",
+      "influenced_regions": ["东亚", "北美"],
+      "status": "ACTIVE"
+    },
+    {
+      "catalog_key": "south_china_sea_maritime_security_disputes",
+      "name": "南海海洋权益与安全争端",
+      "name_en": "South China Sea Maritime Rights and Security Disputes",
+      "rivalry_type": "GEOPOLITICAL",
+      "description": "围绕南海海洋权益、航行安全、资源开发与域外力量介入形成的长期地区争端。海上摩擦、联合演训和外交交涉属于该蓝图下的 Event。",
+      "core_actors": "中国；菲律宾；越南及其他南海声索方",
+      "peripheral_actors": "美国；日本及其他域外相关方",
+      "influenced_regions": ["东亚", "东南亚"],
+      "status": "ACTIVE"
+    },
+    {
+      "catalog_key": "russia_ukraine_war_western_security_confrontation",
+      "name": "俄乌战争及俄西方安全对抗",
+      "name_en": "Russia–Ukraine War and Russia–West Security Confrontation",
+      "rivalry_type": "MILITARY_WAR",
+      "description": "俄乌战争及其引发的俄罗斯与西方国家之间长期安全、制裁和战略资源对抗。战场行动、制裁调整、停火谈判和援助决定属于该蓝图下的 Event。",
+      "core_actors": "俄罗斯；乌克兰",
+      "peripheral_actors": "美国；北约成员国；欧盟",
+      "influenced_regions": ["东欧", "西欧"],
+      "status": "ACTIVE"
+    },
+    {
+      "catalog_key": "iran_us_israel_gulf_security_confrontation",
+      "name": "伊朗—美以及海湾安全对抗",
+      "name_en": "Iran–United States–Israel and Gulf Security Confrontation",
+      "rivalry_type": "MILITARY_WAR",
+      "description": "伊朗与美国、以色列之间围绕军事安全、核问题、地区影响力及海湾航道形成的持续对抗。军事打击、核谈判、制裁和霍尔木兹海峡扰动属于该蓝图下的 Event。",
+      "core_actors": "伊朗；美国；以色列",
+      "peripheral_actors": "海湾阿拉伯国家及相关地区力量",
+      "influenced_regions": ["西亚", "北美"],
+      "status": "ACTIVE"
+    },
+    {
+      "catalog_key": "israel_palestine_gaza_war",
+      "name": "巴以冲突与加沙战争",
+      "name_en": "Israel–Palestine Conflict and Gaza War",
+      "rivalry_type": "MILITARY_WAR",
+      "description": "以色列与巴勒斯坦相关方之间围绕加沙及更广泛巴以问题持续发展的武装冲突与政治安全危机。军事行动、停火、人道安排和谈判属于该蓝图下的 Event。",
+      "core_actors": "以色列；巴勒斯坦相关方",
+      "peripheral_actors": "美国；埃及；卡塔尔及其他地区调停方",
+      "influenced_regions": ["西亚", "北非"],
+      "status": "ACTIVE"
+    },
+    {
+      "catalog_key": "red_sea_yemen_maritime_security_conflict",
+      "name": "红海—也门航运安全冲突",
+      "name_en": "Red Sea–Yemen Maritime Security Conflict",
+      "rivalry_type": "MILITARY_WAR",
+      "description": "也门胡塞武装袭击及相关军事回应对红海、曼德海峡和亚丁湾航运安全形成的持续冲突。船舶袭击、护航行动和航线调整属于该蓝图下的 Event。",
+      "core_actors": "也门胡塞武装；美国及相关海上军事力量",
+      "peripheral_actors": "以色列；也门相关方；红海沿岸国家",
+      "influenced_regions": ["西亚", "东非", "北非"],
+      "status": "ACTIVE"
+    },
+    {
+      "catalog_key": "korean_peninsula_nuclear_security_confrontation",
+      "name": "朝鲜半岛核与安全对抗",
+      "name_en": "Korean Peninsula Nuclear and Security Confrontation",
+      "rivalry_type": "GEOPOLITICAL",
+      "description": "围绕朝鲜核与导弹计划、半岛军事安全和区域同盟体系形成的长期对抗。核活动、导弹试验、联合军演、制裁和外交谈判属于该蓝图下的 Event。",
+      "core_actors": "朝鲜；韩国；美国",
+      "peripheral_actors": "中国；日本；俄罗斯",
+      "influenced_regions": ["东亚", "北美"],
+      "status": "ACTIVE"
+    },
+    {
+      "catalog_key": "eastern_drc_m23_rwanda_conflict",
+      "name": "刚果（金）东部—M23—卢旺达冲突",
+      "name_en": "Eastern DRC–M23–Rwanda Conflict",
+      "rivalry_type": "MILITARY_WAR",
+      "description": "刚果（金）东部政府军、M23及卢旺达相关力量之间持续发展的地区武装与安全冲突，并涉及关键矿产产地和运输路线。军事推进、停火、制裁及矿区控制变化属于该蓝图下的 Event。",
+      "core_actors": "刚果（金）；M23；卢旺达",
+      "peripheral_actors": "乌干达；布隆迪；区域调停方及联合国刚果（金）稳定特派团",
+      "influenced_regions": ["中非", "东非"],
+      "status": "ACTIVE"
+    }
+  ]
+}

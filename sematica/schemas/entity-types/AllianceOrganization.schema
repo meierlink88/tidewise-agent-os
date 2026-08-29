@@ -1,0 +1,22 @@
+namespace Tidewise
+
+# REVIEW FRAGMENT ONLY. Do not submit this file as the complete project Schema.
+AllianceOrganization(联盟组织): EntityType
+    desc: 由多个独立国家、经济体、机构或其他正式成员，依据条约、章程或长期制度化规则设立，具有稳定组织身份、明确成员边界、持续治理或决策机制以及常设职能的跨主体组织。典型对象包括世界贸易组织、国际货币基金组织、东南亚国家联盟和石油输出国组织；排除倡议、协定、自贸安排、峰会、临时论坛、非制度化合作机制及一次性伙伴关系。
+    properties:
+        aliases(别名): Text
+            desc: 联盟组织的正式别名、英文名称、历史名称或常用名称，用于识别同一组织。
+            constraint: NotNull, MultiValue
+            index: Text
+        abbreviation(简称): Text
+            desc: 联盟组织使用的规范简称或缩写，如 WTO、IMF。
+            constraint: NotNull
+            index: Text
+        leadershipSummary(主导方摘要): Text
+            desc: 联盟组织的主要发起方、核心成员、领导机构或治理主导机制摘要。
+            constraint: NotNull
+            index: TextAndVector
+        influenceScopeSummary(影响范围摘要): Text
+            desc: 联盟组织覆盖的成员地域、职能领域、治理范围及主要影响对象摘要。
+            constraint: NotNull
+            index: TextAndVector

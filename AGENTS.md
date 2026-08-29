@@ -32,6 +32,7 @@ AgentOS (app/main.py)
 - `capabilities/collection/`：Collection 领域能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
 - `capabilities/evidence/`：Evidence 领域能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
 - `capabilities/event/`：Event Candidate 提炼与 Reasoning Server 交接能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
+- `sematica/`：AgentOS 内部语义层模块，承载 Graphiti、Ontology、Event Analysis 与 Investment Reasoning 能力；它不是独立服务，不得自行启动第二个 HTTP 进程。
 - `data/collector/`：本地原始采集 Artifact；目录受 Git 忽略。
 - `data/evidence/`、`data/event/`：本地 Evidence 与 Event 提炼 Artifact；目录受 Git 忽略。
 
