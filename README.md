@@ -18,12 +18,14 @@
 
 ## 本地拓扑
 
-本服务通过 `tidewise-local` 网络复用 `tidewise-infra` 中的 PostgreSQL，使用独立数据库
-`agent_os`。Compose 项目名固定为 `tidewise-app`，本仓库只启动容器 `agent-os`。
+本仓库拥有独立的 `agent-os` Compose 项目，同时管理 AgentOS 与 Graphiti 使用的
+Neo4j。AgentOS 仍通过 `tidewise-local` 外部网络复用 `tidewise-infra` 中的
+PostgreSQL，使用独立数据库 `agent_os`；Data Service 也通过该共享网络访问。
 
 ```text
-tidewise-app
-└── agent-os         # 仅在本仓库显式启动
+agent-os
+├── agent-os          # Agno AgentOS
+└── agent-os-neo4j    # Graphiti 图存储，复用历史数据卷
 
 tidewise-infra
 └── postgres-1       # 共享实例，AgentOS 使用独立 agent_os 数据库
@@ -33,9 +35,10 @@ tidewise-infra
 
 ```bash
 cp example.env .env
-# 填写 DEEPSEEK_API_KEY、DB_PASS、DATA_SERVICE_TOKEN 和 MinIO 凭据；首次初始化还需创建 agent_os 数据库/角色。
+# 填写 DeepSeek、Neo4j、Graphiti、DB、Data Service 和 MinIO 凭据；
+# 首次初始化还需创建 agent_os 数据库/角色。
 
-docker compose up -d --build agentos
+docker compose up -d --build agentos neo4j
 curl -sSf http://localhost:8000/health
 # 仅在新的 agent_os 数据库中执行一次：
 docker compose exec -T agentos python -m scripts.seed_schedules
@@ -47,12 +50,20 @@ docker compose exec -T agentos python -m scripts.seed_schedules
 ```bash
 docker compose logs -f agentos
 docker compose restart agentos
-docker compose stop agentos
-docker compose rm -f agentos
+docker compose stop agentos neo4j
+docker compose rm -f agentos neo4j
 ```
 
-> 不要在本仓库执行不带服务名的 `docker compose down` 或 `--remove-orphans`：
-> `tidewise-app` 分组还包含其他观潮家应用服务。
+> Neo4j 数据卷明确复用 `tidewise-reason_graphiti-neo4j-data`。不要执行
+> `docker compose down -v` 或手工删除该卷，否则会丢失图谱数据。
+
+从历史 `tidewise-reason` 本地配置首次迁移时，可执行：
+
+```bash
+./scripts/migrate_graphiti_runtime_env.sh
+```
+
+该脚本只合并 AgentOS `.env` 中缺失的 Neo4j/Graphiti 键，不覆盖已有值，也不输出密钥。
 
 ## 采集提示词与数据
 
@@ -118,7 +129,7 @@ AgentOS、运行幂等迁移并重新启动：
 docker compose build agentos
 docker compose stop agentos
 docker compose run --rm --no-deps agentos python -m scripts.migrate_agno_db
-docker compose up -d agentos
+docker compose up -d agentos neo4j
 ```
 
 迁移不会删除 Agno v2 的 legacy runs 数据；确认新版运行稳定前不执行 cleanup。

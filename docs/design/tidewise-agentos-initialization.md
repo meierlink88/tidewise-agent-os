@@ -4,8 +4,8 @@
 
 把官方 AgentOS Docker 模板收敛为观潮家独立维护的运行时项目：
 
-- AgentOS API 由 Docker 启动，并归入 Docker Compose 项目 `tidewise-app`。
-- 本地服务名保持 `agentos`，容器名固定为 `agent-os`。
+- AgentOS API 与 Neo4j 由 Docker 启动，并归入独立 Docker Compose 项目 `agent-os`。
+- 本地服务名保持 `agentos` 和 `neo4j`，容器名固定为 `agent-os` 和 `agent-os-neo4j`。
 - 复用 `tidewise-infra` 的 PostgreSQL 5432，不创建第二个 PostgreSQL 容器。
 - 使用独立数据库 `agent_os` 和最小权限登录角色 `agent_os_runtime`。
 - 默认模型为 DeepSeek V4 Flash，密钥只保存在被 Git 忽略的 `.env`。
@@ -27,29 +27,32 @@
 ## 数据与安全
 
 - 宿主机仍只暴露已有 PostgreSQL 5432；AgentOS 通过外部网络 `tidewise-local` 和别名 `postgres` 访问它。
+- Neo4j 的 HTTP/Bolt 端口仅绑定宿主机回环地址；AgentOS 通过 `bolt://neo4j:7687` 访问。
+- Neo4j 复用历史显式命名数据卷，Compose 分组迁移不改变图数据真源。
 - `agent_os_runtime` 仅拥有 `agent_os`，不授予其他业务数据库权限。
 - 本地使用 `RUNTIME_ENV=dev`，JWT 关闭；生产必须切换到 `prd` 并配置 JWT/JWKS。
 - DeepSeek API Key 不写入镜像、Compose 文件、日志或 Git。
 
 ## 启动与失败策略
 
-- 启动命令限定为 `docker compose up -d --build agentos`。
-- 因为本服务与其他本地服务共用 Compose 项目名 `tidewise-app`，禁止在本仓库执行不带
-  服务名的 `docker compose down` 或 `--remove-orphans`。
+- 启动命令限定为 `docker compose up -d --build agentos neo4j`。
+- 服务生命周期操作必须指定 `agentos` 或 `neo4j`；禁止执行会删除数据卷的
+  `docker compose down -v`。
 - DB 不可用时入口等待最多 300 秒；Schedule 由新环境显式 seed，应用启动只读检查失败只告警，
   不阻断 API，也不修改 Control Panel 配置。
 - `local-ping` 不依赖模型，先用于区分平台故障与模型供应商故障。
 
 ## 验收
 
-1. `docker compose config` 只包含 `agentos` 服务，网络指向外部 `tidewise-local`。
-2. Docker 标签为 `com.docker.compose.project=tidewise-app`、`service=agentos`。
-3. `agent_os` 数据库存在且归属 `agent_os_runtime`。
-4. `/health`、`/agents`、`/workflows` 返回成功。
-5. `local-ping` Workflow 成功且不产生模型调用。
-6. `tidewise-assistant` 使用 DeepSeek V4 Flash 返回非空内容。
-7. `/mcp` 握手、工具枚举和 `run_agent` 成功。
-8. 格式、静态检查和数据库持久化检查通过。
+1. `docker compose config` 包含 `agentos` 与 `neo4j` 服务，网络指向外部 `tidewise-local`。
+2. Docker 标签为 `com.docker.compose.project=agent-os`，服务分别为 `agentos` 与 `neo4j`。
+3. Neo4j 迁移前后的节点数与关系数一致。
+4. `agent_os` 数据库存在且归属 `agent_os_runtime`。
+5. `/health`、`/agents`、`/workflows` 返回成功。
+6. `local-ping` Workflow 成功且不产生模型调用。
+7. `tidewise-assistant` 使用 DeepSeek V4 Flash 返回非空内容。
+8. `/mcp` 握手、工具枚举和 `run_agent` 成功。
+9. 格式、静态检查和数据库持久化检查通过。
 
 ## 非目标
 
