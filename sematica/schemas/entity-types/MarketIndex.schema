@@ -1,0 +1,30 @@
+namespace Tidewise
+
+# DRAFT FOR REVIEW. Do not submit this file as the complete project Schema.
+MarketIndex(市场指数): EntityType
+    desc: 按照稳定编制规则持续计算，用于衡量一组证券、商品、汇率或市场表现的指标化对象；不含单一证券、普通经营指标、临时统计值或交易市场。
+    properties:
+        aliases(别名): Text
+            desc: 市场指数的正式别名、英文名称或市场常用简称，用于识别同一指数。
+            constraint: NotNull, MultiValue
+            index: Text
+        indexCode(指数代码): Text
+            desc: 市场指数由编制方或行情体系赋予的规范代码。
+            constraint: NotNull
+            index: Text
+        indexType(指数类型): Text
+            desc: 市场指数衡量的资产或市场类别，如股票、债券、商品、汇率或波动率。
+            constraint: NotNull
+            index: Text
+        provider(编制方): Text
+            desc: 负责设计、维护并发布市场指数的机构或组织名称。
+            index: Text
+        currencyCode(计价货币代码): Text
+            desc: 市场指数点位或价值口径采用的规范货币代码。
+            constraint: NotNull
+            index: Text
+        listDate(发布日期): Text
+            desc: 市场指数首次正式发布或启用的日期。
+    relations:
+        belongsToMarket(所属市场): Tidewise.TradingMarket
+            desc: 市场指数主要衡量或发布于的交易市场。

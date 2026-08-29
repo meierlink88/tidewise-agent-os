@@ -1,0 +1,21 @@
+namespace Tidewise
+
+# DRAFT FOR REVIEW. Do not submit this file as the complete project Schema.
+FinancialInstrument(金融工具): EntityType
+    desc: 具有可交易或可订立合约属性、可作为交易、监管或资金配置对象的标准化金融工具；不含发行企业、单只证券、市场指数、标的商品或交易场所。
+    properties:
+        aliases(别名): Text
+            desc: 金融工具的正式别名、英文名称或市场常用名称，用于识别同一工具类别。
+            constraint: NotNull, MultiValue
+            index: Text
+        instrumentType(金融工具类型): Text
+            desc: 金融工具所属的受控类别，如股票、外汇、商品期货或数字资产。
+            constraint: NotNull
+            index: Text
+        exchangeCode(交易场所代码): Text
+            desc: 金融工具主要挂牌、交易或报价场所的规范代码。
+            index: Text
+        currencyCode(计价货币代码): Text
+            desc: 金融工具交易、结算或估值采用的规范货币代码。
+            constraint: NotNull
+            index: Text

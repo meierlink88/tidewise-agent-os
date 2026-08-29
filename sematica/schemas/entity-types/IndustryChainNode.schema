@@ -1,0 +1,28 @@
+namespace Tidewise
+
+# REVIEWED ENTITYTYPE. Do not submit this file as the complete project Schema.
+IndustryChainNode(产业链节点): EntityType
+    desc: 产业链中承担明确投入、制造、工艺、组件、设备、服务或经济环节功能的规范节点；不表示具体企业、证券、完整产业链或一次性事件行为。
+    properties:
+        aliases(别名): Text
+            desc: 产业链节点的正式别名、行业惯用名称或常用简称，用于识别同一节点。
+            constraint: NotNull, MultiValue
+            index: Text
+        definition(定义): Text
+            desc: 产业链节点所代表的产品、技术、工艺、设备、服务或经济环节的业务定义。
+            constraint: NotNull
+            index: TextAndVector
+        boundaryNote(边界说明): Text
+            desc: 产业链节点的纳入范围、排除范围以及与相邻节点的区分说明。
+            index: TextAndVector
+        chainPosition(产业链位置): Text
+            desc: 产业链节点在业务流向中的规范位置，取值为上游、中游或下游。
+            constraint: NotNull, Enum="upstream,midstream,downstream"
+            index: Text
+    relations:
+        downstreamNode(下游节点): IndustryChainNode
+            desc: 当前节点在产业链业务流向上直接指向的下游节点。
+        belongsToIndustryChain(所属产业链): Tidewise.IndustryChain
+            desc: 当前节点所属的产业链。
+        belongsToMarketConcept(所属概念题材): Tidewise.MarketConcept
+            desc: 当前节点所属的股票市场概念题材；同一节点可以属于多个概念题材。

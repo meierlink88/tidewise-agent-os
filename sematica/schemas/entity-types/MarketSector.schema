@@ -1,0 +1,10 @@
+namespace Tidewise
+
+# DRAFT FOR REVIEW. Do not submit this file as the complete project Schema.
+MarketSector(市场板块): EntityType
+    desc: 由正式市场或研究分类规则聚合的一组证券或企业，用于表达共同地域、风格、主题或行业市场属性；不含单一实体、实体行业、产业链、指数或临时行情描述。
+    properties:
+        aliases(别名): Text
+            desc: 市场板块的正式别名、市场惯用名称或研究常用名称，用于识别同一板块。
+            constraint: NotNull, MultiValue
+            index: Text

@@ -1,0 +1,25 @@
+namespace Tidewise
+
+# REVIEWED ENTITYTYPE. Do not submit this file as the complete project Schema.
+Industry(行业): EntityType
+    desc: 按主要经济活动、产品或服务供给方式划分的稳定产业分类，可包含多个企业和产品类别；不含市场板块、研究概念、完整产业链或单一实体。
+    properties:
+        aliases(别名): Text
+            desc: 行业的正式别名、历史名称或行业惯用名称，用于识别同一行业分类。
+            constraint: NotNull, MultiValue
+            index: Text
+        industryCode(行业代码): Text
+            desc: 行业在观潮家行业本体中的稳定规范代码。
+            constraint: NotNull
+            index: Text
+        definition(定义): Text
+            desc: 行业所覆盖的主要经济活动、产品与服务供给方式的业务定义。
+            constraint: NotNull
+            index: TextAndVector
+        boundaryNote(边界说明): Text
+            desc: 行业的纳入范围、排除范围以及与相邻行业的区分说明。
+            constraint: NotNull
+            index: TextAndVector
+    relations:
+        parentIndustry(上级行业): Industry
+            desc: 当前行业在观潮家行业本体中直接归属的上一级行业。

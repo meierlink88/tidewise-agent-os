@@ -1,0 +1,21 @@
+namespace Tidewise
+
+# DRAFT FOR REVIEW. Do not submit this file as the complete project Schema.
+PolicyBody(政策与监管机构): EntityType
+    desc: 依法或依正式授权制定、执行、解释政策并实施公共监管的政府部门、中央银行、法院或监管机构；不含企业、交易所、行业协会、国家或负责人个人。
+    properties:
+        aliases(别名): Text
+            desc: 政策与监管机构的正式别名、英文名称、历史名称或常用简称，用于识别同一机构。
+            constraint: NotNull, MultiValue
+            index: Text
+        bodyType(机构类型): Text
+            desc: 政策与监管机构按公共职能划分的业务类型。
+            constraint: NotNull
+            index: Text
+        jurisdiction(管辖范围): Text
+            desc: 政策与监管机构依法行使职权的国家、地区、市场或事项范围。
+            constraint: NotNull
+            index: TextAndVector
+        policyDomain(政策领域): Text
+            desc: 政策与监管机构主要负责制定、执行或监督的政策领域。
+            index: TextAndVector

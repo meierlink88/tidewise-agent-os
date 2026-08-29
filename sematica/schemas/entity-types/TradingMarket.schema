@@ -1,0 +1,25 @@
+namespace Tidewise
+
+# REVIEWED ENTITYTYPE. Do not submit this file as the complete project Schema.
+TradingMarket(交易市场): EntityType
+    desc: 具有稳定交易范围、组织规则或交易场所身份的正式市场或交易所；不含单一证券、指数、金融工具、市场板块或泛化市场情绪。
+    properties:
+        aliases(别名): Text
+            desc: 交易市场的正式别名、英文名称或市场常用简称，用于识别同一市场。
+            constraint: NotNull, MultiValue
+            index: Text
+        marketType(市场类型): Text
+            desc: 交易市场按资产类别或组织形式划分的业务类型。
+            constraint: NotNull
+            index: Text
+        currencyCode(结算货币代码): Text
+            desc: 交易市场主要用于报价、交易或结算的规范货币代码。
+            constraint: NotNull
+            index: Text
+        timezone(市场时区): Text
+            desc: 交易市场公布交易日程和时间时采用的规范时区。
+            constraint: NotNull
+            index: Text
+    relations:
+        belongsToCountry(所属国家): Tidewise.Country
+            desc: 交易市场在法律管辖或主要运营层面所属的国家。

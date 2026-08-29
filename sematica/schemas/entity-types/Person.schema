@@ -1,0 +1,16 @@
+namespace Tidewise
+
+# DRAFT FOR REVIEW. Do not submit this file as the complete project Schema.
+Person(人物): EntityType
+    desc: 能够以稳定姓名或无歧义正式身份识别的自然人；不含机构、职位本身、匿名群体、虚构主体或原文未指明而只能推断的个人。
+    properties:
+        aliases(别名): Text
+            desc: 人物的正式姓名变体、曾用名、英文名、译名或常用称谓，用于识别同一自然人。
+            constraint: NotNull, MultiValue
+            index: Text
+        roleTitle(职务): Text
+            desc: 人物当前或与投研语境相关的正式职务、职业角色或身份称谓。
+            index: TextAndVector
+    relations:
+        associatedWithCountry(关联国家): Tidewise.Country
+            desc: 人物因任职、活动、身份或主要公共影响而长期关联的国家。

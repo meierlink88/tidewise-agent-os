@@ -1,0 +1,30 @@
+namespace Tidewise
+
+# REVIEWED ENTITYTYPE. Do not submit this file as the complete project Schema.
+Company(企业): EntityType
+    desc: 具有独立经营身份并持续开展经营活动的企业、集团或法人经营主体；不含其发行的证券、品牌、产品、政府机构、联盟组织或临时项目。
+    properties:
+        aliases(别名): Text
+            desc: 企业的正式别名、历史名称、英文名称、品牌化简称或市场常用名称，用于识别同一企业。
+            constraint: NotNull, MultiValue
+            index: Text
+        area(经营地区): Text
+            desc: 企业注册、总部所在或主要开展经营活动的地区。
+            index: Text
+        controllerName(控制方名称): Text
+            desc: 对企业具有最终控制权或重要支配权的个人、机构或主体名称。
+            index: Text
+        controllerType(控制方类型): Text
+            desc: 企业控制方的主体类型，如个人、国有机构、企业或其他组织。
+            index: Text
+    relations:
+        belongsToIndustry(所属行业): Tidewise.Industry
+            desc: 企业主要经营活动所属的行业；同一企业可以属于多个行业。
+        belongsToCountry(所属国家): Tidewise.Country
+            desc: 企业注册或主要法律主体所属的国家。
+        belongsToIndustryChainNode(所属产业链节点): Tidewise.IndustryChainNode
+            desc: 企业经营活动所属的产业链节点；同一企业可以属于多个节点。
+        belongsToMarketConcept(所属概念题材): Tidewise.MarketConcept
+            desc: 企业所属的股票市场概念题材；同一企业可以属于多个概念题材。
+        belongsToTradingMarket(所属交易市场): Tidewise.TradingMarket
+            desc: 企业主要挂牌或被市场归属的交易市场；同一企业可以属于多个交易市场。
