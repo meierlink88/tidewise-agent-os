@@ -4,6 +4,7 @@ from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
 from agno.workflow import Step, Workflow
+from agno.workflow.types import HumanReview, OnError
 
 from agents.raw_collector import LoadedCollectorAgent, load_collector_agent
 from agents.title_curator import LoadedTitleCuratorAgent, load_title_curator_agent
@@ -18,7 +19,12 @@ from capabilities.collection.functions import (
 from db import get_postgres_db
 
 RAW_COLLECTION_WORKFLOW_ID = "raw-collection"
-RAW_COLLECTION_CONTRACT_VERSION = 11
+RAW_COLLECTION_CONTRACT_VERSION = 12
+
+
+def _fail_fast_review() -> HumanReview:
+    """Preserve the v2 fail-fast step contract through Agno v3 HumanReview."""
+    return HumanReview(on_error=OnError.fail)
 
 
 def _workflow_dependencies(
@@ -50,55 +56,55 @@ def _seed_workflow(collector: Agent, curator: Agent, *, dependencies: dict[str, 
                 name="prepare-collection-context",
                 executor=prepare_collection_context,  # type: ignore[arg-type]  # Agno injects RunContext by name.
                 max_retries=0,
-                on_error="fail",
+                human_review=_fail_fast_review(),
             ),
             Step(
                 name="plan-collection-query",
                 agent=collector,
                 max_retries=0,
-                on_error="fail",
+                human_review=_fail_fast_review(),
                 strict_input_validation=True,
             ),
             Step(
                 name="execute-collection-channels",
                 executor=execute_collection_channels_step,  # type: ignore[arg-type]  # Agno injects RunContext.
                 max_retries=0,
-                on_error="fail",
+                human_review=_fail_fast_review(),
                 strict_input_validation=True,
             ),
             Step(
                 name="prepare-title-curation",
                 executor=prepare_title_curation,  # type: ignore[arg-type]  # Agno injects RunContext by name.
                 max_retries=0,
-                on_error="fail",
+                human_review=_fail_fast_review(),
                 strict_input_validation=True,
             ),
             Step(
                 name="curate-collection-titles",
                 agent=curator,
                 max_retries=0,
-                on_error="fail",
+                human_review=_fail_fast_review(),
                 strict_input_validation=True,
             ),
             Step(
                 name="validate-title-curation",
                 executor=validate_title_curation,  # type: ignore[arg-type]  # Agno injects RunContext by name.
                 max_retries=0,
-                on_error="fail",
+                human_review=_fail_fast_review(),
                 strict_input_validation=True,
             ),
             Step(
                 name="build-artifact-set",
                 executor=build_artifact_step,  # type: ignore[arg-type]  # Agno injects RunContext by name.
                 max_retries=0,
-                on_error="fail",
+                human_review=_fail_fast_review(),
                 strict_input_validation=True,
             ),
             Step(
                 name="publish-collection",
                 executor=publish_collection_step,
                 max_retries=0,
-                on_error="fail",
+                human_review=_fail_fast_review(),
                 strict_input_validation=True,
             ),
         ],

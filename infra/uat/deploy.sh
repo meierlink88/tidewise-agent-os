@@ -56,6 +56,15 @@ verify_release() {
   echo "PASS agentos-health-auth-components-schedules-mcp"
 }
 
+migrate_candidate_database() {
+  local runtime="$1"
+  local images="$2"
+  local compose_file="$3"
+  compose_for "$runtime" "$images" "$compose_file" run --rm --no-deps agentos \
+    python -m scripts.migrate_agno_db
+  echo "PASS agno-database-migration"
+}
+
 rollback() {
   rollback_in_progress=true
   echo "Candidate verification failed; restoring the previous AgentOS release" >&2
@@ -96,6 +105,10 @@ on_error() {
 trap 'on_error $?' ERR
 
 compose_for "$runtime_env" "$candidate_images" "$candidate_compose" config --quiet
+# Agno v3 moves runs into their own table. Freeze v2 writes, then apply the
+# additive, idempotent migration with the candidate image before v3 serves.
+compose_for "$runtime_env" "$candidate_images" "$candidate_compose" stop --timeout 30 agentos || true
+migrate_candidate_database "$runtime_env" "$candidate_images" "$candidate_compose"
 compose_for "$runtime_env" "$candidate_images" "$candidate_compose" up -d --wait --wait-timeout 180 agentos
 if [ ! -s "$current_sha" ]; then
   compose_for "$runtime_env" "$candidate_images" "$candidate_compose" exec -T agentos \

@@ -69,7 +69,9 @@ def prepare_raw_document(step_input: StepInput) -> StepOutput:
 async def prepare_evidence_analysis(step_input: StepInput, run_context: RunContext) -> StepOutput:
     """Freeze one formal Category Catalog per run and expose identity-free semantics to the Agent."""
     prepared = _model_from_content(PreparedRawDocument, _step_content(step_input, "prepare-raw-document"))
-    dependencies = dict(run_context.dependencies or {})
+    dependencies = run_context.dependencies
+    if dependencies is None:
+        raise ValueError("run-scoped Evidence dependency state is unavailable")
     snapshot = dependencies.get(_CATEGORY_CATALOG_DEPENDENCY)
     if snapshot is None:
         result = await asyncio.to_thread(get_evidence_categories)
@@ -78,7 +80,6 @@ async def prepare_evidence_analysis(step_input: StepInput, run_context: RunConte
         except ValidationError as exc:
             raise ValueError("Data Service Evidence Category Catalog is invalid") from exc
         dependencies[_CATEGORY_CATALOG_DEPENDENCY] = catalog.model_copy(deep=True)
-        run_context.dependencies = dependencies
     else:
         try:
             catalog = EvidenceCategoryCatalog.model_validate(snapshot)

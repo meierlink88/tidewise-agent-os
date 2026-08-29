@@ -52,8 +52,10 @@ REVOKE ALL ON DATABASE agent_os_uat FROM PUBLIC;
 GRANT CONNECT, TEMPORARY ON DATABASE agent_os_uat TO agent_os_uat_runtime;
 ```
 
-Set a strong password separately and confirm RDS automated backups/PITR before the first deployment. AgentOS provisions
-its own Agno tables on first boot; the deployment never runs a down migration or restores RDS automatically.
+Set a strong password separately and confirm RDS automated backups/PITR before the first deployment. Every deployment
+stops AgentOS traffic, then runs `python -m scripts.migrate_agno_db` from the candidate image before starting it. The
+migration is additive and idempotent; Agno v3 preserves the legacy session `runs` data as rollback protection. The
+deployment never runs a down migration, removes the legacy runs column, or restores RDS automatically.
 
 ## One-time ECS bootstrap
 
