@@ -1,4 +1,4 @@
-"""Typed contracts for the fixed multi-stage investment reasoning DAG."""
+"""Typed contracts for Schedule-driven investment reasoning."""
 
 from __future__ import annotations
 
@@ -49,14 +49,21 @@ class InvestmentAssessment(StrEnum):
     INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
 
 
-class InvestmentAnalysisRequest(FrozenModel):
+class InvestmentAnalysisPlan(FrozenModel):
+    """Planner output parsed from the editable Schedule prompt."""
+
     question: str = Field(min_length=1, max_length=2000)
-    decision_at: datetime
     event_window_hours: int = Field(default=48, ge=1, le=720)
+
+
+class InvestmentAnalysisRequest(InvestmentAnalysisPlan):
+    """Runtime-owned bounds plus the Planner's semantic scope."""
+
     forward_horizon_days: int = Field(default=1095, ge=1, le=3650)
-    min_anchor_matches: int = Field(default=2, ge=1, le=10)
+    min_anchor_matches: int = Field(default=1, ge=1, le=10)
     max_chains: int = Field(default=10, ge=1, le=10)
     max_hops: int = Field(default=3, ge=1, le=3)
+    decision_at: datetime
 
     @field_validator("decision_at")
     @classmethod
@@ -98,11 +105,23 @@ class FactSnapshot(FrozenModel):
     direction: Direction | None = None
     magnitude: str | None = None
     horizons: list[Horizon] = Field(default_factory=list)
+    confidence: Confidence | None = None
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
     expected_end_at: datetime | None = None
     assertion_modality: str | None = None
     mechanism: str | None = None
+
+    def is_active_signal(self, decision_at: datetime) -> bool:
+        return (
+            self.kind == "SIGNAL"
+            and self.direction not in {None, Direction.UNKNOWN}
+            and bool(self.horizons)
+            and self.confidence is not None
+            and (self.valid_at is None or self.valid_at <= decision_at)
+            and (self.invalid_at is None or self.invalid_at > decision_at)
+            and (self.expected_end_at is None or self.expected_end_at > decision_at)
+        )
 
 
 class ChainNodeSnapshot(FrozenModel):
@@ -116,11 +135,7 @@ class ChainNodeSnapshot(FrozenModel):
 class TopologyEdgeSnapshot(FrozenModel):
     uuid: str
     business_id: str
-    name: Literal[
-        "ChainNodeInputTo",
-        "ChainNodeIsComponentOf",
-        "ChainNodeDependsOn",
-    ]
+    name: Literal["ChainNodeInputTo", "ChainNodeIsComponentOf", "ChainNodeDependsOn"]
     source_node_id: str
     source_name: str
     target_node_id: str
@@ -134,20 +149,22 @@ class IndustryChainSnapshot(FrozenModel):
     name: str
     anchor_match_count: int = Field(ge=1)
     matched_node_ids: list[str]
-    nodes: list[ChainNodeSnapshot] = Field(min_length=1, max_length=10)
-    edges: list[TopologyEdgeSnapshot] = Field(max_length=20)
+    signal_root_fact_ids: list[str] = Field(default_factory=list)
+    signal_root_node_ids: list[str] = Field(default_factory=list)
+    nodes: list[ChainNodeSnapshot] = Field(min_length=1, max_length=200)
+    edges: list[TopologyEdgeSnapshot] = Field(default_factory=list, max_length=500)
 
 
 class InvestmentAnalysisContext(FrozenModel):
-    context_version: Literal["investment-reasoning-context/v1"] = "investment-reasoning-context/v1"
+    context_version: Literal["investment-reasoning-context/v2"] = "investment-reasoning-context/v2"
     request: InvestmentAnalysisRequest
-    events: list[EventSnapshot] = Field(min_length=1, max_length=100)
-    facts: list[FactSnapshot] = Field(max_length=500)
-    chains: list[IndustryChainSnapshot] = Field(min_length=1, max_length=10)
-    retrieval_strategy: Literal["GRAPHITI_NATIVE_HYBRID_PLUS_EXACT_TEMPORAL_SCOPE"] = (
-        "GRAPHITI_NATIVE_HYBRID_PLUS_EXACT_TEMPORAL_SCOPE"
+    events: list[EventSnapshot] = Field(min_length=1, max_length=500)
+    facts: list[FactSnapshot] = Field(default_factory=list, max_length=2000)
+    chains: list[IndustryChainSnapshot] = Field(default_factory=list, max_length=10)
+    retrieval_strategy: Literal["GRAPHITI_NATIVE_SEARCH_PLUS_EXACT_TEMPORAL_SCOPE"] = (
+        "GRAPHITI_NATIVE_SEARCH_PLUS_EXACT_TEMPORAL_SCOPE"
     )
-    native_retrieved_fact_ids: list[str] = Field(default_factory=list, max_length=100)
+    native_retrieved_fact_ids: list[str] = Field(default_factory=list, max_length=1000)
     validation_issues: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -163,6 +180,10 @@ class InvestmentAnalysisContext(FrozenModel):
                 if edge.source_node_id not in node_ids or edge.target_node_id not in node_ids:
                     raise ValueError(f"topology edge {edge.business_id} escapes chain {chain.business_id}")
         return self
+
+    @property
+    def eligible_signal_fact_ids(self) -> set[str]:
+        return {fact.uuid for fact in self.facts if fact.is_active_signal(self.request.decision_at)}
 
 
 class TransmissionProposal(FrozenModel):
@@ -184,10 +205,11 @@ class TransmissionProposal(FrozenModel):
 class AcceptedTransmission(TransmissionProposal):
     transmission_id: str
     hop: int = Field(ge=1, le=3)
+    root_signal_fact_ids: list[str] = Field(min_length=1, max_length=20)
 
 
 class TransmissionBatch(FrozenModel):
-    proposals: list[TransmissionProposal] = Field(default_factory=list, max_length=80)
+    proposals: list[TransmissionProposal] = Field(default_factory=list, max_length=100)
     stopped_reason: str | None = Field(default=None, max_length=500)
 
 
@@ -207,7 +229,7 @@ class NodeTrendView(FrozenModel):
 
 
 class NodeAnalysisBatch(FrozenModel):
-    nodes: list[NodeTrendView] = Field(default_factory=list, max_length=10)
+    nodes: list[NodeTrendView] = Field(default_factory=list, max_length=200)
 
 
 class ChainTrendView(FrozenModel):
@@ -218,12 +240,12 @@ class ChainTrendView(FrozenModel):
     long: Trend
     confidence: Confidence
     summary: str = Field(min_length=1, max_length=1600)
-    nodes: list[NodeTrendView] = Field(min_length=1, max_length=10)
+    nodes: list[NodeTrendView] = Field(min_length=1, max_length=200)
 
 
 class AnalysisDraft(FrozenModel):
     one_sentence_conclusion: str = Field(min_length=1, max_length=2000)
-    chains: list[ChainTrendView] = Field(min_length=1, max_length=10)
+    chains: list[ChainTrendView] = Field(default_factory=list, max_length=10)
     limitations: list[str] = Field(default_factory=list, max_length=20)
 
 
@@ -235,7 +257,7 @@ class ReviewResult(FrozenModel):
 
 
 class InvestmentAnalysisResult(FrozenModel):
-    result_version: Literal["investment-reasoning-result/v1"] = "investment-reasoning-result/v1"
+    result_version: Literal["investment-reasoning-result/v2"] = "investment-reasoning-result/v2"
     executor: str
     status: Literal["SUCCEEDED", "NEEDS_REVIEW"]
     context_fingerprint: str
@@ -246,31 +268,18 @@ class InvestmentAnalysisResult(FrozenModel):
     execution_issues: list[str] = Field(default_factory=list, max_length=100)
 
 
-class RecordedReasoningPayload(FrozenModel):
-    payload_version: Literal["recorded-investment-reasoner/v1"] = "recorded-investment-reasoner/v1"
-    executor_name: str = "codex-recorded-reasoner"
-    rounds: dict[int, TransmissionBatch]
+class PreparedInvestmentContext(FrozenModel):
+    context: InvestmentAnalysisContext
+    context_fingerprint: str
+
+
+class InvestmentTransmissionState(FrozenModel):
+    context: InvestmentAnalysisContext
+    context_fingerprint: str
+    transmissions: list[AcceptedTransmission]
+    rounds_executed: int = Field(ge=0, le=3)
+    execution_issues: list[str] = Field(default_factory=list)
+
+
+class InvestmentDraftState(InvestmentTransmissionState):
     draft: AnalysisDraft
-    review: ReviewResult
-    execution_issues: list[str] = Field(default_factory=list, max_length=100)
-
-
-class ComparisonDifference(FrozenModel):
-    chain_id: str
-    node_id: str
-    horizon: Horizon
-    left: Trend
-    right: Trend
-    severity: Literal["COMPATIBLE", "MATERIAL"]
-
-
-class ComparisonReport(FrozenModel):
-    comparison_version: Literal["investment-reasoning-comparison/v1"] = "investment-reasoning-comparison/v1"
-    same_context: bool
-    total_node_horizons: int
-    exact_matches: int
-    compatible_matches: int
-    material_contradictions: int
-    weighted_similarity: float = Field(ge=0, le=1)
-    basically_consistent: bool
-    differences: list[ComparisonDifference]

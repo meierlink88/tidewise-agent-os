@@ -23,6 +23,12 @@ EVIDENCE_EXTRACTION_SCHEDULE_PROMPT = "处理所有尚未提取的 Raw Document"
 EVENT_EXTRACTION_SCHEDULE_NAME = "event-extraction-every-minute"
 EVENT_EXTRACTION_SCHEDULE_ENDPOINT = "/workflows/event-extraction/runs"
 EVENT_EXTRACTION_SCHEDULE_PROMPT = "处理所有已发布且尚未提炼 Event 的 Evidence"
+INVESTMENT_REASONING_SCHEDULE_NAME = "investment-reasoning-daily"
+INVESTMENT_REASONING_SCHEDULE_ENDPOINT = "/workflows/investment-reasoning/runs"
+INVESTMENT_REASONING_SCHEDULE_PROMPT = (
+    "获取最近48小时全部Event，分析这些Event驱动了哪些产业链，"
+    "并对每条命中产业链的所有标准节点给出升温、降温、分化或证据不足的投研结论。"
+)
 
 
 @dataclass(frozen=True)
@@ -107,6 +113,14 @@ def schedule_definitions() -> tuple[ScheduleDefinition, ...]:
                 endpoint=EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
                 payload={"message": EVENT_EXTRACTION_SCHEDULE_PROMPT},
                 description="Every minute: extract mapped local Evidence into Event Candidates.",
+                timezone="Asia/Shanghai",
+            ),
+            ScheduleDefinition(
+                name=INVESTMENT_REASONING_SCHEDULE_NAME,
+                cron="30 7 * * *",
+                endpoint=INVESTMENT_REASONING_SCHEDULE_ENDPOINT,
+                payload={"message": INVESTMENT_REASONING_SCHEDULE_PROMPT},
+                description="Daily pre-market: reason from active Event Signal Facts into industry-chain node trends.",
                 timezone="Asia/Shanghai",
             ),
         ]
