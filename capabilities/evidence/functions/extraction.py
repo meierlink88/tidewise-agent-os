@@ -40,6 +40,7 @@ from capabilities.evidence.internal.storage import (
 )
 
 _CATEGORY_CATALOG_DEPENDENCY = "evidence_category_catalog"
+_EVIDENCE_RUN_STATE = "evidence_extraction"
 
 
 def _model_from_content(model: type[Any], content: Any) -> Any:
@@ -57,6 +58,22 @@ def _step_content(step_input: StepInput, name: str) -> Any:
     return output.content
 
 
+def _evidence_run_state(run_context: RunContext) -> dict[str, Any]:
+    """Return state shared by every Step copy in one Evidence Workflow run."""
+    if run_context.dependencies is not None:
+        return run_context.dependencies
+
+    session_state = run_context.session_state
+    if session_state is None:
+        session_state = {}
+        run_context.session_state = session_state
+    state = session_state.get(_EVIDENCE_RUN_STATE)
+    if not isinstance(state, dict) or state.get("run_id") != run_context.run_id:
+        state = {"run_id": run_context.run_id}
+        session_state[_EVIDENCE_RUN_STATE] = state
+    return state
+
+
 def prepare_raw_document(step_input: StepInput) -> StepOutput:
     """Select and verify one unprocessed Raw document from the incremental index."""
     del step_input
@@ -69,17 +86,15 @@ def prepare_raw_document(step_input: StepInput) -> StepOutput:
 async def prepare_evidence_analysis(step_input: StepInput, run_context: RunContext) -> StepOutput:
     """Freeze one formal Category Catalog per run and expose identity-free semantics to the Agent."""
     prepared = _model_from_content(PreparedRawDocument, _step_content(step_input, "prepare-raw-document"))
-    dependencies = run_context.dependencies
-    if dependencies is None:
-        raise ValueError("run-scoped Evidence dependency state is unavailable")
-    snapshot = dependencies.get(_CATEGORY_CATALOG_DEPENDENCY)
+    run_state = _evidence_run_state(run_context)
+    snapshot = run_state.get(_CATEGORY_CATALOG_DEPENDENCY)
     if snapshot is None:
         result = await asyncio.to_thread(get_evidence_categories)
         try:
             catalog = EvidenceCategoryCatalog.model_validate(result)
         except ValidationError as exc:
             raise ValueError("Data Service Evidence Category Catalog is invalid") from exc
-        dependencies[_CATEGORY_CATALOG_DEPENDENCY] = catalog.model_copy(deep=True)
+        run_state[_CATEGORY_CATALOG_DEPENDENCY] = catalog.model_dump(mode="json")
     else:
         try:
             catalog = EvidenceCategoryCatalog.model_validate(snapshot)
@@ -136,8 +151,8 @@ def validate_evidence_analysis(step_input: StepInput, run_context: RunContext) -
     """Validate Agent semantics, resolve one formal Category ID and add publication metadata."""
     prepared = _model_from_content(PreparedRawDocument, _step_content(step_input, "prepare-raw-document"))
     draft = _model_from_content(EvidenceExtractionDraft, _step_content(step_input, "analyze-raw-evidence"))
-    dependencies = run_context.dependencies or {}
-    snapshot = dependencies.get(_CATEGORY_CATALOG_DEPENDENCY)
+    run_state = _evidence_run_state(run_context)
+    snapshot = run_state.get(_CATEGORY_CATALOG_DEPENDENCY)
     if snapshot is None:
         raise ValueError("run-scoped Evidence Category Catalog is missing")
     try:
