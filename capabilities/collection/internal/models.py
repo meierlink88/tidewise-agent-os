@@ -39,29 +39,16 @@ class CollectionRequest(BaseModel):
         return self
 
 
-class CollectionQueryPlan(BaseModel):
-    """Strict semantic plan returned by the Collector Agent."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    query: str = Field(min_length=1, max_length=512)
-    lookback_hours: int = Field(default=48, ge=1, le=8760)
-
-    @model_validator(mode="after")
-    def normalize_query(self) -> "CollectionQueryPlan":
-        self.query = self.query.strip()
-        if not self.query:
-            raise ValueError("query must not be blank")
-        return self
-
-
 class TitleCurationItem(BaseModel):
-    """Minimal title-only input visible to the Title Curator Agent."""
+    """Bounded material context visible to the Raw Evidence Filter Agent."""
 
     model_config = ConfigDict(extra="forbid")
 
     candidate_id: str = Field(min_length=1)
     title: str = Field(min_length=1, max_length=1_024)
+    source_name: str = Field(min_length=1, max_length=200)
+    published_at: datetime | None = None
+    content_excerpt: str = Field(min_length=1, max_length=2_000)
 
 
 class TitleCurationRequest(BaseModel):
@@ -113,23 +100,8 @@ class ToolBatch(BaseModel):
     collection_id: str
     connector: str
     query: str
-    requested_after: datetime
-    requested_before: datetime
-    agent_component_id: str
-    agent_config_version: int = Field(ge=1)
-    instructions_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     collected_at: datetime
     candidates: list[Candidate]
-
-    @model_validator(mode="after")
-    def validate_requested_window(self) -> "ToolBatch":
-        if self.requested_after.tzinfo is None or self.requested_after.utcoffset() is None:
-            raise ValueError("requested_after must include a timezone")
-        if self.requested_before.tzinfo is None or self.requested_before.utcoffset() is None:
-            raise ValueError("requested_before must include a timezone")
-        if self.requested_after >= self.requested_before:
-            raise ValueError("requested_after must be earlier than requested_before")
-        return self
 
 
 class ToolBatchReceipt(BaseModel):
@@ -138,10 +110,7 @@ class ToolBatchReceipt(BaseModel):
     batch_id: str
     connector: str
     query: str
-    requested_after: datetime
-    requested_before: datetime
     result_count: int
-    in_window_result_count: int
     candidate_ids: list[str]
 
 
@@ -152,7 +121,6 @@ class ChannelFetchReceipt(BaseModel):
     outcome: Literal["succeeded", "failed"]
     batch_id: str | None = None
     result_count: int = Field(ge=0)
-    in_window_result_count: int = Field(ge=0)
     error_code: str | None = None
 
 
@@ -162,8 +130,6 @@ class FetchReceipt(BaseModel):
     channel_group: Literal["web_search", "api", "rss"]
     outcome: Literal["succeeded", "partial", "failed", "no_channels"]
     query: str
-    requested_after: datetime
-    requested_before: datetime
     channels: list[ChannelFetchReceipt]
 
 

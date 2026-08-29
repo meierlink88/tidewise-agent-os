@@ -17,16 +17,16 @@ from agno.run import RunContext
 from agno.workflow import Step, StepInput, StepOutput
 from pydantic import ValidationError
 
-from agents.raw_collector import LoadedCollectorAgent, load_collector_agent
-from agents.title_curator import LoadedTitleCuratorAgent, ensure_title_curator_agent, load_title_curator_agent
+from agents.title_curator import (
+    TITLE_CURATOR_CONTRACT_VERSION,
+    LoadedTitleCuratorAgent,
+    ensure_title_curator_agent,
+    load_title_curator_agent,
+)
 from app.registry import registry
 from capabilities.collection.functions import (
-    build_artifact_step,
-    execute_collection_channels_step,
-    prepare_collection_context,
-    prepare_title_curation,
-    publish_collection_step,
-    validate_title_curation,
+    collect_raw_evidence,
+    publish_raw_evidence,
 )
 from capabilities.collection.functions.collection import request_from_input
 from capabilities.collection.internal.artifacts import build_artifact_set, publish_artifact_set
@@ -39,14 +39,19 @@ from capabilities.collection.internal.buffer import (
 from capabilities.collection.internal.channels.models import ChannelType, CollectionChannel, OwnershipType
 from capabilities.collection.internal.models import (
     Candidate,
-    CollectionQueryPlan,
     CollectionRequest,
     SourceLevel,
     TitleCurationDecision,
     TitleCurationDraft,
+    TitleCurationItem,
     TitleCurationRequest,
 )
-from workflows.raw_collection import RAW_COLLECTION_CONTRACT_VERSION, _seed_workflow, ensure_raw_collection_workflow
+from workflows.raw_collection import (
+    RAW_COLLECTION_CONTRACT_VERSION,
+    _seed_workflow,
+    ensure_raw_collection_workflow,
+    retire_collection_query_planner_agent,
+)
 
 
 class RecordingRawDocumentStore:
@@ -103,19 +108,12 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             request_from_input('{"objective":"采集最近6小时A股政策","time_window_hours":6}')
 
     def test_collection_acquisition_is_only_exposed_as_workflow_functions(self) -> None:
-        workflow_executors = [
-            prepare_collection_context,
-            execute_collection_channels_step,
-            prepare_title_curation,
-            validate_title_curation,
-            build_artifact_step,
-            publish_collection_step,
-        ]
+        workflow_executors = [collect_raw_evidence, publish_raw_evidence]
         registered_tool_names = {getattr(tool, "__name__", "") for tool in registry.tools or []}
         self.assertTrue({"web_fetch", "api_fetch", "rss_fetch"}.isdisjoint(registered_tool_names))
         self.assertTrue(all(inspect.iscoroutinefunction(executor) for executor in workflow_executors))
 
-    async def test_workflow_function_executes_all_channel_groups_with_one_frozen_window(self) -> None:
+    async def test_collect_raw_evidence_executes_all_channel_groups_with_the_original_query(self) -> None:
         now = datetime(2026, 8, 12, 10, tzinfo=UTC)
         channels = [
             CollectionChannel(
@@ -154,7 +152,6 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
 
         class Adapter:
             async def fetch(self, channel: CollectionChannel, request: object) -> list[Candidate]:
-                before = cast(datetime, getattr(request, "published_before"))
                 return [
                     Candidate(
                         candidate_id=f"candidate-{channel.code}",
@@ -165,8 +162,8 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
                         content=f"{channel.name}正文",
                         source_name=channel.name,
                         source_level=channel.default_source_level,
-                        published_at=before,
-                        collected_at=before,
+                        published_at=now,
+                        collected_at=now,
                     )
                 ]
 
@@ -174,39 +171,25 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             run_id="run-deterministic-channels",
             session_id="session",
             dependencies={
-                "collector_agent_component_id": "raw-collector",
-                "collector_agent_config_version": 7,
-                "collector_instructions_sha256": "a" * 64,
                 "collection_adapter_registry": {"bocha": Adapter(), "cls": Adapter()},
             },
         )
-        step_input = StepInput(
-            previous_step_outputs={
-                "plan-collection-query": StepOutput(content=CollectionQueryPlan(query="宏观政策", lookback_hours=48))
-            }
-        )
+        step_input = StepInput(input="宏观政策")
 
         with (
             patch(
                 "capabilities.collection.functions.collection.load_active_source_snapshot",
                 return_value=tuple(channels),
             ),
-            patch("capabilities.collection.functions.collection.datetime", wraps=datetime) as clock,
         ):
-            clock.now.return_value = now
-            output = await execute_collection_channels_step(step_input, context)
+            output = await collect_raw_evidence(step_input, context)
 
-        content = cast(dict[str, object], output.content)
-        receipts = cast(list[dict[str, object]], content["receipts"])
-        self.assertEqual(
-            [item["outcome"] for item in receipts],
-            ["succeeded", "succeeded", "no_channels"],
-        )
+        content = TitleCurationRequest.model_validate(output.content)
+        self.assertCountEqual([item.title for item in content.candidates], ["博查", "财联社"])
+        self.assertTrue(all(item.content_excerpt.endswith("正文") for item in content.candidates))
         batches = read_tool_batches(context.run_id)
         self.assertCountEqual([item.connector for item in batches], ["bocha", "cls_telegraph"])
-        self.assertEqual(
-            {(item.requested_after, item.requested_before) for item in batches}, {(now - timedelta(hours=48), now)}
-        )
+        self.assertEqual({item.query for item in batches}, {"宏观政策"})
 
     def test_build_then_manifest_last_publish_is_deterministic_and_idempotent(self) -> None:
         now = datetime(2026, 8, 10, 15, 30, tzinfo=UTC)
@@ -236,11 +219,6 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             collection_id="run-artifact",
             connector="eastmoney_stock_news",
             query="人工智能",
-            requested_after=now - timedelta(hours=1),
-            requested_before=now + timedelta(minutes=1),
-            agent_component_id="raw-collector",
-            agent_config_version=3,
-            instructions_sha256="b" * 64,
             candidates=[first, duplicate, outside],
         )
         write_title_curation(
@@ -267,7 +245,8 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(prepared.publication_items[-1], "runs/run-artifact/manifest.json")
         self.assertEqual(prepared.candidate_counts["accepted"], 1)
         self.assertEqual(prepared.candidate_counts["known_url"], 1)
-        self.assertEqual(prepared.candidate_counts["out_of_window"], 1)
+        self.assertEqual(prepared.candidate_counts["exact_duplicate"], 1)
+        self.assertNotIn("out_of_window", prepared.candidate_counts)
 
         with self.assertRaisesRegex(RuntimeError, "MinIO unavailable"):
             publish_artifact_set(prepared, document_store=FailingRawDocumentStore())
@@ -306,13 +285,13 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(manifest_payload["schema"], "raw_collection_manifest.v2")
         self.assertEqual(manifest_payload["results_pending"], 0)
-        self.assertEqual(manifest_payload["collector_agent"]["config_version"], 3)
-        self.assertEqual(manifest_payload["tool_batches"][0]["requested_after"], "2026-08-10T14:30:00+00:00")
+        self.assertNotIn("collector_agent", manifest_payload)
+        self.assertNotIn("requested_after", manifest_payload["tool_batches"][0])
         self.assertEqual(
             manifest_payload["objective_sha256"], hashlib.sha256("采集最近1小时人工智能政策".encode()).hexdigest()
         )
 
-    def test_artifact_build_rejects_tool_batches_with_mixed_time_windows(self) -> None:
+    def test_artifact_build_does_not_reject_old_published_at_values(self) -> None:
         now = datetime(2026, 8, 10, 15, 30, tzinfo=UTC)
         candidate = Candidate(
             candidate_id="candidate-window",
@@ -327,21 +306,33 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         )
         for connector, hours in (("bocha", 48), ("cls_telegraph", 24)):
             write_tool_batch(
-                collection_id="run-mixed-window",
+                collection_id="run-latest-results",
                 connector=connector,
                 query="政策",
-                requested_after=now - timedelta(hours=hours),
-                requested_before=now,
-                agent_component_id="raw-collector",
-                agent_config_version=3,
-                instructions_sha256="b" * 64,
                 candidates=[
-                    candidate.model_copy(update={"candidate_id": f"candidate-{connector}", "connector": connector})
+                    candidate.model_copy(
+                        update={
+                            "candidate_id": f"candidate-{connector}",
+                            "connector": connector,
+                            "title": f"政策资讯-{connector}",
+                            "url": f"https://example.com/{connector}",
+                            "published_at": now - timedelta(hours=hours),
+                        }
+                    )
                 ],
             )
-
-        with self.assertRaisesRegex(ValueError, "time window"):
-            build_artifact_set("run-mixed-window", CollectionRequest(objective="采集政策"), completed_at=now)
+        write_title_curation(
+            "run-latest-results",
+            TitleCurationDraft(
+                decisions=[
+                    TitleCurationDecision(candidate_id="candidate-bocha", is_relevant=True),
+                    TitleCurationDecision(candidate_id="candidate-cls_telegraph", is_relevant=True),
+                ]
+            ),
+        )
+        prepared = build_artifact_set("run-latest-results", CollectionRequest(objective="采集政策"), completed_at=now)
+        self.assertEqual(prepared.candidate_counts["accepted"], 2)
+        self.assertNotIn("out_of_window", prepared.candidate_counts)
 
     def test_title_curation_and_normalized_title_dedup_control_artifacts(self) -> None:
         now = datetime(2026, 8, 13, 2, tzinfo=UTC)
@@ -384,11 +375,6 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             collection_id="run-title-policy",
             connector="mixed-test",
             query="A股政策",
-            requested_after=now - timedelta(hours=1),
-            requested_before=now + timedelta(minutes=1),
-            agent_component_id="raw-collector",
-            agent_config_version=8,
-            instructions_sha256="c" * 64,
             candidates=candidates,
         )
         write_title_curation(
@@ -456,11 +442,6 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             collection_id="run-legacy-index",
             connector="bocha",
             query="政策",
-            requested_after=now - timedelta(hours=1),
-            requested_before=now + timedelta(minutes=1),
-            agent_component_id="raw-collector",
-            agent_config_version=8,
-            instructions_sha256="f" * 64,
             candidates=[candidate],
         )
         write_title_curation(
@@ -485,47 +466,32 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(legacy.read_text(encoding="utf-8"), legacy_payload)
         self.assertTrue((artifact_root() / "indexes/title-dedup-index.tsv").is_file())
 
-    async def test_title_curation_input_is_title_only_and_requires_exact_id_coverage(self) -> None:
+    async def test_filter_input_contains_bounded_context_and_requires_exact_id_coverage(self) -> None:
         now = datetime(2026, 8, 13, 3, tzinfo=UTC)
-        write_tool_batch(
-            collection_id="run-curation-validation",
-            connector="bocha",
-            query="政策",
-            requested_after=now - timedelta(hours=1),
-            requested_before=now + timedelta(minutes=1),
-            agent_component_id="raw-collector",
-            agent_config_version=8,
-            instructions_sha256="d" * 64,
-            candidates=[
-                Candidate(
-                    candidate_id="candidate-a",
-                    connector="bocha",
-                    query="政策",
-                    title="政策A",
-                    url="https://example.com/a",
-                    content="SECRET_BODY_A",
-                    source_name="媒体",
-                    published_at=now,
-                    collected_at=now,
-                ),
-                Candidate(
-                    candidate_id="candidate-b",
-                    connector="bocha",
-                    query="政策",
-                    title="政策B",
-                    url="https://example.com/b",
-                    content="SECRET_BODY_B",
-                    source_name="媒体",
-                    published_at=now,
-                    collected_at=now,
-                ),
-            ],
+        prepared = StepOutput(
+            content=TitleCurationRequest(
+                candidates=[
+                    TitleCurationItem(
+                        candidate_id="candidate-a",
+                        title="政策A",
+                        source_name="媒体",
+                        published_at=now,
+                        content_excerpt="SECRET_BODY_A",
+                    ),
+                    TitleCurationItem(
+                        candidate_id="candidate-b",
+                        title="政策B",
+                        source_name="媒体",
+                        published_at=now,
+                        content_excerpt="SECRET_BODY_B",
+                    ),
+                ]
+            )
         )
         context = RunContext(run_id="run-curation-validation", session_id="session")
-        prepared = await prepare_title_curation(StepInput(input="ignored"), context)
         encoded = cast(TitleCurationRequest, prepared.content).model_dump_json()
-        self.assertNotIn("SECRET_BODY", encoded)
-        self.assertNotIn("content", encoded)
+        self.assertIn("SECRET_BODY", encoded)
+        self.assertIn("content_excerpt", encoded)
 
         malformed = TitleCurationDraft(
             decisions=[
@@ -540,13 +506,14 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             ]
         )
         validation_input = StepInput(
+            input="采集政策",
             previous_step_outputs={
-                "prepare-title-curation": prepared,
-                "curate-collection-titles": StepOutput(content=malformed),
-            }
+                "collect-raw-evidence": prepared,
+                "filter-raw-evidence": StepOutput(content=malformed),
+            },
         )
         with self.assertRaisesRegex(ValueError, "coverage mismatch"):
-            await validate_title_curation(validation_input, context)
+            await publish_raw_evidence(validation_input, context)
 
         duplicate = TitleCurationDraft(
             decisions=[
@@ -561,13 +528,14 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             ]
         )
         duplicate_input = StepInput(
+            input="采集政策",
             previous_step_outputs={
-                "prepare-title-curation": prepared,
-                "curate-collection-titles": StepOutput(content=duplicate),
-            }
+                "collect-raw-evidence": prepared,
+                "filter-raw-evidence": StepOutput(content=duplicate),
+            },
         )
         with self.assertRaisesRegex(ValueError, "duplicate Candidate IDs"):
-            await validate_title_curation(duplicate_input, context)
+            await publish_raw_evidence(duplicate_input, context)
 
     def test_title_curator_contract_migration_publishes_reviewed_binary_prompt(self) -> None:
         db = MagicMock()
@@ -588,20 +556,19 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("reason_code", current.instructions)
         self.assertNotIn("uncertain", current.instructions)
         self.assertIs(current.output_schema, TitleCurationDraft)
-        self.assertEqual(current.metadata["title_curator_contract_version"], 4)
+        self.assertEqual(current.metadata["title_curator_contract_version"], TITLE_CURATOR_CONTRACT_VERSION)
 
     def test_studio_workflow_seed_round_trips_registered_functions(self) -> None:
-        collector = Agent(id="raw-collector", name="Collection Query Planner")
-        curator = Agent(id="title-curator", name="Collection Title Curator")
-        seeded = _seed_workflow(collector, curator)
+        curator = Agent(id="title-curator", name="Raw Evidence Filter")
+        seeded = _seed_workflow(curator)
         serialized_steps = cast(list[dict[str, object]], seeded.to_dict()["steps"])
         self.assertEqual(
             [item.get("agent_id") for item in serialized_steps if item.get("agent_id") is not None],
-            ["raw-collector", "title-curator"],
+            ["title-curator"],
         )
         self.assertEqual(
             [step.agent.name for step in cast(list[Step], seeded.steps) if step.agent is not None],
-            ["Collection Query Planner", "Collection Title Curator"],
+            ["Raw Evidence Filter"],
         )
         self.assertIsInstance(seeded.steps, list)
         steps = cast(list[Step], seeded.steps)
@@ -609,15 +576,13 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             [step.agent.id if step.agent is not None else getattr(step.executor, "__name__", None) for step in steps],
             [
-                "prepare_collection_context",
-                "raw-collector",
-                "execute_collection_channels_step",
-                "prepare_title_curation",
+                "collect_raw_evidence",
                 "title-curator",
-                "validate_title_curation",
-                "build_artifact_step",
-                "publish_collection_step",
+                "publish_raw_evidence",
             ],
+        )
+        self.assertEqual(
+            [step.name for step in steps], ["collect-raw-evidence", "filter-raw-evidence", "publish-raw-evidence"]
         )
         self.assertTrue(all(step.max_retries == 0 for step in steps))
         self.assertTrue(all(str(step.human_review.on_error) == "OnError.fail" for step in steps))
@@ -625,21 +590,14 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
     def test_workflow_agents_load_components_without_runtime_session_db(self) -> None:
         db = MagicMock()
         db.get_component.return_value = {"current_version": 11}
-        collector = Agent(id="raw-collector", instructions="published collector instructions", db=db)
         curator = Agent(id="title-curator", instructions="published curator instructions", db=db)
 
-        with (
-            patch("agents.raw_collector.get_postgres_db", return_value=db),
-            patch("agents.raw_collector.Agent.load", return_value=collector),
-        ):
-            loaded_collector = load_collector_agent(MagicMock())
         with (
             patch("agents.title_curator.get_postgres_db", return_value=db),
             patch("agents.title_curator.Agent.load", return_value=curator),
         ):
             loaded_curator = load_title_curator_agent(MagicMock())
 
-        self.assertIsNone(loaded_collector.agent.db)
         self.assertIsNone(loaded_curator.agent.db)
 
     def test_workflow_contract_migration_keeps_workflow_db_and_detaches_agent_dbs(self) -> None:
@@ -652,15 +610,8 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
                 "metadata": {"raw_collection_contract_version": 9},
             }
         }
-        collector_agent = Agent(id="raw-collector", instructions="published collector instructions", db=db)
         curator_agent = Agent(id="title-curator", instructions="published curator instructions", db=db)
-        collector_agent.db = None
         curator_agent.db = None
-        collector = LoadedCollectorAgent(
-            agent=collector_agent,
-            version=21,
-            instructions_sha256="collector-sha256",
-        )
         curator = LoadedTitleCuratorAgent(
             agent=curator_agent,
             version=22,
@@ -669,7 +620,6 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("workflows.raw_collection.get_postgres_db", return_value=db),
-            patch("workflows.raw_collection.load_collector_agent", return_value=collector),
             patch("workflows.raw_collection.load_title_curator_agent", return_value=curator),
             patch("workflows.raw_collection.Workflow.save", autospec=True, return_value=16) as workflow_save,
         ):
@@ -680,9 +630,34 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(migrated.db, db)
         steps = cast(list[Step], migrated.steps)
         agent_steps = [step.agent for step in steps if step.agent is not None]
-        self.assertEqual([agent.id for agent in agent_steps], ["raw-collector", "title-curator"])
+        self.assertEqual([agent.id for agent in agent_steps], ["title-curator"])
         self.assertTrue(all(agent.db is None for agent in agent_steps))
         self.assertEqual(migrated.metadata["raw_collection_contract_version"], RAW_COLLECTION_CONTRACT_VERSION)
+
+    def test_retire_collection_query_planner_soft_archives_current_version(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 9}
+        db.delete_component.return_value = True
+
+        with patch("workflows.raw_collection.get_postgres_db", return_value=db):
+            retired = retire_collection_query_planner_agent()
+
+        self.assertTrue(retired)
+        db.delete_component.assert_called_once_with(
+            "raw-collector",
+            expected_current_version=9,
+            require_no_dependents=False,
+        )
+
+    def test_retire_collection_query_planner_is_idempotent(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = None
+
+        with patch("workflows.raw_collection.get_postgres_db", return_value=db):
+            retired = retire_collection_query_planner_agent()
+
+        self.assertFalse(retired)
+        db.delete_component.assert_not_called()
 
     def test_live_non_streaming_workflow_result_has_visible_agent_steps(self) -> None:
         """Optional REST seam: set RUN_LIVE_AGENTOS_TESTS=1 after starting local AgentOS."""
@@ -700,7 +675,7 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
                 "-H",
                 "Content-Type: application/x-www-form-urlencoded",
                 "--data-urlencode",
-                "message=采集最近48小时影响中国A股的重要政策与上市公司经营事件。",
+                "message=采集影响中国A股的最新政策与上市公司经营事件。",
                 "--data",
                 "stream=false",
                 "--data",
@@ -715,8 +690,9 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "COMPLETED")
         self.assertEqual(result["content"]["candidate_counts"]["results_pending"], 0)
         steps = {item["step_name"]: item for item in result["step_results"]}
-        self.assertEqual(steps["plan-collection-query"]["executor_type"], "agent")
-        self.assertEqual(steps["curate-collection-titles"]["executor_type"], "agent")
+        self.assertEqual(steps["collect-raw-evidence"]["executor_type"], "function")
+        self.assertEqual(steps["filter-raw-evidence"]["executor_type"], "agent")
+        self.assertEqual(steps["publish-raw-evidence"]["executor_type"], "function")
 
 
 if __name__ == "__main__":

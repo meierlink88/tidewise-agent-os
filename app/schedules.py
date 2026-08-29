@@ -14,7 +14,7 @@ DEPLOYMENT_CHECK_SCHEDULE_ENDPOINT = "/workflows/deployment-check/runs"
 RAW_COLLECTION_SCHEDULE_NAME = "raw-collection-hourly"
 RAW_COLLECTION_SCHEDULE_ENDPOINT = "/workflows/raw-collection/runs"
 RAW_COLLECTION_SCHEDULE_PROMPT = (
-    "采集最近48小时可能影响中国A股板块和产业链行情的最新资讯，"
+    "采集全球范围最新发布、可能影响中国A股板块和产业链行情的政经事实资讯，"
     "关注政策、供需、价格、重大订单、产能投放、技术突破和上市公司经营事件。"
 )
 EVIDENCE_EXTRACTION_SCHEDULE_NAME = "evidence-extraction-every-10-minutes"
@@ -96,7 +96,7 @@ def schedule_definitions() -> tuple[ScheduleDefinition, ...]:
                 cron="0 * * * *",
                 endpoint=RAW_COLLECTION_SCHEDULE_ENDPOINT,
                 payload={"message": RAW_COLLECTION_SCHEDULE_PROMPT},
-                description="Hourly: collect and publish raw market-moving information from the last 48 hours.",
+                description="Hourly: collect, filter and publish the latest market-moving Raw Evidence.",
                 timezone="Asia/Shanghai",
             ),
             ScheduleDefinition(

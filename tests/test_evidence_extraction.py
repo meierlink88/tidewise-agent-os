@@ -141,11 +141,6 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             collection_id="collection-evidence",
             connector="cls_telegraph",
             query="AI服务器订单",
-            requested_after=now - timedelta(hours=1),
-            requested_before=now + timedelta(hours=1),
-            agent_component_id="raw-collector",
-            agent_config_version=1,
-            instructions_sha256="a" * 64,
             candidates=[candidate],
         )
         write_title_curation(

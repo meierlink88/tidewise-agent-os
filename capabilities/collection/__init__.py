@@ -3,7 +3,6 @@
 from capabilities.collection.internal.artifacts import build_artifact_set, publish_artifact_set
 from capabilities.collection.internal.buffer import artifact_root
 from capabilities.collection.internal.models import (
-    CollectionQueryPlan,
     CollectionRequest,
     CollectionResult,
     PreparedArtifactSet,
@@ -13,7 +12,6 @@ from capabilities.collection.internal.models import (
 from capabilities.collection.internal.source_snapshot import load_active_source_snapshot
 
 __all__ = [
-    "CollectionQueryPlan",
     "CollectionRequest",
     "CollectionResult",
     "PreparedArtifactSet",

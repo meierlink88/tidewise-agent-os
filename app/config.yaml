@@ -6,15 +6,8 @@ manifest:
       - "当前本地 AgentOS 的用途是什么？"
       - "给我一个新增采集 Workflow 的实施顺序"
 
-  raw-collector:
-    description: "Collection Query Planner：仅组装采集查询和回看时长，通道执行由 Raw Collection Workflow 确定性控制。"
-    quick_prompts:
-      - "采集可能影响中国A股板块行情的最新政策资讯"
-      - "采集上市公司重大订单和产能投放的最新消息"
-      - "采集产业链供需与价格变化的最新资讯"
-
   title-curator:
-    description: "Collection Title Curator：仅根据标题作出二元投研相关性判断；生产请运行 Raw Collection Workflow。"
+    description: "Raw Evidence Filter：根据标题和摘要作出二元投研相关性判断；生产请运行 Raw Collection Workflow。"
     quick_prompts:
       - "判断这批标题是否具有A股投研价值"
       - "保留政策、产业和上市公司相关标题"
@@ -50,9 +43,9 @@ manifest:
       - "Ping"
 
   raw-collection:
-    description: "运行采集 Agent，并确定性生成和发布原始信息 Artifact。"
+    description: "采集、过滤并发布最新 Raw Evidence Artifact。"
     quick_prompts:
-      - "采集最近48小时可能影响中国A股板块和产业链行情的最新资讯，关注政策、供需、价格、重大订单、产能投放、技术突破和上市公司经营事件。"
+      - "采集全球范围最新发布、可能影响中国A股板块和产业链行情的政经事实资讯。"
 
   evidence-extraction:
     description: "增量读取 Raw Collection Manifest 索引，冻结分类目录，并发布唯一分类的 Raw Evidence 和原子 Evidence。"

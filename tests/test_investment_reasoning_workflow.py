@@ -1669,13 +1669,13 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
 
         event_runtime = SimpleNamespace(close=AsyncMock())
         ensure_names = [
-            "ensure_collector_agent",
             "ensure_title_curator_agent",
             "ensure_evidence_extractor_agent",
             "ensure_event_extractor_agent",
             "ensure_investment_reasoner_agent",
             "ensure_investment_reviewer_agent",
             "ensure_raw_collection_workflow",
+            "retire_collection_query_planner_agent",
             "ensure_evidence_extraction_workflow",
             "ensure_event_extraction_workflow",
             "ensure_investment_reasoning_workflow",
@@ -1707,13 +1707,13 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
         event_runtime = SimpleNamespace(close=AsyncMock())
         investment_runtime = SimpleNamespace(close=AsyncMock(side_effect=RuntimeError("close failed")))
         ensure_names = [
-            "ensure_collector_agent",
             "ensure_title_curator_agent",
             "ensure_evidence_extractor_agent",
             "ensure_event_extractor_agent",
             "ensure_investment_reasoner_agent",
             "ensure_investment_reviewer_agent",
             "ensure_raw_collection_workflow",
+            "retire_collection_query_planner_agent",
             "ensure_evidence_extraction_workflow",
             "ensure_event_extraction_workflow",
             "ensure_investment_reasoning_workflow",

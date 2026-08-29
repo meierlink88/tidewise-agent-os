@@ -1,19 +1,11 @@
 """Deterministic Workflow Functions for raw collection."""
 
 from capabilities.collection.functions.collection import (
-    build_artifact_step,
-    execute_collection_channels_step,
-    prepare_collection_context,
-    prepare_title_curation,
-    publish_collection_step,
-    validate_title_curation,
+    collect_raw_evidence,
+    publish_raw_evidence,
 )
 
 __all__ = [
-    "build_artifact_step",
-    "execute_collection_channels_step",
-    "prepare_collection_context",
-    "prepare_title_curation",
-    "publish_collection_step",
-    "validate_title_curation",
+    "collect_raw_evidence",
+    "publish_raw_evidence",
 ]

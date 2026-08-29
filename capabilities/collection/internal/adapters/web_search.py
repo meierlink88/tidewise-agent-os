@@ -1,6 +1,6 @@
 """Web Search provider Adapters."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -56,13 +56,9 @@ def _candidate(
 
 class BochaAdapter:
     async def fetch(self, channel: CollectionChannel, request: FetchRequest) -> list[Candidate]:
-        window = request.published_before - request.published_after
-        freshness = (
-            "oneDay" if window <= timedelta(days=1) else "oneWeek" if window <= timedelta(days=7) else "oneMonth"
-        )
         payload = await post_json(
             str(channel.endpoint),
-            {"query": request.query, "freshness": freshness, "summary": True, "count": channel.max_results},
+            {"query": request.query, "freshness": "oneDay", "summary": True, "count": channel.max_results},
             {"Authorization": f"Bearer {_key(channel)}"},
             timeout_seconds=channel.timeout_seconds,
         )
@@ -101,11 +97,6 @@ class TavilyAdapter:
             "include_answer": False,
             "include_raw_content": "text",
         }
-        if request.published_before - request.published_after <= timedelta(days=1):
-            body["time_range"] = "day"
-        else:
-            body["start_date"] = request.published_after.date().isoformat()
-            body["end_date"] = request.published_before.date().isoformat()
         payload = await post_json(
             str(channel.endpoint),
             body,
