@@ -191,6 +191,66 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertCountEqual([item.connector for item in batches], ["bocha", "cls_telegraph"])
         self.assertEqual({item.query for item in batches}, {"宏观政策"})
 
+    async def test_collect_raw_evidence_executes_twenty_rss_snapshot_sources_and_exposes_article_content(self) -> None:
+        now = datetime(2026, 8, 30, 10, tzinfo=UTC)
+        channels = [
+            CollectionChannel(
+                code=f"research-rss-{index:02d}",
+                name=f"Research RSS {index:02d}",
+                ownership_type=OwnershipType.DYNAMIC,
+                channel_type=ChannelType.RSS,
+                adapter_key="generic_rss",
+                enabled=True,
+                endpoint=f"https://example.com/research-rss-{index:02d}.xml",
+                config={"max_bytes": 5_000_000},
+                priority=2,
+                timeout_seconds=30,
+                max_results=3,
+                default_source_level=SourceLevel.L3_MEDIA,
+                created_at=now,
+                updated_at=now,
+            )
+            for index in range(20)
+        ]
+
+        class ArticleAdapter:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            async def fetch(self, channel: CollectionChannel, request: object) -> list[Candidate]:
+                self.calls += 1
+                return [
+                    Candidate(
+                        candidate_id=f"candidate-{channel.code}",
+                        connector=channel.code,
+                        query=cast(str, getattr(request, "query")),
+                        title=channel.name,
+                        url=f"https://example.com/{channel.code}/article",
+                        content=f"{channel.name} 已抓取文章正文",
+                        source_name=channel.name,
+                        source_level=channel.default_source_level,
+                        published_at=now,
+                        collected_at=now,
+                    )
+                ]
+
+        adapter = ArticleAdapter()
+        context = RunContext(
+            run_id="run-twenty-research-rss",
+            session_id="session",
+            dependencies={"collection_adapter_registry": {"generic_rss": adapter}},
+        )
+        with patch(
+            "capabilities.collection.functions.collection.load_active_source_snapshot",
+            return_value=tuple(channels),
+        ):
+            output = await collect_raw_evidence(StepInput(input="全球产业链变化"), context)
+
+        content = TitleCurationRequest.model_validate(output.content)
+        self.assertEqual(adapter.calls, 20)
+        self.assertEqual(len(content.candidates), 20)
+        self.assertTrue(all("已抓取文章正文" in item.content_excerpt for item in content.candidates))
+
     def test_build_then_manifest_last_publish_is_deterministic_and_idempotent(self) -> None:
         now = datetime(2026, 8, 10, 15, 30, tzinfo=UTC)
         url = "http://finance.eastmoney.com/a/202608103836967018.html?utm_source=test"

@@ -5,15 +5,18 @@ import json
 import os
 import tempfile
 import unittest
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 from unittest.mock import AsyncMock, patch
 
+import httpx
 from agno.run import RunContext
 
 from capabilities.collection.internal.acquisition import execute_channel_group
 from capabilities.collection.internal.adapters.base import FetchRequest
+from capabilities.collection.internal.adapters.common import get_text
 from capabilities.collection.internal.adapters.registry import ADAPTERS
 from capabilities.collection.internal.adapters.rss import GenericRssAdapter
 from capabilities.collection.internal.adapters.web_search import BochaAdapter, TavilyAdapter
@@ -315,22 +318,110 @@ class CollectionAdapterContractTest(unittest.IsolatedAsyncioTestCase):
         <summary>产业正文</summary><updated>2026-08-12T09:30:00Z</updated>
         </entry></feed>"""
         adapter = GenericRssAdapter()
+        rss_channel = _channel(
+            "rss-source", ChannelType.RSS, "generic_rss", ownership_type=OwnershipType.DYNAMIC
+        ).model_copy(update={"config": {"fetch_article_body": False}})
+        atom_channel = _channel(
+            "atom-source", ChannelType.RSS, "generic_rss", ownership_type=OwnershipType.DYNAMIC
+        ).model_copy(update={"config": {"fetch_article_body": False}})
         with patch(
             "capabilities.collection.internal.adapters.rss.get_text",
             new=AsyncMock(side_effect=[rss, atom]),
         ):
-            rss_candidates = await adapter.fetch(
-                _channel("rss-source", ChannelType.RSS, "generic_rss", ownership_type=OwnershipType.DYNAMIC),
-                request,
-            )
-            atom_candidates = await adapter.fetch(
-                _channel("atom-source", ChannelType.RSS, "generic_rss", ownership_type=OwnershipType.DYNAMIC),
-                request,
-            )
+            rss_candidates = await adapter.fetch(rss_channel, request)
+            atom_candidates = await adapter.fetch(atom_channel, request)
 
         self.assertEqual([item.title for item in rss_candidates], ["宏观政策"])
         self.assertEqual([item.title for item in atom_candidates], ["产业新闻"])
         self.assertEqual(atom_candidates[0].source_level, SourceLevel.L3_MEDIA)
+
+    async def test_generic_rss_adapter_uses_article_body_and_respects_source_limit(self) -> None:
+        request = FetchRequest(query="产业变化")
+        rss = """<?xml version="1.0"?><rss version="2.0"><channel>
+        <item><guid>rss-1</guid><title>第一条</title><link>https://example.com/one</link><description>短摘要一</description></item>
+        <item><guid>rss-2</guid><title>第二条</title><link>https://example.com/two</link><description>短摘要二</description></item>
+        </channel></rss>"""
+        article = """<html><body><nav>导航噪声</nav><main><h1>第一条</h1>
+        <p>这是第一段具有投研价值的文章正文，描述产业供需发生变化。</p>
+        <p>这是第二段文章正文，补充价格、库存和产能事实。</p></main><footer>页脚噪声</footer></body></html>"""
+        channel = _channel(
+            "rss-source",
+            ChannelType.RSS,
+            "generic_rss",
+            ownership_type=OwnershipType.DYNAMIC,
+        ).model_copy(update={"max_results": 1})
+
+        with patch(
+            "capabilities.collection.internal.adapters.rss.get_text",
+            new=AsyncMock(side_effect=[rss, article]),
+        ) as request_mock:
+            candidates = await GenericRssAdapter().fetch(channel, request)
+
+        self.assertEqual(len(candidates), 1)
+        self.assertIn("产业供需发生变化", candidates[0].content)
+        self.assertIn("价格、库存和产能事实", candidates[0].content)
+        self.assertNotIn("导航噪声", candidates[0].content)
+        self.assertEqual(request_mock.await_count, 2)
+        self.assertEqual(request_mock.await_args_list[1].kwargs["timeout_seconds"], 10)
+
+    async def test_generic_rss_adapter_falls_back_to_feed_content_when_article_fetch_fails(self) -> None:
+        request = FetchRequest(query="宏观政策")
+        rss = """<?xml version="1.0"?><rss version="2.0"><channel><item>
+        <guid>rss-1</guid><title>政策发布</title><link>https://example.com/policy</link>
+        <description>政策摘要仍可用于后续过滤。</description></item></channel></rss>"""
+        with patch(
+            "capabilities.collection.internal.adapters.rss.get_text",
+            new=AsyncMock(side_effect=[rss, RuntimeError("article unavailable")]),
+        ):
+            candidates = await GenericRssAdapter().fetch(
+                _channel("rss-source", ChannelType.RSS, "generic_rss", ownership_type=OwnershipType.DYNAMIC),
+                request,
+            )
+
+        self.assertEqual([item.content for item in candidates], ["政策摘要仍可用于后续过滤。"])
+
+    async def test_get_text_preserves_an_endpoint_query_when_no_extra_params_are_required(self) -> None:
+        requests: list[httpx.Request] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(200, content=b"<rss/>")
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        with patch("capabilities.collection.internal.adapters.common.httpx.AsyncClient", return_value=client):
+            payload = await get_text(
+                "https://example.com/feed/rss.php?mid=21",
+                {},
+                timeout_seconds=10,
+            )
+
+        self.assertEqual(payload, "<rss/>")
+        self.assertEqual(str(requests[0].url), "https://example.com/feed/rss.php?mid=21")
+
+    async def test_get_text_stops_streaming_as_soon_as_the_byte_limit_is_exceeded(self) -> None:
+        class TrackingStream(httpx.AsyncByteStream):
+            def __init__(self) -> None:
+                self.consumed = 0
+
+            async def __aiter__(self) -> AsyncIterator[bytes]:
+                for chunk in (b"123456", b"abcdef", b"must-not-be-read"):
+                    self.consumed += 1
+                    yield chunk
+
+        stream = TrackingStream()
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            del request
+            return httpx.Response(200, stream=stream)
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        with (
+            patch("capabilities.collection.internal.adapters.common.httpx.AsyncClient", return_value=client),
+            self.assertRaisesRegex(ValueError, "too large"),
+        ):
+            await get_text("https://example.com/large", {}, timeout_seconds=10, max_bytes=10)
+
+        self.assertEqual(stream.consumed, 2)
 
     def test_adapter_registry_covers_fixed_and_generic_protocols(self) -> None:
         self.assertEqual(
