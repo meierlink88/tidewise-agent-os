@@ -7,6 +7,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from copy import copy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
@@ -224,6 +225,40 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("id", request.categories[0].model_dump())
         snapshot = context.dependencies["evidence_category_catalog"]  # type: ignore[index]
         self.assertEqual(EvidenceCategoryCatalog.model_validate(snapshot).categories[0].id, self.CATEGORY_ID)
+
+    async def test_analysis_initializes_missing_run_dependencies(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        context = RunContext(
+            run_id="run-missing-dependencies",
+            session_id="session-missing-dependencies",
+            session_state={},
+        )
+        step_input = StepInput(previous_step_outputs={"prepare-raw-document": StepOutput(content=prepared)})
+
+        with patch(
+            "capabilities.evidence.functions.extraction.get_evidence_categories",
+            return_value=self._catalog_result(),
+        ) as mocked:
+            first = await prepare_evidence_analysis(step_input, copy(context))
+            second = await prepare_evidence_analysis(step_input, copy(context))
+
+        self.assertEqual(mocked.call_count, 1)
+        self.assertEqual(
+            EvidenceAnalysisRequest.model_validate(first.content),
+            EvidenceAnalysisRequest.model_validate(second.content),
+        )
+        self.assertIsNotNone(context.session_state)
+        assert context.session_state is not None
+        self.assertIn("evidence_extraction", context.session_state)
+        validation_input = StepInput(
+            previous_step_outputs={
+                "prepare-raw-document": StepOutput(content=prepared),
+                "analyze-raw-evidence": StepOutput(content=self._draft()),
+            }
+        )
+        validated = validate_evidence_analysis(validation_input, copy(context))
+        self.assertIsInstance(validated.content, PreparedEvidencePublication)
 
     async def test_invalid_catalog_fails_before_agent_analysis(self) -> None:
         self._publish_raw_fixture()
