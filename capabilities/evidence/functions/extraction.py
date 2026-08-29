@@ -215,6 +215,7 @@ def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -
             or artifact.bindings is None
         ):
             raise ValueError("published Evidence Artifact identity conflict")
+    _enqueue_for_event(path, artifact.identities.ids)
     checkpoint = advance_checkpoint(frozen.prepared_raw)
     return EvidencePublicationResult(
         raw_evidence_id=artifact.identities.raw_evidence_id,
@@ -223,6 +224,14 @@ def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -
         artifact_manifest_path=str(path),
         checkpoint=checkpoint,
     )
+
+
+def _enqueue_for_event(manifest_path: Path, evidence_ids: list[str]) -> None:
+    """Import lazily so Evidence and Event capabilities retain a one-way runtime seam."""
+
+    from capabilities.event.functions import enqueue_evidence_artifact
+
+    enqueue_evidence_artifact(str(manifest_path), evidence_ids)
 
 
 async def publish_evidences(step_input: StepInput) -> StepOutput:
@@ -270,6 +279,8 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
         raise ValueError("Evidence identity count mismatch in publication response")
     if evidence_response.items is not None and len(evidence_response.items) != len(publication.evidences):
         raise ValueError("Evidence identity mapping count mismatch in publication response")
+    if evidence_response.items is None and len(publication.evidences) > 1:
+        raise ValueError("Evidence publication response must map every input to its formal identity")
 
     for name in ("prepared.json",):
         source = pending / name
@@ -304,6 +315,7 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
         "artifacts": artifacts,
     }
     write_json(final_manifest, manifest)
+    _enqueue_for_event(final_manifest, evidence_response.ids)
     shutil.rmtree(pending, ignore_errors=True)
     checkpoint = advance_checkpoint(publication.prepared_raw)
     result = EvidencePublicationResult(

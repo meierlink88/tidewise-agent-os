@@ -103,7 +103,7 @@ class EventAnalysisPipeline:
             )
         if not candidates.variables:
             return EventAnalysisOutcome(
-                status="NEEDS_REVIEW",
+                status="NO_SIGNAL",
                 classification=classification,
                 signal_fact_uuids=[],
                 reason_codes=["NO_ELIGIBLE_FUNDAMENTAL_VARIABLE"],
@@ -149,7 +149,7 @@ class EventAnalysisPipeline:
 
         if errors:
             return EventAnalysisOutcome(
-                status="NEEDS_REVIEW",
+                status="NO_SIGNAL",
                 classification=classification,
                 signal_fact_uuids=[],
                 reason_codes=sorted(set(errors)),

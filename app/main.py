@@ -17,6 +17,7 @@ from agents.tidewise_assistant import tidewise_assistant
 from agents.title_curator import ensure_title_curator_agent
 from app.registry import registry
 from app.schedules import validate_schedules
+from capabilities.event import configure_event_workflow_runtime, create_local_event_workflow_runtime
 from db import get_postgres_db
 from workflows.deployment_check import deployment_check
 from workflows.event_extraction import ensure_event_extraction_workflow
@@ -89,12 +90,20 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     ensure_raw_collection_workflow(registry)
     ensure_evidence_extraction_workflow(registry)
     ensure_event_extraction_workflow(registry)
+    model_id = getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    model = registry.get_model(model_id)
+    if model is None:
+        raise RuntimeError(f"registered Event Workflow model is unavailable: {model_id}")
+    event_runtime = create_local_event_workflow_runtime(model)
+    configure_event_workflow_runtime(event_runtime)
     # Schedule rows are runtime configuration owned by PostgreSQL/Control Panel.
     # Startup only validates them; new environments use the explicit seed command.
     validate_schedules()
     try:
         yield
     finally:
+        configure_event_workflow_runtime(None)
+        await event_runtime.close()
         log_info("AgentOS lifespan: shutdown")
 
 

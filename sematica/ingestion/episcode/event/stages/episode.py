@@ -52,10 +52,12 @@ FIND_EVENT = """
 /* graphiti_event_projection_identity */
 MATCH (episode:Episodic {group_id: $group_id})
 WHERE episode.uuid = $episode_uuid
+OPTIONAL MATCH (episode)-[mention:MENTIONS]->()
 RETURN episode.uuid AS uuid, episode.name AS name, episode.content AS content,
        episode.source_description AS source_description,
        episode.episode_kind AS episode_kind,
-       episode.domain_object_id AS domain_object_id
+       episode.domain_object_id AS domain_object_id,
+       count(mention) AS mention_count
 LIMIT 1
 """.strip()
 
@@ -115,7 +117,11 @@ class GraphitiEpisodeStage:
                 PENDING_EVENT_SOURCE_DESCRIPTION,
             }:
                 raise RuntimeError("Graphiti Event Episode has a conflicting source identity")
-            if source_description == EVENT_SOURCE_DESCRIPTION:
+            # Graphiti persists Episode, MENTIONS, entities and ordinary Facts in
+            # one bulk write. MENTIONS on a pending Episode therefore proves the
+            # native write completed even if its acknowledgement was lost before
+            # MARK_EVENT could finalize Tidewise metadata.
+            if source_description == EVENT_SOURCE_DESCRIPTION or int(row["mention_count"]) > 0:
                 native_projection_required = False
 
         valid_at = (

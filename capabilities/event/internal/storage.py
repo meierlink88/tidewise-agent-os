@@ -15,16 +15,21 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from capabilities.event.internal.models import (
-    EventEvidenceInput,
     EventExtractionBatch,
     EventExtractionBusy,
     EventExtractionDraft,
     EventExtractionLease,
     EventExtractionResult,
-    EventSubmissionJournal,
+    EventPublicationJournal,
+    EventSignalJournal,
     FrozenEventExtractionBatch,
 )
-from capabilities.evidence import read_resolved_evidences
+from capabilities.event.internal.queue import (
+    ensure_processing_items,
+    finalize_queue_items,
+    pending_queue_items,
+    resolve_queue_item,
+)
 
 
 def event_artifact_root() -> Path:
@@ -85,7 +90,7 @@ def pending_directory(batch_id: str) -> Path:
 def _single_pending_directory() -> Path | None:
     directories = sorted(path for path in (event_artifact_root() / ".pending").glob("*") if path.is_dir())
     if len(directories) > 1:
-        raise ValueError("multiple pending Event extraction batches require operator review")
+        raise ValueError("multiple pending Event extraction batches violate the single-worker invariant")
     return directories[0] if directories else None
 
 
@@ -137,36 +142,8 @@ def _runtime_batch(
     )
 
 
-def _processed_ids() -> set[str]:
-    processed: set[str] = set()
-    for path in sorted((event_artifact_root() / "batches").glob("*/manifest.json")):
-        try:
-            result = EventExtractionResult.model_validate_json(path.read_text(encoding="utf-8"))
-        except (OSError, ValidationError) as exc:
-            raise ValueError("completed Event extraction Artifact is invalid") from exc
-        processed.update(result.evidence_ids)
-    return processed
-
-
-def _available_evidences() -> list[EventEvidenceInput]:
-    evidence_root = Path(os.getenv("EVIDENCE_ARTIFACT_ROOT", "data/evidence")).resolve()
-    resolved: dict[str, EventEvidenceInput] = {}
-    for manifest in sorted((evidence_root / "documents").glob("*/manifest.json")):
-        try:
-            items = read_resolved_evidences(manifest)
-        except ValueError:
-            continue
-        for item in items:
-            candidate = EventEvidenceInput.model_validate(item.model_dump(mode="json"))
-            previous = resolved.get(candidate.id)
-            if previous is not None and previous != candidate:
-                raise ValueError("formal Evidence identity has conflicting local Artifacts")
-            resolved[candidate.id] = candidate
-    return [resolved[key] for key in sorted(resolved)]
-
-
 def claim_event_batch() -> EventExtractionBatch | EventExtractionBusy | None:
-    """Exclusively resume one pending batch or atomically claim unprocessed Evidence."""
+    """Exclusively resume one frozen batch or claim pending Evidence queue items."""
     with _claim_lock():
         now = datetime.now(UTC)
         pending = _single_pending_directory()
@@ -175,14 +152,15 @@ def claim_event_batch() -> EventExtractionBatch | EventExtractionBusy | None:
             current = _load_lease(pending)
             if current is not None and current.expires_at > now:
                 return EventExtractionBusy(batch_id=frozen.batch_id, retry_after=current.expires_at)
+            ensure_processing_items(frozen.batch_id, [item.id for item in frozen.evidences])
             lease = _new_lease(frozen.batch_id, now=now)
             _atomic_write_json(pending / "lease.json", lease.model_dump(mode="json"))
             return _runtime_batch(frozen, lease, needs_analysis=not (pending / "draft.json").is_file())
 
-        processed = _processed_ids()
-        selected = [item for item in _available_evidences() if item.id not in processed][: _batch_size()]
-        if not selected:
+        queue_items = pending_queue_items()[: _batch_size()]
+        if not queue_items:
             return None
+        selected = [resolve_queue_item(item) for item in queue_items]
         identity = "\n".join(item.id for item in selected).encode("utf-8")
         batch_id = hashlib.sha256(identity).hexdigest()
         frozen = FrozenEventExtractionBatch(
@@ -200,6 +178,7 @@ def claim_event_batch() -> EventExtractionBatch | EventExtractionBusy | None:
             target = pending_directory(batch_id)
             target.parent.mkdir(parents=True, exist_ok=True)
             os.replace(staging, target)
+            ensure_processing_items(batch_id, [item.id for item in selected])
         except Exception:
             shutil.rmtree(staging, ignore_errors=True)
             raise
@@ -257,22 +236,42 @@ def load_draft(batch_id: str) -> EventExtractionDraft:
         raise ValueError("frozen Event extraction draft is invalid") from exc
 
 
-def load_journal(batch_id: str) -> EventSubmissionJournal:
-    path = pending_directory(batch_id) / "submissions.json"
+def load_publication_journal(batch_id: str) -> EventPublicationJournal:
+    path = pending_directory(batch_id) / "publications.json"
     if not path.exists():
-        return EventSubmissionJournal(batch_id=batch_id, submissions=[])
+        return EventPublicationJournal(batch_id=batch_id, publications=[])
     try:
-        journal = EventSubmissionJournal.model_validate_json(path.read_text(encoding="utf-8"))
+        journal = EventPublicationJournal.model_validate_json(path.read_text(encoding="utf-8"))
     except (OSError, ValidationError) as exc:
-        raise ValueError("Event submission journal is invalid") from exc
+        raise ValueError("Event publication journal is invalid") from exc
     if journal.batch_id != batch_id:
-        raise ValueError("Event submission journal batch identity conflict")
+        raise ValueError("Event publication journal batch identity conflict")
     return journal
 
 
-def write_journal(journal: EventSubmissionJournal) -> None:
+def write_publication_journal(journal: EventPublicationJournal) -> None:
     _atomic_write_json(
-        pending_directory(journal.batch_id) / "submissions.json",
+        pending_directory(journal.batch_id) / "publications.json",
+        journal.model_dump(mode="json"),
+    )
+
+
+def load_signal_journal(batch_id: str) -> EventSignalJournal:
+    path = pending_directory(batch_id) / "signals.json"
+    if not path.exists():
+        return EventSignalJournal(batch_id=batch_id, signals=[])
+    try:
+        journal = EventSignalJournal.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        raise ValueError("Event signal journal is invalid") from exc
+    if journal.batch_id != batch_id:
+        raise ValueError("Event signal journal batch identity conflict")
+    return journal
+
+
+def write_signal_journal(journal: EventSignalJournal) -> None:
+    _atomic_write_json(
+        pending_directory(journal.batch_id) / "signals.json",
         journal.model_dump(mode="json"),
     )
 
@@ -282,6 +281,11 @@ def complete_batch(batch: EventExtractionBatch, result: EventExtractionResult) -
         _assert_event_batch_lease(batch, now=datetime.now(UTC))
         source = pending_directory(result.batch_id)
         _atomic_write_json(source / "manifest.json", result.model_dump(mode="json"))
+        finalize_queue_items(
+            result.batch_id,
+            result.evidence_ids,
+            set(result.failed_evidence_ids),
+        )
         target = event_artifact_root() / "batches" / result.batch_id
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists():

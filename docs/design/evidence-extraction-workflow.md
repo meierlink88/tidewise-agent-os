@@ -5,8 +5,8 @@
 Incrementally consume completed Raw Collection manifests, classify each accepted Raw Evidence against the formal
 Evidence Category Catalog, extract atomic Evidence in the same AI reading, publish Raw Evidence metadata and Evidence
 through Data Service APIs, and advance a crash-safe file checkpoint only after both publications and the local
-Evidence manifest succeed. The AI reads the verified local Markdown body, while Data Service receives only its MinIO
-URL path through the existing `raw_text` field.
+Evidence manifest and the downstream Event queue item succeed. The AI reads the verified local Markdown body, while
+Data Service receives only its MinIO URL path through the existing `raw_text` field.
 
 AgentOS owns the stable `publication_key` used for retries but does not create formal Raw Evidence or Evidence IDs.
 Data Service returns `id` from Raw Evidence Publication; AgentOS passes that exact value as `raw_evidence_id` to
@@ -21,7 +21,7 @@ indexes/manifest-index.jsonl + data/evidence/checkpoint.json
   -> prepare-evidence-analysis  (deterministic Function, run-scoped Category Catalog)
   -> analyze-raw-evidence       (Studio-managed Evidence Extractor Agent)
   -> validate-evidence-analysis (deterministic Function, Category code -> ID)
-  -> publish-evidences          (deterministic Function, Data Service + manifest + checkpoint)
+  -> publish-evidences          (deterministic Function, Data Service + manifest + Event queue + checkpoint)
 ```
 
 The five steps run inside an Agno `Loop` with a 100-document safety cap. `prepare-raw-document` returns
@@ -79,8 +79,9 @@ runs continue from the file checkpoint.
   condition, quantity, time range, and uncertainty modality must be preserved.
 - The second publication uses only the `id` returned by the first response. Its response must repeat that identity and
   return exactly one unique formal Evidence ID per submitted item. AgentOS treats `ids` as an unordered compatibility
-  set and uses only the complete zero-based `items[{input_index,id}]` mapping to associate formal identities with the
-  prepared Evidence list. Missing, duplicate, out-of-range, or contradictory mappings fail before checkpoint advance.
+  set. A one-item publication has one unambiguous local association; a multi-item publication requires the complete
+  zero-based `items[{input_index,id}]` mapping. Missing multi-item, duplicate, out-of-range, or contradictory mappings
+  fail before checkpoint advance.
 - Raw Evidence `raw_text` is the environment-neutral `/{bucket}/{object_key}` path recorded by Raw Collection, never
   the article body or a Base URL.
 - Browser access is `environment MinIO Base URL + raw_text`; Data Service does not proxy the object.
@@ -94,9 +95,10 @@ runs continue from the file checkpoint.
 - New frozen publications continue to use `prepared_evidence_publication.v4`. A mapped publication writes immutable
   `evidence_identity_bindings.v1`, then completes `evidence_extraction_manifest.v5` last. The binding records the Raw
   Evidence identity, publication identity, document digest, Evidence count, and every request index-to-ID association.
-- During mixed-version rollout, a legacy response without `items` remains readable and completes the existing v4
-  manifest without inventing a mapping. A completed v4 or v5 manifest and its frozen `prepared.json` remain recovery
-  truth; a v5 recovery additionally validates its binding Artifact before advancing the checkpoint.
+- A one-item legacy response without `items` remains safely readable as a v4 manifest because its only ID can map only
+  to input index zero. A multi-item response without `items` is rejected before local completion. A completed v4 or
+  v5 manifest and its frozen `prepared.json` remain recovery truth; v5 recovery additionally validates its binding
+  Artifact before advancing the checkpoint.
 - Historical v4 manifests are never overwritten. `python -m scripts.reconcile_evidence_bindings` explicitly appends a
   binding beside eligible history: a one-item set is uniquely resolved locally, while a multi-item set is replayed as
   the exact frozen Evidence Publication payload so Data Service can return the authoritative mapping. The operation is
@@ -108,4 +110,8 @@ runs continue from the file checkpoint.
 - `split_order`, `layer_type`, all Evidence `source_*`/`source_*_core` fields, `expression_fingerprint`,
   `expression_key`, and `fingerprint_version` are not part of the contract.
 - Formal Raw Evidence and Evidence IDs are Data Service outputs.
-- The Evidence Artifact manifest is written last; checkpoint advances only after that manifest exists.
+- After the Evidence Artifact manifest exists, Evidence publication writes one idempotent
+  `data/event/evidence-queue/pending/<evidence-id>.json` marker per formal Evidence. The marker stores only the formal
+  Evidence ID, immutable manifest path, and creation time.
+- The Evidence checkpoint advances only after every Event queue marker exists. Recovery recreates a missing marker
+  from the immutable final Evidence Artifact before advancing, closing the lost-task window without PostgreSQL state.

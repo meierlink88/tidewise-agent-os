@@ -3,20 +3,21 @@
 from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
-from agno.workflow import Condition, Step, Workflow
+from agno.workflow import Condition, Step, Steps, Workflow
 from agno.workflow.types import HumanReview, OnError
 
 from agents.event_extractor import load_event_extractor_agent
 from capabilities.event.functions import (
+    construct_event_signals,
     event_batch_requires_analysis,
     freeze_event_analysis,
     prepare_event_batch,
-    submit_event_candidates,
+    publish_event_candidates,
 )
 from db import get_postgres_db
 
 EVENT_EXTRACTION_WORKFLOW_ID = "event-extraction"
-EVENT_EXTRACTION_CONTRACT_VERSION = 2
+EVENT_EXTRACTION_CONTRACT_VERSION = 5
 
 
 def _fail_fast_review() -> HumanReview:
@@ -29,40 +30,57 @@ def _seed_workflow(agent: Agent) -> Workflow:
     return Workflow(
         id=EVENT_EXTRACTION_WORKFLOW_ID,
         name="Event Extraction",
-        description="Extracts frozen local Evidence into Event Candidates and hands them to Reasoning Server.",
+        description=(
+            "Extracts frozen Evidence, resolves and publishes new Events locally, projects them "
+            "through Graphiti, and constructs Variable Signal Facts."
+        ),
         db=get_postgres_db(),
         metadata={"event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION},
         steps=[
-            Step(
-                name="prepare-event-batch",
-                executor=prepare_event_batch,
-                max_retries=0,
-                human_review=_fail_fast_review(),
-            ),
-            Condition(
-                name="analyze-unfrozen-event-batch",
-                evaluator=event_batch_requires_analysis,
+            Steps(
+                name="extract-event-candidates",
+                description="Freeze Evidence and extract atomic Event Candidates exactly once.",
                 human_review=_fail_fast_review(),
                 steps=[
                     Step(
-                        name="analyze-event-batch",
-                        agent=agent,
+                        name="prepare-event-batch",
+                        executor=prepare_event_batch,
                         max_retries=0,
                         human_review=_fail_fast_review(),
-                        strict_input_validation=True,
                     ),
-                    Step(
-                        name="freeze-event-analysis",
-                        executor=freeze_event_analysis,
-                        max_retries=0,
+                    Condition(
+                        name="analyze-unfrozen-event-batch",
+                        evaluator=event_batch_requires_analysis,
                         human_review=_fail_fast_review(),
-                        strict_input_validation=True,
+                        steps=[
+                            Step(
+                                name="analyze-event-batch",
+                                agent=agent,
+                                max_retries=0,
+                                human_review=_fail_fast_review(),
+                                strict_input_validation=True,
+                            ),
+                            Step(
+                                name="freeze-event-analysis",
+                                executor=freeze_event_analysis,
+                                max_retries=0,
+                                human_review=_fail_fast_review(),
+                                strict_input_validation=True,
+                            ),
+                        ],
                     ),
                 ],
             ),
             Step(
-                name="submit-event-candidates",
-                executor=submit_event_candidates,
+                name="publish-event-candidates",
+                executor=publish_event_candidates,
+                max_retries=0,
+                human_review=_fail_fast_review(),
+                strict_input_validation=True,
+            ),
+            Step(
+                name="construct-event-signals",
+                executor=construct_event_signals,
                 max_retries=0,
                 human_review=_fail_fast_review(),
                 strict_input_validation=True,

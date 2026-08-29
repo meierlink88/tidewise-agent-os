@@ -16,7 +16,7 @@ from capabilities.evidence.functions import (
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTION_WORKFLOW_ID = "evidence-extraction"
-EVIDENCE_EXTRACTION_CONTRACT_VERSION = 7
+EVIDENCE_EXTRACTION_CONTRACT_VERSION = 8
 
 
 def _fail_fast_review() -> HumanReview:

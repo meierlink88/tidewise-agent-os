@@ -79,6 +79,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             {
                 "COLLECTOR_ARTIFACT_ROOT": str(root / "collector"),
                 "EVIDENCE_ARTIFACT_ROOT": str(root / "evidence"),
+                "EVENT_ARTIFACT_ROOT": str(root / "event"),
             },
         )
         self.environment.start()
@@ -590,6 +591,8 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(frozen["raw_evidence"]["category_ids"], [self.CATEGORY_ID])
         self.assertEqual(result.raw_evidence_id, raw_evidence_id)
         self.assertEqual(result.evidence_ids, [evidence_id])
+        queue_marker = Path(os.environ["EVENT_ARTIFACT_ROOT"]) / "evidence-queue" / "pending" / f"{evidence_id}.json"
+        self.assertTrue(queue_marker.is_file())
         self.assertEqual(list((evidence_artifact_root() / ".pending").glob("*")), [])
         self.assertGreater(result.checkpoint.manifest_offset, 0)
         self.assertEqual(result.checkpoint, read_checkpoint())
@@ -604,6 +607,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             EvidencePublicationResult.model_validate(repeated_output.content).checkpoint, read_checkpoint()
         )
+        self.assertEqual(len(list(queue_marker.parent.glob("*.json"))), 1)
 
     async def test_failed_evidence_publication_does_not_advance_checkpoint(self) -> None:
         self._publish_raw_fixture()
@@ -620,7 +624,12 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             self.assertRaisesRegex(ValueError, "evidence rejected"),
         ):
             await publish_evidences(step_input)
+
         self.assertEqual(read_checkpoint().manifest_offset, 0)
+        self.assertEqual(
+            list((Path(os.environ["EVENT_ARTIFACT_ROOT"]) / "evidence-queue" / "pending").glob("*.json")),
+            [],
+        )
         self.assertEqual(list((evidence_artifact_root() / "documents").glob("*/manifest.json")), [])
 
     async def test_multi_evidence_response_persists_request_indexed_bindings(self) -> None:
@@ -743,12 +752,24 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             "capabilities.evidence.functions.extraction.post_publication",
             side_effect=[
                 {"id": raw_evidence_id},
-                {"raw_evidence_id": raw_evidence_id, "ids": sorted_ids},
+                {
+                    "raw_evidence_id": raw_evidence_id,
+                    "ids": sorted_ids,
+                    "items": [
+                        {"input_index": 0, "id": first_id},
+                        {"input_index": 1, "id": second_id},
+                    ],
+                },
             ],
         ):
             output = await publish_evidences(step_input)
 
         manifest_path = Path(EvidencePublicationResult.model_validate(output.content).artifact_manifest_path)
+        (manifest_path.parent / "bindings.json").unlink()
+        legacy_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        legacy_manifest["schema"] = "evidence_extraction_manifest.v4"
+        legacy_manifest["artifacts"] = {"prepared": "prepared.json"}
+        manifest_path.write_text(json.dumps(legacy_manifest), encoding="utf-8")
         original_manifest = manifest_path.read_bytes()
         with patch(
             "capabilities.evidence.functions.reconciliation.post_publication",
@@ -928,7 +949,14 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             "capabilities.evidence.functions.extraction.post_publication",
             side_effect=[
                 {"id": raw_evidence_id},
-                {"raw_evidence_id": raw_evidence_id, "ids": evidence_ids},
+                {
+                    "raw_evidence_id": raw_evidence_id,
+                    "ids": evidence_ids,
+                    "items": [
+                        {"input_index": 0, "id": evidence_ids[0]},
+                        {"input_index": 1, "id": evidence_ids[1]},
+                    ],
+                },
             ],
         ):
             output = await publish_evidences(step_input)
@@ -1006,6 +1034,9 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             self.assertRaisesRegex(RuntimeError, "checkpoint interrupted"),
         ):
             await publish_evidences(step_input)
+
+        queue_marker = Path(os.environ["EVENT_ARTIFACT_ROOT"]) / "evidence-queue" / "pending" / f"{evidence_id}.json"
+        self.assertTrue(queue_marker.is_file())
 
         changed = publication.model_copy(deep=True)
         second = changed.evidences[0].model_copy(deep=True)

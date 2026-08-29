@@ -11,15 +11,17 @@ from capabilities.event import EventExtractionDraft
 from db import get_postgres_db
 
 EVENT_EXTRACTOR_AGENT_ID = "event-extractor"
-EVENT_EXTRACTOR_CONTRACT_VERSION = 1
+EVENT_EXTRACTOR_CONTRACT_VERSION = 3
 EVENT_EXTRACTOR_DESCRIPTION = "Groups mapped local Evidence into single-real-world-action Event Candidates."
 _SEED_PROMPT = Path(__file__).with_name("event_extractor.seed.md")
-_RUNTIME_CONTRACT = """Event Extractor runtime contract version 1:
+_RUNTIME_CONTRACT = """Event Extractor runtime contract version 3:
 - Consume exactly the supplied frozen EventExtractionBatch.
-- Partition every Evidence ID exactly once across candidates, no_event, and needs_review.
+- Partition every Evidence ID exactly once across candidates and no_event.
 - Merge only the same core actor, real-world action, direct object, stage, and compatible occurrence time.
 - Treat wording, source, and supplementary detail as non-identity differences.
-- Return one atomic Reasoning Server Event Candidate per real-world action.
+- Return one atomic Event Candidate per real-world action.
+- Evidence without an explicit occurrence, announcement, or effective time must be returned as no_event
+  with reason missing_reliable_time; never emit a timeless Candidate.
 - Never query history, call tools, publish, or invent a formal Evidence ID.
 """
 

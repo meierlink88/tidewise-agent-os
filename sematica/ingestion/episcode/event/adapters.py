@@ -95,7 +95,7 @@ class DataEventClient:
     async def ready(self) -> bool:
         """Validate connectivity and the authoritative Event page contract."""
 
-        params = {"page": 1, "page_size": 1, "status": "ACTIVE"}
+        params: dict[str, str | int] = {"page": 1, "page_size": 1, "status": "ACTIVE"}
         try:
             async with httpx.AsyncClient(
                 timeout=self._timeout,
@@ -113,7 +113,7 @@ class DataEventClient:
         anchor = candidate.occurred_at or candidate.announced_at or candidate.semantic.effective_at
         assert anchor is not None
         lower, upper = anchor - timedelta(days=30), anchor + timedelta(days=30)
-        params = {"page": 1, "page_size": 100, "status": "ACTIVE"}
+        params: dict[str, str | int] = {"page": 1, "page_size": 100, "status": "ACTIVE"}
         result: list[HistoricalEvent] = []
         async with httpx.AsyncClient(
             timeout=self._timeout,

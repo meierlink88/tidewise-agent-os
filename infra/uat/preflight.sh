@@ -89,13 +89,35 @@ load_active_source_snapshot()
 ' >/dev/null || fail source-snapshot "authenticated complete Source Snapshot is unavailable or invalid"
 pass internal-data-service-and-source-snapshot
 
-reason_ready_url="${REASON_SERVICE_BASE_URL:?REASON_SERVICE_BASE_URL is required}"
-reason_ready_url="${reason_ready_url%/}/readyz"
-docker run --rm --network tidewise-uat --entrypoint curl "$agentos_image" \
-  -fsS --connect-timeout 5 --max-time 15 "$reason_ready_url" >/dev/null \
-  || fail internal-reasoning-server "${REASON_SERVICE_BASE_URL} is unavailable from tidewise-uat"
-: "${REASON_SERVICE_TOKEN:?REASON_SERVICE_TOKEN is required}"
-pass internal-reasoning-server
+: "${NEO4J_URI:?NEO4J_URI is required}"
+: "${NEO4J_USER:?NEO4J_USER is required}"
+: "${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}"
+: "${GRAPHITI_EMBEDDING_API_KEY:?GRAPHITI_EMBEDDING_API_KEY is required}"
+: "${GRAPHITI_EMBEDDING_BASE_URL:?GRAPHITI_EMBEDDING_BASE_URL is required}"
+: "${GRAPHITI_EMBEDDING_MODEL:?GRAPHITI_EMBEDDING_MODEL is required}"
+: "${GRAPHITI_EMBEDDING_DIM:?GRAPHITI_EMBEDDING_DIM is required}"
+docker run --rm --network tidewise-uat \
+  -e NEO4J_URI -e NEO4J_USER -e NEO4J_PASSWORD \
+  --entrypoint python "$agentos_image" -c '
+import os
+from neo4j import GraphDatabase
+driver = GraphDatabase.driver(
+    os.environ["NEO4J_URI"],
+    auth=(os.environ["NEO4J_USER"], os.environ["NEO4J_PASSWORD"]),
+)
+try:
+    driver.verify_connectivity()
+finally:
+    driver.close()
+' >/dev/null || fail internal-neo4j "${NEO4J_URI} is unavailable from tidewise-uat"
+docker run --rm --network tidewise-uat \
+  -e NEO4J_URI -e NEO4J_USER -e NEO4J_PASSWORD \
+  -e NEO4J_HTTP_PORT=7474 -e NEO4J_BOLT_PORT=7687 \
+  -e GRAPHITI_EMBEDDING_API_KEY -e GRAPHITI_EMBEDDING_BASE_URL \
+  -e GRAPHITI_EMBEDDING_MODEL -e GRAPHITI_EMBEDDING_DIM \
+  --entrypoint python "$agentos_image" -m sematica.graphiti.readiness >/dev/null \
+  || fail graphiti-embedding "configured embedding provider or vector dimension is invalid"
+pass internal-neo4j-and-graphiti-embedding
 
 minio_health_url="${MINIO_ENDPOINT:?MINIO_ENDPOINT is required}"
 minio_health_url="${minio_health_url%/}/minio/health/live"
