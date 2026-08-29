@@ -1,0 +1,1 @@
+"""Private investment reasoning implementation."""

@@ -67,8 +67,19 @@ async def run_check(headers: dict | None, auth_note: str) -> None:
             config = json.loads(config_result.content[0].text)
             agent_ids = {item["id"] for item in config["agents"]}
             workflow_ids = {item["id"] for item in config["workflows"]}
-            required_agents = {"event-extractor", "evidence-extractor", "raw-collector"}
-            required_workflows = {"event-extraction", "evidence-extraction", "raw-collection"}
+            required_agents = {
+                "event-extractor",
+                "evidence-extractor",
+                "investment-reasoner",
+                "investment-reviewer",
+                "raw-collector",
+            }
+            required_workflows = {
+                "event-extraction",
+                "evidence-extraction",
+                "investment-reasoning",
+                "raw-collection",
+            }
             if not required_agents <= agent_ids or not required_workflows <= workflow_ids:
                 raise RuntimeError("MCP AgentOS config is missing required registered components")
             step("MCP config — registered Agents and Workflows visible")

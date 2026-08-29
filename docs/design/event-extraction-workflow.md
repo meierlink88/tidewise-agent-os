@@ -10,8 +10,8 @@ reasoning. It has one authoritative execution path with three business stages:
    `add_episode`;
 3. classify newly projected Events, match existing Variables and anchors, and create direct Signal Facts.
 
-The Workflow runs inside AgentOS. `sematica` supplies the Graphiti and investment-semantics primitives, but does not
-start a second HTTP service or own a separate worker process.
+The Workflow runs inside AgentOS. `capabilities/event` owns Event business orchestration while `sematica` supplies
+only Graphiti integration primitives; neither starts a second HTTP service or owns a separate worker process.
 
 ## Stage 1: extract Event Candidates
 

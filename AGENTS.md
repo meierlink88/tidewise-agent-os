@@ -15,11 +15,13 @@ AgentOS (app/main.py)
 ├── Collection Title Curator (Agno Studio/PostgreSQL component; seeded by agents/title_curator.py)
 ├── Evidence Extractor  (Agno Studio/PostgreSQL component; seeded by agents/evidence_extractor.py)
 ├── Event Extractor     (Agno Studio/PostgreSQL component; seeded by agents/event_extractor.py)
+├── Investment Reasoner / Reviewer (Studio components; seeded by agents/investment_*.py)
 ├── Local Ping         (workflows/local_ping.py)
 ├── Deployment Check   (workflows/deployment_check.py)
 ├── Raw Collection     (Agno Studio/PostgreSQL component; seeded by workflows/raw_collection.py)
 ├── Evidence Extraction (Agno Studio/PostgreSQL component; seeded by workflows/evidence_extraction.py)
-└── Event Extraction    (Agno Studio/PostgreSQL component; seeded by workflows/event_extraction.py)
+├── Event Extraction    (Agno Studio/PostgreSQL component; seeded by workflows/event_extraction.py)
+└── Investment Reasoning (Agno Studio/PostgreSQL component; seeded by workflows/investment_reasoning.py)
 ```
 
 共享能力：
@@ -32,7 +34,8 @@ AgentOS (app/main.py)
 - `capabilities/collection/`：Collection 领域能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
 - `capabilities/evidence/`：Evidence 领域能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
 - `capabilities/event/`：Event Candidate 提炼、去重、发布与 Signal 构建能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
-- `sematica/`：AgentOS 内部语义层模块，承载 Graphiti、Ontology、Event Analysis 与 Investment Reasoning 能力；它不是独立服务，不得自行启动第二个 HTTP 进程。
+- `capabilities/investment/`：投研推理合同、Signal 根门禁、传导、结论综合与 Workflow Function。
+- `sematica/`：AgentOS 内部 Graphiti 适配层，承载 Graphiti、Ontology、Event 投影和图检索扩展；投研业务规则必须放在 `capabilities/investment/`。它不是独立服务，不得自行启动第二个 HTTP 进程。
 - `data/collector/`：本地原始采集 Artifact；目录受 Git 忽略。
 - `data/evidence/`、`data/event/`：本地 Evidence 与 Event 提炼 Artifact；目录受 Git 忽略。
 

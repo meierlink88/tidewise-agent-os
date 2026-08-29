@@ -10,6 +10,8 @@ from app.schedules import (
     EVENT_EXTRACTION_SCHEDULE_PROMPT,
     EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
     EVIDENCE_EXTRACTION_SCHEDULE_PROMPT,
+    INVESTMENT_REASONING_SCHEDULE_ENDPOINT,
+    INVESTMENT_REASONING_SCHEDULE_PROMPT,
     RAW_COLLECTION_SCHEDULE_ENDPOINT,
     inspect_schedules,
     seed_schedules,
@@ -37,6 +39,12 @@ class ScheduleSeedTest(unittest.TestCase):
                 name="renamed-event-schedule",
                 endpoint=EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
                 enabled=False,
+            ),
+            SimpleNamespace(
+                id="investment-id",
+                name="renamed-investment-schedule",
+                endpoint=INVESTMENT_REASONING_SCHEDULE_ENDPOINT,
+                enabled=True,
             ),
         ]
 
@@ -75,6 +83,12 @@ class ScheduleSeedTest(unittest.TestCase):
                 endpoint=EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
                 enabled=True,
             ),
+            SimpleNamespace(
+                id="investment-id",
+                name="Investment Reasoning",
+                endpoint=INVESTMENT_REASONING_SCHEDULE_ENDPOINT,
+                enabled=True,
+            ),
         ]
 
         with patch.dict(os.environ, {"ENABLE_DEPLOY_CHECK": "false"}):
@@ -90,6 +104,7 @@ class ScheduleSeedTest(unittest.TestCase):
             SimpleNamespace(id="raw-id"),
             SimpleNamespace(id="evidence-id"),
             SimpleNamespace(id="event-id"),
+            SimpleNamespace(id="investment-id"),
         ]
 
         with patch.dict(os.environ, {"ENABLE_DEPLOY_CHECK": "false"}):
@@ -102,6 +117,7 @@ class ScheduleSeedTest(unittest.TestCase):
                 RAW_COLLECTION_SCHEDULE_ENDPOINT,
                 EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
                 EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
+                INVESTMENT_REASONING_SCHEDULE_ENDPOINT,
             },
         )
         evidence = next(call for call in calls if call["endpoint"] == EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT)
@@ -114,6 +130,19 @@ class ScheduleSeedTest(unittest.TestCase):
         self.assertEqual(event["payload"], {"message": EVENT_EXTRACTION_SCHEDULE_PROMPT})
         self.assertEqual(event["timezone"], "Asia/Shanghai")
         self.assertEqual(event["if_exists"], "raise")
+        investment = next(call for call in calls if call["endpoint"] == INVESTMENT_REASONING_SCHEDULE_ENDPOINT)
+        self.assertEqual(investment["cron"], "30 7 * * *")
+        self.assertEqual(
+            investment["payload"],
+            {
+                "message": {
+                    "question": INVESTMENT_REASONING_SCHEDULE_PROMPT,
+                    "event_window_hours": 48,
+                    "include_company": False,
+                }
+            },
+        )
+        self.assertEqual(investment["timezone"], "Asia/Shanghai")
 
 
 class ScheduleInspectionTest(unittest.TestCase):

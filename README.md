@@ -9,11 +9,13 @@
 - Agent：`title-curator`，对采集标题做投研相关性判断，由 Raw Collection Workflow 调用。
 - Agent：`evidence-extractor`，从 Raw Evidence 提取 Atomic Evidence，由 Studio/PostgreSQL 管理。
 - Agent：`event-extractor`，按 5W1H 身份语义把同批 Evidence 提炼为 Event Candidate。
+- Agent：`investment-reasoner`、`investment-reviewer`，分别负责分层影响/Signal 传导和最终谱系审核。
 - Workflow：`local-ping`，无模型依赖的运行时检查。
 - Workflow：`deployment-check`，检查数据库、MCP、组件和调度状态。
 - Workflow：`raw-collection`，由 Agno Studio/PostgreSQL 管理编排版本，执行 Agent 采集、确定性去重和 manifest-last 发布。
 - Workflow：`evidence-extraction`，增量提取并发布 Atomic Evidence，回写正式 Evidence ID。
 - Workflow：`event-extraction`，冻结本地 Evidence，发布去重后 Event，投影 Graphiti 并构建 Signal Fact。
+- Workflow：`investment-reasoning`，由 Schedule 命题直接触发，按地缘政治→宏观经济→产业链及节点逐层推导，仅从有效 Signal 根形成方向结论。
 - API/MCP：`http://localhost:8000`、`http://localhost:8000/mcp`。
 
 ## 本地拓扑
@@ -75,14 +77,14 @@ Control Plane 的 Studio 中编辑并发布 Instructions；`raw-collection` 每�
 `raw-collection` 首次启动时也会创建一个 Studio 发布版本。Workflow 编排可在 Studio
 中创建新版本并发布；步骤使用的 Agent 和自定义 Function 实现在 Git 中维护。采集
 实现集中在 `capabilities/collection/`，Evidence 实现集中在 `capabilities/evidence/`，Event Candidate
-提炼与交接集中在 `capabilities/event/`；每个领域只以 `tools/`、`functions/`、`internal/` 组织，不属于某个 Agent 或 Workflow 私有。
+提炼与交接集中在 `capabilities/event/`，投研推理规则集中在 `capabilities/investment/`；每个领域只以 `tools/`、`functions/`、`internal/` 组织，不属于某个 Agent 或 Workflow 私有。Graphiti 的时间检索与图驱动适配仍保留在 `sematica/graphiti/`。
 采集 Workflow Executor 使用 Agno 异步运行接口，所有外部通道使用异步 HTTP；Tool Batch、
 Artifact 构建和发布的文件操作会卸载到工作线程，因此单 Worker 运行采集时不会阻塞其他业务
 Agent 或 Workflow。
 
 新环境显式执行一次 `python -m scripts.seed_schedules` 后，会得到默认的
-`raw-collection-hourly`、`evidence-extraction-every-10-minutes` 和
-`event-extraction-every-minute` Schedule。默认名称只用于首次
+`raw-collection-hourly`、`evidence-extraction-every-10-minutes`、
+`event-extraction-every-minute` 和 `investment-reasoning-daily` Schedule。默认名称只用于首次
 创建；之后名称、cron、endpoint、payload 和启停状态均由 PostgreSQL 与 AgentOS Control Panel
 管理。应用启动仅按 Workflow endpoint 做只读缺失、重复和启停检查，不创建或覆盖 Schedule，
 因此 Control Panel 中的改名和其他运行配置会跨容器重启保留。

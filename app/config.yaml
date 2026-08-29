@@ -34,6 +34,16 @@ manifest:
       - "识别同批 Evidence 中描述同一现实动作的内容"
       - "标记不能安全提炼 Event 的 Evidence"
 
+  investment-reasoner:
+    description: "按地缘政治、宏观经济、产业链三层复用推理，并从有效 Signal 根沿标准拓扑执行最多三跳传导。"
+    quick_prompts:
+      - "根据给定 Signal Fact 和拓扑推导产业链节点变化"
+
+  investment-reviewer:
+    description: "审核投研结论的 Signal 根、拓扑传导、周期和证据完整性。"
+    quick_prompts:
+      - "审核该产业链节点结论是否可追溯至有效 Signal Fact"
+
   local-ping:
     description: "不调用模型的本地运行时健康检查。"
     quick_prompts:
@@ -53,6 +63,11 @@ manifest:
     description: "增量读取本地已映射 Evidence，提炼并去重 Event，投影 Graphiti 后构建变量信号。"
     quick_prompts:
       - "处理所有已发布且尚未提炼 Event 的 Evidence"
+
+  investment-reasoning:
+    description: "Schedule 直达的五阶段投研推理：冻结Event/Signal，依次分析地缘政治、宏观经济、产业链及节点并审核。"
+    quick_prompts:
+      - "获取最近48小时全部Event，分析对相关产业链所有节点的投资价值变化。"
 
   deployment-check:
     description: "检查 Tidewise AgentOS 的数据库、MCP、组件和调度配置。"

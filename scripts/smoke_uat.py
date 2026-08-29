@@ -17,6 +17,7 @@ from mcp.types import TextContent
 from app.schedules import (
     EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
     EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
+    INVESTMENT_REASONING_SCHEDULE_ENDPOINT,
     RAW_COLLECTION_SCHEDULE_ENDPOINT,
 )
 from db import get_postgres_db
@@ -48,17 +49,21 @@ async def _probe(token: str) -> None:
             "raw-collector",
             "evidence-extractor",
             "event-extractor",
+            "investment-reasoner",
+            "investment-reviewer",
         }
         required_workflows = {
             "local-ping",
             "raw-collection",
             "evidence-extraction",
             "event-extraction",
+            "investment-reasoning",
         }
         required_schedule_endpoints = {
             RAW_COLLECTION_SCHEDULE_ENDPOINT,
             EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
             EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
+            INVESTMENT_REASONING_SCHEDULE_ENDPOINT,
         }
         if not required_agents <= agent_ids:
             raise RuntimeError(f"missing Agents: {sorted(required_agents - agent_ids)}")

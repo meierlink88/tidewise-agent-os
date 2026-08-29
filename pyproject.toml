@@ -38,7 +38,6 @@ select = ["E", "F", "I", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
-"sematica/reasoning/investment/adapters.py" = ["E501"]
 
 [tool.mypy]
 check_untyped_defs = true
