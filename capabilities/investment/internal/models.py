@@ -402,6 +402,25 @@ class InvestmentAnalysisResult(FrozenModel):
     execution_issues: list[str] = Field(default_factory=list, max_length=100)
 
 
+class InvestmentConclusionArtifact(InvestmentAnalysisResult):
+    """Durable product result emitted by one completed reasoning Workflow run."""
+
+    schema_version: Literal["investment-conclusion-artifact/v1"] = "investment-conclusion-artifact/v1"
+    workflow_run_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+    artifact_path: str = Field(min_length=1, max_length=4096)
+    decision_at: datetime
+    question: str = Field(min_length=1, max_length=2000)
+    event_window_hours: int = Field(ge=1, le=720)
+    conclusion_status: Literal["SUPPORTED", "INSUFFICIENT_EVIDENCE"]
+
+    @field_validator("decision_at")
+    @classmethod
+    def artifact_decision_at_is_utc(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value):
+            raise ValueError("decision_at must be explicit UTC")
+        return value
+
+
 class PreparedInvestmentContext(FrozenModel):
     context: InvestmentAnalysisContext
     context_fingerprint: str

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,6 +16,7 @@ from capabilities.investment.internal.models import (
     IndustryAnalysisState,
     InvestmentAnalysisRequest,
     InvestmentAnalysisResult,
+    InvestmentConclusionArtifact,
     InvestmentReasoningInput,
     LayerAnalysisResult,
     MacroAnalysisState,
@@ -23,6 +25,7 @@ from capabilities.investment.internal.models import (
     Trend,
 )
 from capabilities.investment.internal.runtime import investment_workflow_runtime
+from capabilities.investment.internal.storage import conclusion_artifact_path, write_conclusion_artifact
 
 
 def _content(step_input: StepInput, name: str, model: type[Any]) -> Any:
@@ -151,7 +154,7 @@ def _safe_layer_result(result: LayerAnalysisResult, reason: str) -> LayerAnalysi
     )
 
 
-async def review_and_finalize(step_input: StepInput) -> StepOutput:
+async def review_and_finalize(step_input: StepInput, run_context: RunContext) -> StepOutput:
     """Apply deterministic lineage gates, then let the Reviewer check supported conclusions."""
 
     state = _content(step_input, "analyze-industry-impact", IndustryAnalysisState)
@@ -236,4 +239,29 @@ async def review_and_finalize(step_input: StepInput) -> StepOutput:
         },
         execution_issues=list(dict.fromkeys(execution_issues))[:100],
     )
-    return StepOutput(content=result, success=True)
+    workflow_run_id = str(run_context.run_id or "").strip()
+    path = conclusion_artifact_path(workflow_run_id)
+    request = state.prepared.context.request
+    has_supported_conclusion = bool(
+        geopolitical.claims
+        or macro.claims
+        or industry.claims
+        or transmissions
+        or any(
+            trend != Trend.INSUFFICIENT_EVIDENCE
+            for chain in draft.chains
+            for node in chain.nodes
+            for trend in (node.short, node.medium, node.long)
+        )
+    )
+    artifact = InvestmentConclusionArtifact(
+        **result.model_dump(),
+        workflow_run_id=workflow_run_id,
+        artifact_path=str(path),
+        decision_at=request.decision_at,
+        question=request.question,
+        event_window_hours=request.event_window_hours,
+        conclusion_status="SUPPORTED" if has_supported_conclusion else "INSUFFICIENT_EVIDENCE",
+    )
+    await asyncio.to_thread(write_conclusion_artifact, artifact)
+    return StepOutput(content=artifact, success=True)

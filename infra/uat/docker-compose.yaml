@@ -51,6 +51,7 @@ services:
       COLLECTOR_ARTIFACT_ROOT: /app/data/collector
       EVIDENCE_ARTIFACT_ROOT: /app/data/evidence
       EVENT_ARTIFACT_ROOT: /app/data/event
+      INVESTMENT_ARTIFACT_ROOT: /app/data/investment
       EVENT_EXTRACTION_BATCH_SIZE: ${EVENT_EXTRACTION_BATCH_SIZE:-50}
       NEO4J_URI: ${NEO4J_URI:?NEO4J_URI is required}
       NEO4J_USER: ${NEO4J_USER:-neo4j}

@@ -38,6 +38,7 @@ AgentOS (app/main.py)
 - `sematica/`：AgentOS 内部 Graphiti 适配层，承载 Graphiti、Ontology、Event 投影和图检索扩展；投研业务规则必须放在 `capabilities/investment/`。它不是独立服务，不得自行启动第二个 HTTP 进程。
 - `data/collector/`：本地原始采集 Artifact；目录受 Git 忽略。
 - `data/evidence/`、`data/event/`：本地 Evidence 与 Event 提炼 Artifact；目录受 Git 忽略。
+- `data/investment/conclusions/`：投研 Workflow 最终结论 Artifact；与 Agno Workflow 执行审计记录分离，目录受 Git 忽略。
 
 ## 本地 Docker 约束
 
