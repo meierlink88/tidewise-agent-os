@@ -151,11 +151,11 @@ class GraphitiEventHistory:
             ]
         )
         result: dict[str, HistoricalEvent] = {}
-        search_interface = self._graphiti.driver.search_interface
-        if search_interface is None:
+        search_ops = self._graphiti.driver.search_ops
+        if search_ops is None:
             raise EventRecallUnavailable("Graphiti Event recall failed: full-text search is unavailable")
         try:
-            episodes = await search_interface.episode_fulltext_search(
+            episodes = await search_ops.episode_fulltext_search(
                 self._graphiti.driver,
                 query,
                 SearchFilters(),
