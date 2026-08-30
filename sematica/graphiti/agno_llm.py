@@ -148,6 +148,7 @@ class AgnoGraphitiLLM(LLMClient):
 
         if response_model is None:
             return payload
+        payload = cls._apply_declared_defaults_to_nulls(payload, response_model)
         try:
             validated = response_model.model_validate(payload)
         except ValidationError as exc:
@@ -162,6 +163,29 @@ class AgnoGraphitiLLM(LLMClient):
             )
             raise _StructuredOutputValidationError(issues) from exc
         return validated.model_dump(mode="json")
+
+    @staticmethod
+    def _apply_declared_defaults_to_nulls(
+        payload: dict[str, Any],
+        response_model: type[BaseModel],
+    ) -> dict[str, Any]:
+        """Use explicit model defaults for null optional enrichment fields.
+
+        Graphiti entity schemas commonly expose optional enrichment lists with
+        ``default_factory=list``. A model may serialize an unknown value as
+        ``null`` instead of omitting it; those two representations carry the
+        same business meaning. Only fields that declare a non-null default are
+        normalized. Required fields and non-null wrong types remain strict.
+        """
+
+        normalized = dict(payload)
+        for field_name, field in response_model.model_fields.items():
+            if field_name not in normalized or normalized[field_name] is not None or field.is_required():
+                continue
+            default = field.get_default(call_default_factory=True)
+            if default is not None:
+                normalized[field_name] = default
+        return normalized
 
 
 class _Relevance(BaseModel):
