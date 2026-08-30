@@ -76,6 +76,14 @@ def read_title_curation(collection_id: str) -> TitleCurationDraft:
     return TitleCurationDraft.model_validate_json(path.read_text(encoding="utf-8"))
 
 
+def read_title_curation_if_present(collection_id: str) -> TitleCurationDraft | None:
+    """Load partial filter decisions when a collection loop has already persisted some."""
+    path = collection_staging_root(collection_id) / "curation" / "title-decisions.json"
+    if not path.is_file():
+        return None
+    return TitleCurationDraft.model_validate_json(path.read_text(encoding="utf-8"))
+
+
 def write_json(path: Path, value: object) -> None:
     """Atomically persist JSON with stable human-readable formatting."""
     _atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n")

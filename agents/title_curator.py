@@ -13,7 +13,7 @@ from capabilities.collection import TitleCurationDraft
 from db import get_postgres_db
 
 TITLE_CURATOR_AGENT_ID = "title-curator"
-TITLE_CURATOR_CONTRACT_VERSION = 6
+TITLE_CURATOR_CONTRACT_VERSION = 7
 TITLE_CURATOR_AGENT_NAME = "Raw Evidence Filter"
 _SEED_PROMPT = Path(__file__).with_name("title_curator.seed.md")
 

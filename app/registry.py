@@ -13,12 +13,16 @@ from app.settings import default_model
 from capabilities.collection import (
     CollectionRequest,
     PreparedArtifactSet,
+    RawEvidenceFilterProgress,
     TitleCurationDraft,
     TitleCurationRequest,
 )
 from capabilities.collection.functions import (
     collect_raw_evidence,
+    prepare_raw_evidence_filter_batch,
     publish_raw_evidence,
+    raw_evidence_filter_complete,
+    save_raw_evidence_filter_batch,
 )
 from capabilities.event import EventExtractionBatch, EventExtractionDraft, EventExtractionResult
 from capabilities.event.functions import (
@@ -102,6 +106,7 @@ registry = TidewiseRegistry(
         TitleCurationRequest,
         TitleCurationDraft,
         PreparedArtifactSet,
+        RawEvidenceFilterProgress,
         PreparedRawDocument,
         EvidenceCategoryCatalog,
         EvidenceAnalysisRequest,
@@ -129,7 +134,10 @@ registry = TidewiseRegistry(
     functions=[
         platform_identity,
         collect_raw_evidence,
+        prepare_raw_evidence_filter_batch,
         publish_raw_evidence,
+        raw_evidence_filter_complete,
+        save_raw_evidence_filter_batch,
         prepare_raw_document,
         prepare_evidence_analysis,
         validate_evidence_analysis,

@@ -40,7 +40,7 @@ class CollectionRequest(BaseModel):
 
 
 class TitleCurationItem(BaseModel):
-    """Bounded material context visible to the Raw Evidence Filter Agent."""
+    """One complete document visible to the Raw Evidence Filter Agent."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -48,15 +48,25 @@ class TitleCurationItem(BaseModel):
     title: str = Field(min_length=1, max_length=1_024)
     source_name: str = Field(min_length=1, max_length=200)
     published_at: datetime | None = None
-    content_excerpt: str = Field(min_length=1, max_length=2_000)
+    content: str = Field(min_length=1)
 
 
 class TitleCurationRequest(BaseModel):
-    """Complete candidate set requiring one title decision each."""
+    """One dynamically sized candidate batch requiring one decision per item."""
 
     model_config = ConfigDict(extra="forbid")
 
     candidates: list[TitleCurationItem]
+
+
+class RawEvidenceFilterProgress(BaseModel):
+    """Small loop state returned after each complete filter batch."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_candidates: int = Field(ge=0)
+    decided_candidates: int = Field(ge=0)
+    remaining_candidates: int = Field(ge=0)
 
 
 class TitleCurationDecision(BaseModel):
