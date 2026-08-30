@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 import tempfile
 import unittest
@@ -32,8 +34,10 @@ from agents.event_signal_analyst import (
     ensure_event_signal_analyst_agent,
 )
 from capabilities.event import (
+    EventCandidate,
     EventExtractionBatch,
     EventExtractionDraft,
+    EventExtractionIdle,
     EventExtractionResult,
     EventIdentityDecision,
     EventIdentityRequest,
@@ -45,7 +49,10 @@ from capabilities.event import (
 )
 from capabilities.event.functions import enqueue_evidence_artifact
 from capabilities.event.functions.extraction import _candidate_key
+from capabilities.event.internal.identity import same_occurrence
 from capabilities.event.internal.models import (
+    EventAgentExecutionJournal,
+    EventAgentExecutionRecord,
     EventPublicationJournal,
     EventResolutionRecord,
     EventSignalJournal,
@@ -53,8 +60,10 @@ from capabilities.event.internal.models import (
 )
 from capabilities.event.internal.storage import (
     claim_event_batch,
+    freeze_agent_execution,
     freeze_draft,
     freeze_resolution,
+    load_agent_execution_journal,
     release_event_batch_lease,
     write_publication_journal,
     write_signal_journal,
@@ -71,6 +80,7 @@ from sematica.analysis.event.errors import PermanentEventAnalysisFailure
 from sematica.ingestion.episcode.event.contracts import EventCandidateDTO, HistoricalEvent
 from workflows.event_extraction import (
     EVENT_EXTRACTION_CONTRACT_VERSION,
+    EVENT_EXTRACTION_PUBLICATION_POLICY,
     _seed_workflow,
     ensure_event_extraction_workflow,
 )
@@ -82,6 +92,8 @@ class FakeEventWorkflowRuntime:
     EVENT_ID = "EVT15bec7e3-998c-5434-aa5d-29712c4c67cf"
 
     def __init__(self) -> None:
+        self.agents: dict[str, Agent] = {}
+        self.agent_versions: list[tuple[str, int]] = []
         self.history: list[HistoricalEvent] = []
         self.signal_candidates = CandidateSet(anchors=[], variables=[])
         self.fail_before_data_ack_checkpoint_once = False
@@ -95,6 +107,10 @@ class FakeEventWorkflowRuntime:
         self.signal_candidate_reads = 0
         self.signal_projection_attempts = 0
         self.signal_projections = 0
+
+    async def invoke_agent(self, agent_id, version, request, run_context) -> RunOutput:
+        self.agent_versions.append((agent_id, version))
+        return await self.agents[agent_id].arun(input=request, run_context=run_context, stream=False)
 
     async def retrieve_history(self, candidate) -> list[HistoricalEvent]:
         del candidate
@@ -280,6 +296,58 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         "event-signal-analyst": 17,
     }
 
+    def test_event_candidate_wire_contract_owns_complete_business_semantics(self) -> None:
+        event = EventCandidate.model_validate(
+            {
+                "title": "示例公司签署服务器订单",
+                "summary": "示例公司于 2026 年 8 月 25 日宣布签署服务器订单。",
+                "semantic": {
+                    "actors": ["示例公司"],
+                    "action": "签署",
+                    "objects": ["服务器订单"],
+                    "stage": "ANNOUNCED",
+                    "modality": "FACT",
+                    "time": {
+                        "occurred_at": None,
+                        "announced_at": "2026-08-25T00:00:00Z",
+                        "effective_at": None,
+                        "precision": "RANGE",
+                    },
+                    "jurisdictions": ["中国"],
+                    "reason": "扩充 AI 服务器交付能力",
+                    "method": "签署正式采购合同",
+                    "metrics": [
+                        {
+                            "name": "订单金额",
+                            "value": "30",
+                            "unit": "亿元",
+                            "change": None,
+                            "period": "合同期",
+                        }
+                    ],
+                },
+            }
+        )
+
+        payload = event.model_dump(mode="json")
+        self.assertEqual(set(payload), {"title", "summary", "semantic"})
+        self.assertEqual(
+            set(payload["semantic"]),
+            {
+                "actors",
+                "action",
+                "objects",
+                "stage",
+                "modality",
+                "time",
+                "jurisdictions",
+                "reason",
+                "method",
+                "metrics",
+            },
+        )
+        self.assertNotIn("attribution", payload["semantic"])
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         root = Path(self.temporary.name)
@@ -319,9 +387,17 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
                 "precision": "DAY",
             },
             "jurisdictions": ["中国"],
-            "reason": None,
-            "method": "公告宣布",
-            "metrics": [],
+            "reason": "客户扩容需求",
+            "method": "签署正式采购协议",
+            "metrics": [
+                {
+                    "name": "订单金额",
+                    "value": "100",
+                    "unit": "亿元",
+                    "change": None,
+                    "period": "2026年",
+                }
+            ],
             "attribution": {"reported_by": None, "claimed_by": "示例公司"},
         }
         return [
@@ -337,7 +413,7 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
                 raw_evidence_id=cls.RAW_EVIDENCE_ID,
                 summary="示例公司的同一服务器订单公告",
                 keywords=["服务器", "订单"],
-                semantic={**semantic, "method": "媒体转述"},
+                semantic={**semantic, "method": "通过正式采购合同签署"},
             ),
         ]
 
@@ -354,13 +430,18 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
                             "action": "签署",
                             "objects": ["服务器订单"],
                             "stage": "ANNOUNCED",
+                            "modality": "FACT",
+                            "time": {
+                                "occurred_at": None,
+                                "announced_at": "2026-08-25T00:00:00Z",
+                                "effective_at": None,
+                                "precision": "DAY",
+                            },
                             "jurisdictions": ["中国"],
-                            "effective_at": None,
-                            "time_precision": "DAY",
+                            "reason": None,
+                            "method": "签署正式采购协议",
+                            "metrics": [],
                         },
-                        "modality": "FACT",
-                        "occurred_at": None,
-                        "announced_at": "2026-08-25T00:00:00Z",
                     },
                     "evidence_ids": [cls.FIRST_EVIDENCE_ID, cls.SECOND_EVIDENCE_ID],
                 }
@@ -439,14 +520,18 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
             Agent(id="event-signal-analyst", name="Event Signal Analyst", instructions="test signal analyst"),
         )
 
-    @classmethod
-    def workflow(cls) -> tuple[Workflow, Agent, Agent, Agent]:
-        extractor, identity, signal_analyst = cls.studio_agents()
+    def workflow(self) -> tuple[Workflow, Agent, Agent, Agent]:
+        extractor, identity, signal_analyst = self.studio_agents()
+        self.runtime.agents = {
+            "event-extractor": extractor,
+            "event-identity": identity,
+            "event-signal-analyst": signal_analyst,
+        }
         workflow = _seed_workflow(
             extractor,
             identity,
             signal_analyst,
-            agent_versions=cls.AGENT_VERSIONS,
+            agent_versions=self.AGENT_VERSIONS,
         )
         workflow.db = None
         return workflow, extractor, identity, signal_analyst
@@ -508,24 +593,51 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
                 session_id=f"session-{run_id}",
             )
 
-    def test_workflow_has_five_exact_business_phases_and_three_direct_studio_agents(self) -> None:
+    def test_studio_serialization_has_one_outer_loop_with_five_direct_function_steps(self) -> None:
         workflow, _, _, _ = self.workflow()
-        self.assertIsInstance(workflow.steps, list)
-        assert isinstance(workflow.steps, list)
-        phase_steps = cast(list[Any], workflow.steps)
-
+        serialized = workflow.to_dict()
+        self.assertEqual(len(serialized["steps"]), 1)
+        outer_loop = serialized["steps"][0]
+        self.assertEqual(outer_loop["type"], "Loop")
+        self.assertEqual(outer_loop["max_iterations"], 50)
+        self.assertEqual(outer_loop["end_condition"], "event_extraction_complete")
+        self.assertEqual(outer_loop["end_condition_type"], "function")
+        phase_steps = outer_loop["steps"]
         self.assertEqual(
-            [step.name for step in phase_steps],
+            [step["name"] for step in phase_steps],
             ["Extract Events", "Resolve Events", "Publish Events", "Analyze Signals", "Publish Signals"],
         )
+        self.assertEqual([step["type"] for step in phase_steps], ["Step"] * 5)
         self.assertEqual(
-            self.direct_agent_ids(cast(list[object], workflow.steps)),
-            ["event-extractor", "event-identity", "event-signal-analyst"],
+            [step["executor_ref"] for step in phase_steps],
+            ["extract_events", "resolve_events", "publish_events", "analyze_signals", "publish_signals"],
         )
+        forbidden_visible_keys = {
+            "agent_id",
+            "team_id",
+            "workflow_id",
+            "steps",
+            "else_steps",
+            "condition",
+            "conditions",
+            "router",
+            "branches",
+        }
+        self.assertTrue(all(forbidden_visible_keys.isdisjoint(step) for step in phase_steps))
+
+        def node_types(nodes: list[dict[str, Any]]) -> list[str]:
+            result: list[str] = []
+            for node in nodes:
+                result.append(node["type"])
+                result.extend(node_types(node.get("steps", [])))
+            return result
+
+        self.assertEqual(node_types(serialized["steps"]), ["Loop", "Step", "Step", "Step", "Step", "Step"])
         self.assertEqual(
             workflow.metadata,
             {
                 "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
+                "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
                 "event_agent_versions": self.AGENT_VERSIONS,
             },
         )
@@ -615,6 +727,103 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(list((self.event_root / ".pending").glob("*/lease.json")), [])
 
+    def test_agent_execution_binding_is_idempotent_and_immutable(self) -> None:
+        with patch(
+            "capabilities.event.internal.queue.read_resolved_evidences",
+            return_value=self.evidences(),
+        ):
+            enqueue_evidence_artifact(
+                str(self.evidence_manifest),
+                [item.id for item in self.evidences()],
+            )
+            claimed = claim_event_batch()
+
+        self.assertIsInstance(claimed, EventExtractionBatch)
+        batch = cast(EventExtractionBatch, claimed)
+        execution = EventAgentExecutionRecord(
+            operation_key="EXTRACT_EVENTS",
+            agent_id="event-extractor",
+            version=11,
+        )
+        self.assertEqual(freeze_agent_execution(batch, execution), execution)
+        self.assertEqual(freeze_agent_execution(batch, execution), execution)
+        self.assertEqual(load_agent_execution_journal(batch.batch_id).executions, [execution])
+        with self.assertRaisesRegex(ValueError, "execution binding is immutable"):
+            freeze_agent_execution(
+                batch,
+                execution.model_copy(update={"version": 12}),
+            )
+        self.assertEqual(load_agent_execution_journal(batch.batch_id).executions, [execution])
+        release_event_batch_lease(batch)
+
+    def test_agent_execution_journal_rejects_corruption_and_cross_batch_identity(self) -> None:
+        with patch(
+            "capabilities.event.internal.queue.read_resolved_evidences",
+            return_value=self.evidences(),
+        ):
+            enqueue_evidence_artifact(
+                str(self.evidence_manifest),
+                [item.id for item in self.evidences()],
+            )
+            claimed = claim_event_batch()
+
+        self.assertIsInstance(claimed, EventExtractionBatch)
+        batch = cast(EventExtractionBatch, claimed)
+        path = self.event_root / ".pending" / batch.batch_id / "agent-executions.json"
+        path.write_text("not-json\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "execution journal is invalid"):
+            load_agent_execution_journal(batch.batch_id)
+
+        path.write_text(
+            EventAgentExecutionJournal(batch_id="a" * 64, executions=[]).model_dump_json(),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "batch identity conflict"):
+            load_agent_execution_journal(batch.batch_id)
+        release_event_batch_lease(batch)
+
+    def test_expired_batch_lease_cannot_append_agent_execution_audit(self) -> None:
+        class ControlledClock:
+            current = datetime(2026, 8, 30, tzinfo=UTC)
+
+            @classmethod
+            def now(cls, tz=None):
+                del tz
+                return cls.current
+
+        replacement: EventExtractionBatch | None = None
+        with (
+            patch(
+                "capabilities.event.internal.queue.read_resolved_evidences",
+                return_value=self.evidences(),
+            ),
+            patch("capabilities.event.internal.storage.datetime", ControlledClock),
+        ):
+            enqueue_evidence_artifact(
+                str(self.evidence_manifest),
+                [item.id for item in self.evidences()],
+            )
+            claimed = claim_event_batch()
+            self.assertIsInstance(claimed, EventExtractionBatch)
+            stale = cast(EventExtractionBatch, claimed)
+            ControlledClock.current += timedelta(seconds=601)
+            takeover = claim_event_batch()
+            self.assertIsInstance(takeover, EventExtractionBatch)
+            replacement = cast(EventExtractionBatch, takeover)
+            with self.assertRaisesRegex(ValueError, "lease is not owned"):
+                freeze_agent_execution(
+                    stale,
+                    EventAgentExecutionRecord(
+                        operation_key="EXTRACT_EVENTS",
+                        agent_id="event-extractor",
+                        version=11,
+                    ),
+                )
+            self.assertFalse((self.event_root / ".pending" / stale.batch_id / "agent-executions.json").exists())
+
+        assert replacement is not None
+        release_event_batch_lease(replacement)
+
     async def test_renamed_workflow_completes_new_event_and_signal_as_v4_result(self) -> None:
         workflow, extractor, identity, signal_analyst = self.workflow()
         assert isinstance(workflow.steps, list)
@@ -658,10 +867,50 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(studio.extraction_inputs), 1)
         self.assertEqual(len(studio.identity_inputs), 1)
+        resolved_semantic = studio.identity_inputs[0].candidate.event.semantic
+        self.assertEqual(resolved_semantic.reason, "客户扩容需求")
+        self.assertEqual(resolved_semantic.method, "签署正式采购协议")
+        self.assertEqual([metric.name for metric in resolved_semantic.metrics], ["订单金额"])
+        self.assertNotIn("attribution", resolved_semantic.model_dump(mode="json"))
         self.assertEqual([request.task for request in studio.signal_inputs], ["CLASSIFY", "PROPOSE_SIGNALS"])
         proposed = cast(EventSignalAnalysisRequest, studio.signal_inputs[1])
         self.assertEqual(proposed.classification, self.classification())
         self.assertEqual(proposed.candidates, self.candidates())
+        self.assertEqual(
+            proposed.analysis.event.event.semantic.model_dump(mode="json"),
+            resolved_semantic.model_dump(mode="json"),
+        )
+        published = next(iter(self.runtime._published_by_key.values()))
+        self.assertEqual(published["event"]["semantic"], resolved_semantic.model_dump(mode="json"))
+        execution_journal = EventAgentExecutionJournal.model_validate_json(
+            (self.event_root / "batches" / result.batch_id / "agent-executions.json").read_text(encoding="utf-8")
+        )
+        candidate_key = _candidate_key(studio.identity_inputs[0].candidate)
+        self.assertEqual(
+            [record.model_dump() for record in execution_journal.executions],
+            [
+                {
+                    "operation_key": "EXTRACT_EVENTS",
+                    "agent_id": "event-extractor",
+                    "version": 11,
+                },
+                {
+                    "operation_key": f"RESOLVE_EVENT:{candidate_key}",
+                    "agent_id": "event-identity",
+                    "version": 13,
+                },
+                {
+                    "operation_key": f"SIGNAL_CLASSIFY:{self.runtime.EVENT_ID}",
+                    "agent_id": "event-signal-analyst",
+                    "version": 17,
+                },
+                {
+                    "operation_key": f"SIGNAL_PROPOSE_SIGNALS:{self.runtime.EVENT_ID}",
+                    "agent_id": "event-signal-analyst",
+                    "version": 17,
+                },
+            ],
+        )
         self.assertEqual(
             (
                 self.runtime.history_reads,
@@ -672,6 +921,143 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
             ),
             (1, 1, 1, 1, 1),
         )
+
+    async def test_visible_outer_loop_returns_idle_without_invoking_any_agent(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        studio = FakeStudioResponses(
+            extraction=self.extraction_draft(),
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
+
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-visible-loop-idle",
+            enqueue=False,
+        )
+
+        self.assertEqual(response.status, RunStatus.completed)
+        EventExtractionIdle.model_validate(response.content)
+        self.assertEqual(studio.extraction_inputs, [])
+        self.assertEqual(studio.identity_inputs, [])
+        self.assertEqual(studio.signal_inputs, [])
+        self.assertEqual(self.runtime.agent_versions, [])
+
+    async def test_visible_outer_loop_processes_multiple_bounded_batches_before_stopping(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        studio = FakeStudioResponses(
+            extraction=self.extraction_draft(),
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
+
+        with patch.dict(os.environ, {"EVENT_EXTRACTION_BATCH_SIZE": "1"}):
+            response = await self.execute_workflow(
+                workflow,
+                extractor,
+                identity,
+                signal_analyst,
+                studio,
+                run_id="run-visible-loop-two-batches",
+                enqueue=True,
+            )
+
+        self.assertEqual(response.status, RunStatus.completed)
+        self.assertEqual(len(studio.extraction_inputs), 2)
+        self.assertEqual(len(studio.identity_inputs), 2)
+        self.assertEqual(self.runtime.data_publications, 2)
+        self.assertEqual(list((self.event_root / "evidence-queue" / "pending").glob("*.json")), [])
+
+    def test_reason_method_and_metrics_do_not_expand_exact_event_identity(self) -> None:
+        candidate = self.extraction_draft().candidates[0].event
+        historical = EventCandidateDTO.model_validate(candidate.model_dump(mode="json"))
+        historical_payload = historical.model_dump(mode="json")
+        historical_payload["semantic"].update(
+            reason="另一项补充原因",
+            method="另一项补充方法",
+            metrics=[
+                {
+                    "name": "交付量",
+                    "value": "20",
+                    "unit": "台",
+                    "change": None,
+                    "period": "2026年",
+                }
+            ],
+        )
+
+        self.assertTrue(
+            same_occurrence(
+                candidate,
+                EventCandidateDTO.model_validate(historical_payload),
+            )
+        )
+
+    def test_supporting_semantics_do_not_change_the_v8_recovery_candidate_key(self) -> None:
+        candidate = self.extraction_draft().candidates[0]
+        legacy_projection = {
+            "event": {
+                "title": candidate.event.title,
+                "summary": candidate.event.summary,
+                "semantic": {
+                    "actors": candidate.event.semantic.actors,
+                    "action": candidate.event.semantic.action,
+                    "objects": candidate.event.semantic.objects,
+                    "stage": candidate.event.semantic.stage,
+                    "jurisdictions": candidate.event.semantic.jurisdictions,
+                    "effective_at": None,
+                    "time_precision": "DAY",
+                },
+                "modality": "FACT",
+                "occurred_at": None,
+                "announced_at": "2026-08-25T00:00:00Z",
+            },
+            "evidence_ids": candidate.evidence_ids,
+        }
+        expected = hashlib.sha256(
+            json.dumps(
+                legacy_projection,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        changed_support = candidate.model_copy(
+            update={
+                "event": candidate.event.model_copy(
+                    update={
+                        "semantic": candidate.event.semantic.model_copy(
+                            update={
+                                "reason": "补充原因不会改变恢复身份",
+                                "method": "补充方法不会改变恢复身份",
+                                "metrics": [],
+                            }
+                        )
+                    }
+                )
+            }
+        )
+
+        self.assertEqual(_candidate_key(candidate), expected)
+        self.assertEqual(_candidate_key(changed_support), expected)
 
     async def test_duplicate_event_completes_without_data_graph_or_signal_writes(self) -> None:
         workflow, extractor, identity, signal_analyst = self.workflow()
@@ -852,8 +1238,12 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         first.evidence_ids = [self.FIRST_EVIDENCE_ID]
         second = first.model_copy(deep=True)
         second.evidence_ids = [self.SECOND_EVIDENCE_ID]
-        second.event.title = "示例公司开始交付服务器订单"
-        second.event.semantic.action = "交付"
+        second.event = second.event.model_copy(
+            update={
+                "title": "示例公司开始交付服务器订单",
+                "semantic": second.event.semantic.model_copy(update={"action": "交付"}),
+            }
+        )
         extraction = EventExtractionDraft(candidates=[first, second], no_event=[])
         studio = FakeStudioResponses(
             extraction=extraction,
@@ -1483,6 +1873,7 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
             component_metadata,
             {
                 "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
+                "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
                 "event_agent_versions": self.AGENT_VERSIONS,
             },
         )
@@ -1494,24 +1885,24 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
             [
                 {
                     "link_kind": "step_agent",
-                    "link_key": "event-extract-agent",
+                    "link_key": "event-extract",
                     "child_component_id": "event-extractor",
                     "child_version": 11,
                     "position": 0,
                 },
                 {
                     "link_kind": "step_agent",
-                    "link_key": "event-identity-agent",
+                    "link_key": "event-resolve",
                     "child_component_id": "event-identity",
                     "child_version": 13,
                     "position": 1,
                 },
                 {
                     "link_kind": "step_agent",
-                    "link_key": "event-signal-agent",
+                    "link_key": "event-signal-analyze",
                     "child_component_id": "event-signal-analyst",
                     "child_version": 17,
-                    "position": 1,
+                    "position": 3,
                 },
             ],
         )
@@ -1585,11 +1976,38 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         complete_links = [
             {
                 "link_kind": "step_agent",
+                "link_key": step_id,
                 "child_component_id": agent_id,
                 "child_version": version,
+                "position": position,
             }
-            for agent_id, version in complete_versions.items()
+            for step_id, agent_id, position in (
+                ("event-extract", "event-extractor", 0),
+                ("event-resolve", "event-identity", 1),
+                ("event-signal-analyze", "event-signal-analyst", 3),
+            )
+            for version in (complete_versions[agent_id],)
         ]
+        generic_publication = MagicMock()
+        generic_publication.get_component.return_value = {"current_version": 29}
+        generic_publication.get_config.return_value = {
+            "config": {
+                "id": "event-extraction",
+                "metadata": {
+                    "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
+                    "event_agent_versions": complete_versions,
+                },
+            }
+        }
+        generic_publication.get_links.return_value = []
+        with (
+            patch("workflows.event_extraction.get_postgres_db", return_value=generic_publication),
+            patch.object(Workflow, "load", autospec=True) as generic_workflow_load,
+            self.assertRaisesRegex(ValueError, "code-managed exact-link publication policy"),
+        ):
+            ensure_event_extraction_workflow(MagicMock())
+        generic_workflow_load.assert_not_called()
+
         cases = (
             (
                 {"event-extractor": 11, "event-identity": 13},
@@ -1599,6 +2017,16 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
             (
                 complete_versions,
                 complete_links[:-1],
+                "does not pin all exact Agent versions",
+            ),
+            (
+                {**complete_versions, "event-extractor": True},
+                complete_links,
+                "version metadata is invalid",
+            ),
+            (
+                complete_versions,
+                [{**complete_links[0], "link_key": "editable-display-name"}, *complete_links[1:]],
                 "does not pin all exact Agent versions",
             ),
         )
@@ -1611,6 +2039,7 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
                         "id": "event-extraction",
                         "metadata": {
                             "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
+                            "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
                             "event_agent_versions": metadata_versions,
                         },
                     }

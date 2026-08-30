@@ -82,13 +82,26 @@ class GraphitiEpisodeStageTest(unittest.IsolatedAsyncioTestCase):
                         "action": "签署",
                         "objects": ["服务器订单"],
                         "stage": "ANNOUNCED",
+                        "modality": "FACT",
+                        "time": {
+                            "occurred_at": None,
+                            "announced_at": "2026-08-25T00:00:00Z",
+                            "effective_at": None,
+                            "precision": "DAY",
+                        },
                         "jurisdictions": ["中国"],
-                        "effective_at": None,
-                        "time_precision": "DAY",
+                        "reason": "客户扩容需求",
+                        "method": "公告宣布",
+                        "metrics": [
+                            {
+                                "name": "订单金额",
+                                "value": "100",
+                                "unit": "亿元",
+                                "change": None,
+                                "period": "2026年",
+                            }
+                        ],
                     },
-                    "modality": "FACT",
-                    "occurred_at": None,
-                    "announced_at": "2026-08-25T00:00:00Z",
                 },
             }
         )
@@ -128,7 +141,25 @@ class GraphitiEpisodeStageTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(driver.episode["source_description"], EVENT_SOURCE_DESCRIPTION)
         self.assertNotEqual(driver.episode["source_description"], PENDING_EVENT_SOURCE_DESCRIPTION)
         self.assertEqual(driver.episode["domain_object_id"], historical.id)
-        self.assertEqual(json.loads(str(driver.episode["content"]))["id"], historical.id)
+        content = json.loads(str(driver.episode["content"]))
+        self.assertEqual(content["id"], historical.id)
+        self.assertEqual(set(content), {"id", "status", "title", "summary", "semantic"})
+        self.assertEqual(
+            set(content["semantic"]),
+            {
+                "actors",
+                "action",
+                "objects",
+                "stage",
+                "modality",
+                "time",
+                "jurisdictions",
+                "reason",
+                "method",
+                "metrics",
+            },
+        )
+        self.assertNotIn("attribution", content["semantic"])
 
 
 if __name__ == "__main__":

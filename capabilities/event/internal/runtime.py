@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import Any, Protocol
+
+from agno.run import RunContext
+from agno.run.agent import RunOutput
 
 from capabilities.event.internal.models import (
     EventCandidateSubmission,
@@ -24,7 +27,15 @@ PublicationCheckpoint = Callable[[EventPublicationRecord], None]
 
 
 class EventWorkflowRuntime(Protocol):
-    """Deep interface containing only deterministic I/O and Graphiti-native operations."""
+    """Deep interface for pinned Studio decisions and deterministic external operations."""
+
+    async def invoke_agent(
+        self,
+        agent_id: str,
+        version: int,
+        request: Any,
+        run_context: RunContext,
+    ) -> RunOutput: ...
 
     async def retrieve_history(self, candidate: EventCandidateSubmission) -> list[HistoricalEvent]: ...
 

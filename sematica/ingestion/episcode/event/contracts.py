@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from capabilities.evidence import EvidenceMetric
+
 EventStage = Literal[
     "OCCURRED",
     "ANNOUNCED",
@@ -17,7 +19,39 @@ EventStage = Literal[
     "TERMINATED",
     "EXPECTED",
 ]
-TimePrecision = Literal["INSTANT", "DAY", "MONTH", "QUARTER", "YEAR", "UNKNOWN"]
+TimePrecision = Literal["INSTANT", "DAY", "RANGE", "MONTH", "QUARTER", "YEAR", "UNKNOWN"]
+
+
+class EventTimeDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    occurred_at: datetime | None
+    announced_at: datetime | None
+    effective_at: datetime | None
+    precision: TimePrecision
+
+    @field_validator("occurred_at", "announced_at", "effective_at")
+    @classmethod
+    def event_times_are_utc(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value)):
+            raise ValueError("Event time values must be explicit UTC")
+        return value
+
+    @model_validator(mode="after")
+    def occurrence_has_a_time_anchor(self) -> EventTimeDTO:
+        if self.occurred_at is None and self.announced_at is None and self.effective_at is None:
+            raise ValueError("Event time requires an occurrence, announcement, or effective time")
+        return self
+
+
+def _metric_key(metric: EvidenceMetric) -> tuple[str, str, str, str, str]:
+    return (
+        metric.name,
+        metric.value or "",
+        metric.unit or "",
+        metric.change or "",
+        metric.period or "",
+    )
 
 
 class EventSemanticDTO(BaseModel):
@@ -27,9 +61,12 @@ class EventSemanticDTO(BaseModel):
     action: str = Field(min_length=1)
     objects: list[str] = Field(min_length=1)
     stage: EventStage
+    modality: Literal["FACT", "PLAN", "SPEC"]
+    time: EventTimeDTO
     jurisdictions: list[str]
-    effective_at: datetime | None
-    time_precision: TimePrecision
+    reason: str | None = Field(max_length=500)
+    method: str | None = Field(max_length=500)
+    metrics: list[EvidenceMetric]
 
     @field_validator("actors", "objects", "jurisdictions")
     @classmethod
@@ -47,12 +84,20 @@ class EventSemanticDTO(BaseModel):
             raise ValueError("action must not be blank")
         return value
 
-    @field_validator("effective_at")
+    @field_validator("reason", "method")
     @classmethod
-    def effective_time_is_utc(cls, value: datetime | None) -> datetime | None:
-        if value is not None and (value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value)):
-            raise ValueError("effective_at must be explicit UTC")
+    def support_text_is_nonblank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("reason and method must be nonblank or null")
         return value
+
+    @field_validator("metrics")
+    @classmethod
+    def metrics_are_deterministically_unique(cls, values: list[EvidenceMetric]) -> list[EvidenceMetric]:
+        return sorted({_metric_key(metric): metric for metric in values}.values(), key=_metric_key)
 
 
 class EventCandidateDTO(BaseModel):
@@ -61,9 +106,6 @@ class EventCandidateDTO(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     summary: str = Field(min_length=1)
     semantic: EventSemanticDTO
-    modality: Literal["FACT", "PLAN", "SPEC"]
-    occurred_at: datetime | None
-    announced_at: datetime | None
 
     @field_validator("title", "summary")
     @classmethod
@@ -72,19 +114,6 @@ class EventCandidateDTO(BaseModel):
         if not value:
             raise ValueError("Event title and summary must not be blank")
         return value
-
-    @field_validator("occurred_at", "announced_at")
-    @classmethod
-    def event_times_are_utc(cls, value: datetime | None) -> datetime | None:
-        if value is not None and (value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value)):
-            raise ValueError("Event timestamps must be explicit UTC")
-        return value
-
-    @model_validator(mode="after")
-    def occurrence_has_a_time_anchor(self) -> EventCandidateDTO:
-        if self.occurred_at is None and self.announced_at is None and self.semantic.effective_at is None:
-            raise ValueError("Event requires an occurrence, announcement, or effective time")
-        return self
 
 
 class EventCandidateRequest(BaseModel):

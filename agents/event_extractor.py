@@ -9,19 +9,21 @@ from agno.db.base import ComponentType
 from agno.registry import Registry
 
 from app.settings import default_model
-from capabilities.event import EventExtractionDraft
+from capabilities.event import EVENT_EXTRACTOR_AGENT_ID, EventExtractionDraft
 from db import get_postgres_db
 
-EVENT_EXTRACTOR_AGENT_ID = "event-extractor"
-EVENT_EXTRACTOR_CONTRACT_VERSION = 4
+EVENT_EXTRACTOR_CONTRACT_VERSION = 5
 EVENT_EXTRACTOR_DESCRIPTION = "Groups mapped local Evidence into single-real-world-action Event Candidates."
 _SEED_PROMPT = Path(__file__).with_name("event_extractor.seed.md")
-_RUNTIME_CONTRACT = """Event Extractor runtime contract version 4:
+_RUNTIME_CONTRACT = """Event Extractor runtime contract version 5:
 - Consume exactly the supplied frozen EventExtractionBatch.
 - Partition every Evidence ID exactly once across candidates and no_event.
 - Merge only the same core actor, real-world action, direct object, stage, and compatible occurrence time.
 - Treat wording, source, and supplementary detail as non-identity differences.
 - Return one atomic Event Candidate per real-world action.
+- Return Event business fields only as title, summary, and semantic. Semantic owns modality and time.
+- Preserve explicit compatible Evidence reason and method by selecting supported source text verbatim, and preserve
+  every supporting EvidenceMetric; return null on semantic conflict and never copy attribution.
 - Evidence without an explicit occurrence, announcement, or effective time must be returned as no_event
   with reason missing_reliable_time; never emit a timeless Candidate.
 - Never query history, call tools, publish, or invent a formal Evidence ID.
