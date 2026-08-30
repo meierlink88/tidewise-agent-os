@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import timedelta
 from typing import Literal
 
 import httpx
@@ -20,14 +19,13 @@ from sematica.ingestion.episcode.event.provenance import EVENT_SOURCE_DESCRIPTIO
 from sematica.projection.runtime import GRAPHITI_GROUP_ID
 
 EVENTS_PATH = "/api/data/v1/events"
-MAX_DATA_HISTORY = 1_000
 MAX_RESOLUTION_CANDIDATES = 30
 PERMANENT_PUBLICATION_REJECTION_STATUSES = frozenset({400, 409, 422})
 EVENT_ID_PATTERN = re.compile(r"^EVT[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 
 
-class EventHistoryUnavailable(RuntimeError):
-    """The authoritative Data Event history could not be recalled safely."""
+class EventRecallUnavailable(RuntimeError):
+    """The complete Graphiti Event recall set could not be loaded safely."""
 
 
 class PublicationRejected(RuntimeError):
@@ -49,20 +47,6 @@ class DataEventDTO(EventCandidateDTO):
         return HistoricalEvent(
             id=self.id, event=EventCandidateDTO.model_validate(self.model_dump(exclude={"id", "status"}))
         )
-
-
-class DataEventPage(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    items: list[DataEventDTO]
-    total: int
-    page: int
-    page_size: int
-
-
-class DataEventPageEnvelope(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    request_id: str
-    result: DataEventPage
 
 
 class DataEventPublicationResult(BaseModel):
@@ -93,53 +77,6 @@ class DataEventClient:
         self._headers = {"Authorization": f"Bearer {service_token}"}
         self._timeout = timeout_seconds
         self._transport = transport
-
-    async def ready(self) -> bool:
-        """Validate connectivity and the authoritative Event page contract."""
-
-        params: dict[str, str | int] = {"page": 1, "page_size": 1, "status": "ACTIVE"}
-        try:
-            async with httpx.AsyncClient(
-                timeout=self._timeout,
-                headers=self._headers,
-                transport=self._transport,
-            ) as client:
-                response = await client.get(self._url, params=params)
-                response.raise_for_status()
-                DataEventPageEnvelope.model_validate(response.json())
-        except Exception:
-            return False
-        return True
-
-    async def list_candidates(self, candidate: EventCandidateDTO) -> list[HistoricalEvent]:
-        anchor = candidate.occurred_at or candidate.announced_at or candidate.semantic.effective_at
-        assert anchor is not None
-        lower, upper = anchor - timedelta(days=30), anchor + timedelta(days=30)
-        params: dict[str, str | int] = {"page": 1, "page_size": 100, "status": "ACTIVE"}
-        result: list[HistoricalEvent] = []
-        async with httpx.AsyncClient(
-            timeout=self._timeout,
-            headers=self._headers,
-            transport=self._transport,
-        ) as client:
-            while True:
-                response = await client.get(self._url, params=params)
-                response.raise_for_status()
-                page = DataEventPageEnvelope.model_validate(response.json()).result
-                if page.total > MAX_DATA_HISTORY:
-                    raise RuntimeError("Event history window exceeds the safe retrieval bound")
-                result.extend(item.historical() for item in page.items)
-                if page.page * page.page_size >= page.total:
-                    break
-                params["page"] = page.page + 1
-        return [
-            event
-            for event in result
-            if (
-                event_anchor := event.event.occurred_at or event.event.announced_at or event.event.semantic.effective_at
-            )
-            and lower <= event_anchor <= upper
-        ]
 
     async def publish(self, submission) -> HistoricalEvent:
         payload = {
@@ -189,15 +126,19 @@ def _identity_rank(candidate: EventCandidateDTO, historical: HistoricalEvent) ->
     object_overlap = len(objects & {value.casefold() for value in event.semantic.objects})
     action_match = candidate.semantic.action.casefold() == event.semantic.action.casefold()
     stage_match = candidate.semantic.stage == event.semantic.stage
-    anchor = candidate.occurred_at or candidate.announced_at or candidate.semantic.effective_at
-    other = event.occurred_at or event.announced_at or event.semantic.effective_at
+    anchor = (
+        candidate.semantic.time.occurred_at
+        or candidate.semantic.time.announced_at
+        or candidate.semantic.time.effective_at
+    )
+    other = event.semantic.time.occurred_at or event.semantic.time.announced_at or event.semantic.time.effective_at
     distance = abs((anchor - other).total_seconds()) if anchor and other else float("inf")
     return (-int(stage_match), -actor_overlap, -object_overlap, -int(action_match), distance, historical.id)
 
 
-class CompositeEventHistory:
-    def __init__(self, graphiti: Graphiti, data: DataEventClient):
-        self._graphiti, self._data = graphiti, data
+class GraphitiEventHistory:
+    def __init__(self, graphiti: Graphiti):
+        self._graphiti = graphiti
 
     async def retrieve(self, candidate: EventCandidateDTO) -> list[HistoricalEvent]:
         query = " ".join(
@@ -210,21 +151,33 @@ class CompositeEventHistory:
             ]
         )
         result: dict[str, HistoricalEvent] = {}
+        search_interface = self._graphiti.driver.search_interface
+        if search_interface is None:
+            raise EventRecallUnavailable("Graphiti Event recall failed: full-text search is unavailable")
         try:
-            search_interface = self._graphiti.driver.search_interface
-            if search_interface is not None:
-                episodes = await search_interface.episode_fulltext_search(
-                    self._graphiti.driver,
-                    query,
-                    SearchFilters(),
-                    [GRAPHITI_GROUP_ID],
-                    MAX_RESOLUTION_CANDIDATES,
-                )
-                for episode in episodes:
-                    if event := _historical_from_content(episode.content):
-                        result[event.id] = event
-        except Exception:
-            pass
+            episodes = await search_interface.episode_fulltext_search(
+                self._graphiti.driver,
+                query,
+                SearchFilters(),
+                [GRAPHITI_GROUP_ID],
+                MAX_RESOLUTION_CANDIDATES,
+            )
+        except Exception as exc:
+            raise EventRecallUnavailable("Graphiti Event recall failed: full-text query failed") from exc
+        event_hits = 0
+        malformed_event_hits = 0
+        for episode in episodes:
+            if getattr(episode, "source_description", None) != EVENT_SOURCE_DESCRIPTION:
+                continue
+            event_hits += 1
+            content = getattr(episode, "content", None)
+            if not isinstance(content, str):
+                malformed_event_hits += 1
+                continue
+            if event := _historical_from_content(content):
+                result[event.id] = event
+            else:
+                malformed_event_hits += 1
 
         try:
             records, _, _ = await self._graphiti.driver.execute_query(
@@ -239,15 +192,22 @@ class CompositeEventHistory:
                 limit=MAX_RESOLUTION_CANDIDATES,
                 routing_="r",
             )
-            for record in records:
-                if event := _historical_from_content(str(record["content"])):
-                    result[event.id] = event
-        except Exception:
-            pass
-
-        try:
-            for event in await self._data.list_candidates(candidate):
-                result[event.id] = event
         except Exception as exc:
-            raise EventHistoryUnavailable("authoritative Data Event history retrieval failed") from exc
+            raise EventRecallUnavailable("Graphiti Event recall failed: anchor query failed") from exc
+        for record in records:
+            event_hits += 1
+            try:
+                content = record["content"]
+            except (KeyError, TypeError):
+                malformed_event_hits += 1
+                continue
+            if not isinstance(content, str):
+                malformed_event_hits += 1
+                continue
+            if event := _historical_from_content(content):
+                result[event.id] = event
+            else:
+                malformed_event_hits += 1
+        if event_hits > 0 and malformed_event_hits == event_hits:
+            raise EventRecallUnavailable("Graphiti Event recall matched only malformed Event content")
         return sorted(result.values(), key=lambda item: _identity_rank(candidate, item))[:MAX_RESOLUTION_CANDIDATES]

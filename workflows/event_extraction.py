@@ -5,40 +5,37 @@ from typing import Any
 from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
-from agno.workflow import Condition, Loop, Step, Workflow
+from agno.workflow import Loop, Step, Workflow
 from agno.workflow.types import HumanReview, OnError
-from agno.workflow.workflow import derive_step_links
 
-from agents.event_extractor import EVENT_EXTRACTOR_AGENT_ID, load_event_extractor_agent
-from agents.event_identity import EVENT_IDENTITY_AGENT_ID, load_event_identity_agent
-from agents.event_signal_analyst import EVENT_SIGNAL_ANALYST_AGENT_ID, load_event_signal_analyst_agent
+from agents.event_extractor import load_event_extractor_agent
+from agents.event_identity import load_event_identity_agent
+from agents.event_signal_analyst import load_event_signal_analyst_agent
+from capabilities.event import (
+    EVENT_AGENT_IDS,
+    EVENT_EXTRACTOR_AGENT_ID,
+    EVENT_IDENTITY_AGENT_ID,
+    EVENT_SIGNAL_ANALYST_AGENT_ID,
+    EventAgentVersions,
+)
 from capabilities.event.functions import (
-    event_extraction_required,
-    event_resolution_complete,
-    freeze_event_extraction,
-    has_pending_event_resolution,
-    has_pending_signal_analysis,
-    persist_event_resolution,
-    persist_signal_task,
-    prepare_event_extraction,
-    prepare_event_resolution,
-    prepare_signal_task,
+    analyze_signals,
+    event_extraction_complete,
+    extract_events,
     publish_events,
     publish_signals,
-    signal_analysis_complete,
+    resolve_events,
 )
 from db import get_postgres_db
 
 EVENT_EXTRACTION_WORKFLOW_ID = "event-extraction"
-EVENT_EXTRACTION_CONTRACT_VERSION = 8
+EVENT_EXTRACTION_CONTRACT_VERSION = 9
 EVENT_EXTRACTION_BATCH_LIMIT = 50
-EVENT_SIGNAL_TASK_LIMIT = EVENT_EXTRACTION_BATCH_LIMIT * 2
-EVENT_AGENT_IDS = frozenset(
-    {
-        EVENT_EXTRACTOR_AGENT_ID,
-        EVENT_IDENTITY_AGENT_ID,
-        EVENT_SIGNAL_ANALYST_AGENT_ID,
-    }
+EVENT_EXTRACTION_PUBLICATION_POLICY = "code_managed_exact_agent_links.v1"
+_AGENT_LINK_BINDINGS = (
+    ("event-extract", EVENT_EXTRACTOR_AGENT_ID, 0),
+    ("event-resolve", EVENT_IDENTITY_AGENT_ID, 1),
+    ("event-signal-analyze", EVENT_SIGNAL_ANALYST_AGENT_ID, 3),
 )
 
 
@@ -57,18 +54,6 @@ def _function_step(name: str, step_id: str, executor: Any) -> Step:
     )
 
 
-def _agent_step(name: str, step_id: str, agent: Agent) -> Step:
-    return Step(
-        name=name,
-        step_id=step_id,
-        agent=agent,
-        max_retries=0,
-        skip_on_failure=True,
-        human_review=_fail_fast_review(),
-        strict_input_validation=True,
-    )
-
-
 def _seed_workflow(
     extractor: Agent,
     identity: Agent,
@@ -76,7 +61,14 @@ def _seed_workflow(
     *,
     agent_versions: dict[str, int],
 ) -> Workflow:
-    """Build five business phases around three direct Studio Agent seams."""
+    """Build one visible batch Loop containing five direct business Function Steps."""
+
+    if {str(agent.id) for agent in (extractor, identity, signal_analyst)} != EVENT_AGENT_IDS:
+        raise ValueError("Event Extraction requires exactly its three Studio Agents")
+    try:
+        pinned_versions = EventAgentVersions.model_validate(agent_versions).as_mapping()
+    except ValueError as exc:
+        raise ValueError("Event Extraction requires complete positive exact Agent versions") from exc
 
     return Workflow(
         id=EVENT_EXTRACTION_WORKFLOW_ID,
@@ -89,68 +81,24 @@ def _seed_workflow(
         dependencies={},
         metadata={
             "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
-            "event_agent_versions": dict(sorted(agent_versions.items())),
+            "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
+            "event_agent_versions": pinned_versions,
         },
         steps=[
-            Condition(
-                name="Extract Events",
-                evaluator=True,
+            Loop(
+                name="Process Event Evidence batches",
+                description="Process frozen Evidence batches until the queue is drained or the safety cap is reached.",
+                max_iterations=EVENT_EXTRACTION_BATCH_LIMIT,
+                end_condition=event_extraction_complete,
                 human_review=_fail_fast_review(),
                 steps=[
-                    _function_step("Prepare Event extraction", "event-extract-prepare", prepare_event_extraction),
-                    Condition(
-                        name="Run Event Extractor when draft is absent",
-                        evaluator=event_extraction_required,  # type: ignore[arg-type]  # Agno injects RunContext.
-                        human_review=_fail_fast_review(),
-                        steps=[
-                            _agent_step("Extract atomic Events", "event-extract-agent", extractor),
-                            _function_step("Freeze Event extraction", "event-extract-freeze", freeze_event_extraction),
-                        ],
-                    ),
+                    _function_step("Extract Events", "event-extract", extract_events),
+                    _function_step("Resolve Events", "event-resolve", resolve_events),
+                    _function_step("Publish Events", "event-publish", publish_events),
+                    _function_step("Analyze Signals", "event-signal-analyze", analyze_signals),
+                    _function_step("Publish Signals", "event-signal-publish", publish_signals),
                 ],
-            ),
-            Condition(
-                name="Resolve Events",
-                evaluator=has_pending_event_resolution,  # type: ignore[arg-type]  # Agno injects RunContext.
-                human_review=_fail_fast_review(),
-                steps=[
-                    Loop(
-                        name="Resolve frozen Event Candidates",
-                        max_iterations=EVENT_EXTRACTION_BATCH_LIMIT,
-                        end_condition=event_resolution_complete,
-                        human_review=_fail_fast_review(),
-                        steps=[
-                            _function_step(
-                                "Prepare Event identity",
-                                "event-identity-prepare",
-                                prepare_event_resolution,
-                            ),
-                            _agent_step("Resolve Event identity", "event-identity-agent", identity),
-                            _function_step("Freeze Event identity", "event-identity-freeze", persist_event_resolution),
-                        ],
-                    )
-                ],
-            ),
-            _function_step("Publish Events", "event-publish", publish_events),
-            Condition(
-                name="Analyze Signals",
-                evaluator=has_pending_signal_analysis,  # type: ignore[arg-type]  # Agno injects RunContext.
-                human_review=_fail_fast_review(),
-                steps=[
-                    Loop(
-                        name="Classify Events and validate direct Signals",
-                        max_iterations=EVENT_SIGNAL_TASK_LIMIT,
-                        end_condition=signal_analysis_complete,
-                        human_review=_fail_fast_review(),
-                        steps=[
-                            _function_step("Prepare Signal task", "event-signal-prepare", prepare_signal_task),
-                            _agent_step("Analyze direct Signals", "event-signal-agent", signal_analyst),
-                            _function_step("Freeze Signal analysis", "event-signal-freeze", persist_signal_task),
-                        ],
-                    )
-                ],
-            ),
-            _function_step("Publish Signals", "event-signal-publish", publish_signals),
+            )
         ],
     )
 
@@ -166,18 +114,20 @@ def _publish_pinned_workflow(
     if workflow.id is None:
         raise ValueError("Event Extraction Workflow requires a stable ID")
 
-    def pin_child(link: dict[str, Any]) -> dict[str, Any]:
-        child_id = link.get("child_component_id")
-        version = agent_versions.get(str(child_id))
-        if version is None:
-            raise ValueError(f"Event Extraction has no exact version for child Agent {child_id}")
-        return {**link, "child_version": version}
-
-    links = derive_step_links(
-        workflow.steps,
-        pin_child=pin_child,
-        workflow_id=workflow.id,
-    )
+    try:
+        pinned_versions = EventAgentVersions.model_validate(agent_versions).as_mapping()
+    except ValueError as exc:
+        raise ValueError("Event Extraction requires complete positive exact Agent versions") from exc
+    links = [
+        {
+            "link_kind": "step_agent",
+            "link_key": step_id,
+            "child_component_id": agent_id,
+            "child_version": pinned_versions[agent_id],
+            "position": position,
+        }
+        for step_id, agent_id, position in _AGENT_LINK_BINDINGS
+    ]
     pinned_ids = {str(link.get("child_component_id")) for link in links if link.get("link_kind") == "step_agent"}
     if pinned_ids != EVENT_AGENT_IDS:
         raise ValueError("Event Extraction must pin exactly its three Studio Agents")
@@ -203,18 +153,30 @@ def _publish_pinned_workflow(
 
 
 def _validate_published_agent_pins(db: Any, version: int, metadata: dict[str, Any]) -> None:
+    if metadata.get("event_extraction_publication_policy") != EVENT_EXTRACTION_PUBLICATION_POLICY:
+        raise ValueError("Event Extraction must use its code-managed exact-link publication policy")
     pinned_metadata = metadata.get("event_agent_versions")
     if not isinstance(pinned_metadata, dict) or set(pinned_metadata) != EVENT_AGENT_IDS:
         raise ValueError("Event Extraction published Agent version metadata is incomplete")
-    if any(not isinstance(value, int) for value in pinned_metadata.values()):
-        raise ValueError("Event Extraction published Agent version metadata is invalid")
+    try:
+        pinned_versions = EventAgentVersions.model_validate(pinned_metadata).as_mapping()
+    except ValueError as exc:
+        raise ValueError("Event Extraction published Agent version metadata is invalid") from exc
     links = db.get_links(component_id=EVENT_EXTRACTION_WORKFLOW_ID, version=version)
-    linked_versions = {
-        str(link.get("child_component_id")): link.get("child_version")
+    linked_bindings = sorted(
+        (
+            str(link.get("link_key")),
+            str(link.get("child_component_id")),
+            link.get("child_version"),
+            link.get("position"),
+        )
         for link in links
         if link.get("link_kind") == "step_agent"
-    }
-    if linked_versions != pinned_metadata:
+    )
+    expected_bindings = sorted(
+        (step_id, agent_id, pinned_versions[agent_id], position) for step_id, agent_id, position in _AGENT_LINK_BINDINGS
+    )
+    if len(links) != len(_AGENT_LINK_BINDINGS) or linked_bindings != expected_bindings:
         raise ValueError("Event Extraction published Workflow does not pin all exact Agent versions")
 
 
@@ -266,6 +228,7 @@ def ensure_event_extraction_workflow(registry: Registry) -> int:
         migrated.metadata = {
             **metadata,
             "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
+            "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
             "event_agent_versions": dict(sorted(versions.items())),
         }
         return _publish_pinned_workflow(

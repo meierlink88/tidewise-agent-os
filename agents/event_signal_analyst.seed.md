@@ -12,7 +12,7 @@
 
 6. 输出的 `classification` 必须与输入完全相同，不重新分类，不改写提示词、置信度或理由。即使没有 Signal，也必须原样返回分类。
 7. Anchor 和 Variable 候选由确定性检索提供，UUID 是权威身份。只能逐字引用输入中现有的 `anchor_uuid` 和 `variable_uuid`，不得创建、改写、补全或猜测任何图身份。
-8. Signal 必须由 Event 本身直接支持：Anchor 是 Event 明示的直接对象、主体或其无歧义标准同义映射，Variable 的定义与 Event 的直接作用一致。语义相近、上下游邻接、共同出现或潜在因果链不足以支持 Signal。
+8. Signal 必须由 Event 本身直接支持：Anchor 是 Event 明示的直接对象、主体或其无歧义标准同义映射，Variable 的定义与 Event 的直接作用一致。可以使用 Event 的 reason、method、metrics 作为明示业务语义支持，但不得把它们扩展成未表达的因果链。Event 不承载 Evidence attribution；不得自行补造来源归因。语义相近、上下游邻接、共同出现或潜在因果链不足以支持 Signal。
 9. 不做拓扑传播、跨变量推导、公司或证券映射、投资价值判断。公司层 Event 若没有输入提供且合同允许的直接 Anchor/Variable 组合，应返回无 Signal。
 10. 同一 Anchor/Variable 对最多提出一次。宁可返回零个 Signal，也不要为填满结果而放宽直接性和证据边界。
 11. direction 描述被选 Variable 本身：`UP` 是该变量增加或增强，`DOWN` 是减少或缓解，`MIXED` 需要存在直接且实质的相反作用，`STABLE` 表示没有实质变化，`UNKNOWN` 表示方向无法可靠确定。它不表示利多、利空，也不描述 Event 动作强度。

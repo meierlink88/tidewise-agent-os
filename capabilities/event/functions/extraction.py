@@ -12,11 +12,18 @@ from typing import Any, Literal, NoReturn, cast
 from uuid import uuid4
 
 from agno.run import RunContext
+from agno.run.base import RunStatus
 from agno.workflow import StepInput, StepOutput
 from pydantic import ValidationError
 
 from capabilities.event.internal.identity import same_occurrence
 from capabilities.event.internal.models import (
+    EVENT_AGENT_IDS,
+    EVENT_EXTRACTOR_AGENT_ID,
+    EVENT_IDENTITY_AGENT_ID,
+    EVENT_SIGNAL_ANALYST_AGENT_ID,
+    EventAgentExecutionRecord,
+    EventAgentVersions,
     EventCandidateSubmission,
     EventDisposition,
     EventExtractionBatch,
@@ -40,11 +47,13 @@ from capabilities.event.internal.models import (
     EventSignalRecord,
     EventWorkflowProgress,
 )
+from capabilities.event.internal.queue import pending_queue_items
 from capabilities.event.internal.review import ControlledSignalReviewer
 from capabilities.event.internal.runtime import event_workflow_runtime
 from capabilities.event.internal.storage import (
     claim_event_batch,
     complete_batch,
+    freeze_agent_execution,
     freeze_draft,
     freeze_identity_request,
     freeze_resolution,
@@ -79,6 +88,9 @@ _EVENT_RUN_STATE = "event_workflow_state"
 _BATCH = "batch"
 _IDENTITY_REQUEST = "identity_request"
 _SIGNAL_REQUEST = "signal_request"
+_EVENT_AGENT_EXECUTION_VERSIONS = "event_agent_execution_versions"
+_EVENT_RESOLUTION_LIMIT = 50
+_EVENT_SIGNAL_TASK_LIMIT = _EVENT_RESOLUTION_LIMIT * 2
 
 
 def _raise_stage_failure(stage: str, batch_id: str, error: Exception) -> NoReturn:
@@ -134,6 +146,60 @@ def _direct_predecessor(step_input: StepInput) -> StepOutput:
     return StepOutput(content=_previous_content(step_input))
 
 
+def _pinned_agent_versions(run_context: RunContext) -> dict[str, int]:
+    """Return the complete immutable Agent binding stored on this Workflow run."""
+
+    metadata = run_context.metadata
+    versions = metadata.get("event_agent_versions") if isinstance(metadata, dict) else None
+    if not isinstance(versions, dict) or set(versions) != EVENT_AGENT_IDS:
+        raise ValueError("Event Workflow run metadata does not contain all exact Agent versions")
+    try:
+        pinned = EventAgentVersions.model_validate(versions)
+    except ValidationError as exc:
+        raise ValueError("Event Workflow run metadata contains an invalid Agent version") from exc
+    return pinned.as_mapping()
+
+
+async def _invoke_pinned_agent(
+    agent_id: str,
+    request: Any,
+    run_context: RunContext,
+    *,
+    operation_key: str,
+) -> Any:
+    """Freeze and invoke one exact Agent version, then mirror it in run metadata."""
+
+    versions = _pinned_agent_versions(run_context)
+    version = versions[agent_id]
+    freeze_agent_execution(
+        _batch(run_context),
+        EventAgentExecutionRecord(
+            operation_key=operation_key,
+            agent_id=agent_id,
+            version=version,
+        ),
+    )
+    metadata = run_context.metadata
+    assert metadata is not None
+    execution_versions = metadata.setdefault(_EVENT_AGENT_EXECUTION_VERSIONS, {})
+    if not isinstance(execution_versions, dict):
+        raise ValueError("Event Workflow Agent execution audit metadata is invalid")
+    existing = execution_versions.get(agent_id)
+    if existing is not None and existing != version:
+        raise ValueError("Event Workflow Agent execution version changed during one run")
+    execution_versions[agent_id] = version
+    response = await event_workflow_runtime().invoke_agent(agent_id, version, request, run_context)
+    if response.status != RunStatus.completed:
+        raise RuntimeError(f"pinned Event Agent {agent_id}@{version} did not complete")
+    return response.content
+
+
+def _agent_predecessor(content: Any) -> StepInput:
+    """Build an internal predecessor handoff without using an editable display name."""
+
+    return StepInput(previous_step_outputs={"agent_result": StepOutput(content=content)})
+
+
 def _event_run_state(run_context: RunContext) -> dict[str, Any]:
     """Return mutable state shared by shallow RunContext copies in one run."""
 
@@ -178,24 +244,12 @@ def _event_draft_from_content(content: Any) -> EventExtractionDraft:
     candidates: list[EventCandidateSubmission] = []
     dispositions: list[EventDisposition] = []
     for item in candidates_payload:
-        if isinstance(item, dict) and isinstance(item.get("event"), dict):
-            item = dict(item)
-            event = dict(item["event"])
-            semantic = event.get("semantic")
-            if isinstance(semantic, dict):
-                semantic = dict(semantic)
-                semantic.setdefault("effective_at", None)
-                semantic.setdefault("time_precision", "UNKNOWN")
-                event["semantic"] = semantic
-            event.setdefault("occurred_at", None)
-            event.setdefault("announced_at", None)
-            item["event"] = event
         try:
             candidates.append(EventCandidateSubmission.model_validate(item))
         except ValidationError as exc:
             missing_time = bool(exc.errors()) and all(
                 error.get("type") == "value_error"
-                and "Event requires an occurrence, announcement, or effective time" in str(error.get("msg"))
+                and "Event time requires an occurrence, announcement, or effective time" in str(error.get("msg"))
                 for error in exc.errors()
             )
             evidence_ids = item.get("evidence_ids") if isinstance(item, dict) else None
@@ -216,6 +270,7 @@ def _event_draft_from_content(content: Any) -> EventExtractionDraft:
 
 def _validate_partition(batch: EventExtractionBatch, draft: EventExtractionDraft) -> EventExtractionDraft:
     expected = {item.id for item in batch.evidences}
+    evidence_by_id = {item.id: item for item in batch.evidences}
     occurrence_merged: list[EventCandidateSubmission] = []
     for candidate in draft.candidates:
         duplicate_index = next(
@@ -249,7 +304,38 @@ def _validate_partition(batch: EventExtractionBatch, draft: EventExtractionDraft
             if evidence_id in expected and evidence_id not in ambiguous
         )
         if retained:
-            normalized_candidates.append(candidate.model_copy(update={"evidence_ids": retained}))
+            supporting_semantics = [evidence_by_id[evidence_id].semantic for evidence_id in retained]
+
+            def compatible_text(field_name: Literal["reason", "method"]) -> str | None:
+                # The pinned Extractor owns semantic compatibility. This gate
+                # admits only its verbatim Evidence-supported choice, recovers
+                # a sole source value, and otherwise preserves a null conflict
+                # disposition instead of accepting an invented paraphrase.
+                values = sorted(
+                    {value for semantic in supporting_semantics if (value := getattr(semantic, field_name)) is not None}
+                )
+                proposed = getattr(candidate.event.semantic, field_name)
+                if proposed in values:
+                    return proposed
+                return values[0] if len(values) == 1 else None
+
+            metrics = [metric for semantic in supporting_semantics for metric in semantic.metrics]
+            semantic_payload = candidate.event.semantic.model_dump(mode="json")
+            semantic_payload.update(
+                reason=compatible_text("reason"),
+                method=compatible_text("method"),
+                metrics=[metric.model_dump(mode="json") for metric in metrics],
+            )
+            event_payload = candidate.event.model_dump(mode="json")
+            event_payload["semantic"] = semantic_payload
+            normalized_candidates.append(
+                EventCandidateSubmission.model_validate(
+                    {
+                        "event": event_payload,
+                        "evidence_ids": retained,
+                    }
+                )
+            )
 
     candidate_ids = {evidence_id for candidate in normalized_candidates for evidence_id in candidate.evidence_ids}
     dispositions_by_id: dict[str, EventDisposition] = {}
@@ -270,8 +356,32 @@ def _validate_partition(batch: EventExtractionBatch, draft: EventExtractionDraft
 
 
 def _candidate_key(candidate: EventCandidateSubmission) -> str:
+    """Keep the v8 journal identity stable while the public Event wire evolves."""
+
+    event = candidate.event
+    time = event.semantic.time
+    stable_v8_projection = {
+        "event": {
+            "title": event.title,
+            "summary": event.summary,
+            "semantic": {
+                "actors": event.semantic.actors,
+                "action": event.semantic.action,
+                "objects": event.semantic.objects,
+                "stage": event.semantic.stage,
+                "jurisdictions": event.semantic.jurisdictions,
+                "effective_at": time.effective_at,
+                "time_precision": time.precision,
+            },
+            "modality": event.semantic.modality,
+            "occurred_at": time.occurred_at,
+            "announced_at": time.announced_at,
+        },
+        "evidence_ids": candidate.evidence_ids,
+    }
     encoded = json.dumps(
-        candidate.model_dump(mode="json"),
+        stable_v8_projection,
+        default=lambda value: value.isoformat().replace("+00:00", "Z") if isinstance(value, datetime) else value,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -758,14 +868,14 @@ async def _validated_signal_analysis(
     anchors = {item.uuid: item for item in request.candidates.anchors}
     variables = {item.uuid: item for item in request.candidates.variables}
     event_time = (
-        request.analysis.event.event.semantic.effective_at
-        or request.analysis.event.event.occurred_at
-        or request.analysis.event.event.announced_at
+        request.analysis.event.event.semantic.time.occurred_at
+        or request.analysis.event.event.semantic.time.announced_at
+        or request.analysis.event.event.semantic.time.effective_at
     )
     assert event_time is not None
     assertion_modality = cast(
         Literal["ACTUAL", "ANTICIPATED", "SOURCE_FORECAST", "ASSUMED"],
-        {"FACT": "ACTUAL", "PLAN": "ANTICIPATED", "SPEC": "ASSUMED"}[request.analysis.event.event.modality],
+        {"FACT": "ACTUAL", "PLAN": "ANTICIPATED", "SPEC": "ASSUMED"}[request.analysis.event.event.semantic.modality],
     )
     reviewer = ControlledSignalReviewer()
     accepted: list[SignalProposal] = []
@@ -978,7 +1088,116 @@ async def publish_signals(step_input: StepInput, run_context: RunContext) -> Ste
             signal_fact_uuids=sorted(fact_uuid for signal in signals.signals for fact_uuid in signal.signal_fact_uuids),
         )
         complete_batch(batch, result)
-        return StepOutput(content=result)
+        return StepOutput(content=result, stop=not pending_queue_items())
     except Exception as exc:
         release_event_batch_lease(batch)
         _raise_stage_failure("SIGNAL_PUBLICATION", batch.batch_id, exc)
+
+
+async def extract_events(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Claim, prepare, analyze and freeze one bounded Event extraction batch."""
+
+    prepared = await prepare_event_extraction(step_input, run_context)
+    if prepared.stop:
+        return prepared
+    batch = _batch(run_context)
+    if not batch.needs_analysis:
+        return StepOutput(content=load_draft(batch.batch_id))
+    try:
+        content = await _invoke_pinned_agent(
+            EVENT_EXTRACTOR_AGENT_ID,
+            batch,
+            run_context,
+            operation_key="EXTRACT_EVENTS",
+        )
+    except Exception as exc:
+        release_event_batch_lease(batch)
+        _raise_stage_failure("EVENT_EXTRACTION", batch.batch_id, exc)
+    return freeze_event_extraction(_agent_predecessor(content), run_context)
+
+
+async def resolve_events(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Resolve every unfrozen Candidate through the exact pinned Event Identity Agent."""
+
+    del step_input
+    batch = _batch(run_context)
+    draft = load_draft(batch.batch_id)
+    last = StepOutput(
+        content=EventWorkflowProgress(
+            phase="RESOLVE_EVENTS",
+            processed=len(load_resolution_journal(batch.batch_id).resolutions),
+            total=len(draft.candidates),
+            done=not has_pending_event_resolution(StepInput(), run_context),
+        )
+    )
+    for _ in range(_EVENT_RESOLUTION_LIMIT):
+        if not has_pending_event_resolution(StepInput(), run_context):
+            return last
+        prepared = await prepare_event_resolution(StepInput(), run_context)
+        request = EventIdentityRequest.model_validate(prepared.content)
+        try:
+            content = await _invoke_pinned_agent(
+                EVENT_IDENTITY_AGENT_ID,
+                request,
+                run_context,
+                operation_key=f"RESOLVE_EVENT:{request.candidate_key}",
+            )
+        except Exception as exc:
+            release_event_batch_lease(batch)
+            _raise_stage_failure("EVENT_IDENTITY", batch.batch_id, exc)
+        last = persist_event_resolution(_agent_predecessor(content), run_context)
+    if has_pending_event_resolution(StepInput(), run_context):
+        release_event_batch_lease(batch)
+        _raise_stage_failure(
+            "EVENT_IDENTITY",
+            batch.batch_id,
+            ValueError("Event Candidate resolution exceeded its frozen batch bound"),
+        )
+    return last
+
+
+async def analyze_signals(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Classify and analyze every eligible Event through the exact pinned Signal Agent."""
+
+    del step_input
+    batch = _batch(run_context)
+    publications = load_publication_journal(batch.batch_id).publications
+    total = sum(item.event_created and item.graph_projection_status == "SUCCEEDED" for item in publications)
+    last = StepOutput(
+        content=EventWorkflowProgress(
+            phase="ANALYZE_SIGNALS",
+            processed=len(_terminal_signal_event_ids(batch.batch_id)),
+            total=total,
+            done=not has_pending_signal_analysis(StepInput(), run_context),
+        )
+    )
+    for _ in range(_EVENT_SIGNAL_TASK_LIMIT):
+        if not has_pending_signal_analysis(StepInput(), run_context):
+            return last
+        await prepare_signal_task(StepInput(), run_context)
+        request = _signal_request(run_context)
+        try:
+            content = await _invoke_pinned_agent(
+                EVENT_SIGNAL_ANALYST_AGENT_ID,
+                request,
+                run_context,
+                operation_key=f"SIGNAL_{request.task}:{request.analysis.event.id}",
+            )
+        except Exception as exc:
+            release_event_batch_lease(batch)
+            _raise_stage_failure("SIGNAL_ANALYSIS", batch.batch_id, exc)
+        last = await persist_signal_task(_agent_predecessor(content), run_context)
+    if has_pending_signal_analysis(StepInput(), run_context):
+        release_event_batch_lease(batch)
+        _raise_stage_failure(
+            "SIGNAL_ANALYSIS",
+            batch.batch_id,
+            ValueError("Event Signal analysis exceeded its frozen batch bound"),
+        )
+    return last
+
+
+def event_extraction_complete(iteration_outputs: list[StepOutput]) -> bool:
+    """End the outer batch Loop after an idle, busy, or fully drained queue result."""
+
+    return any(output.stop for output in iteration_outputs)

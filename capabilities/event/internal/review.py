@@ -27,14 +27,16 @@ class ControlledSignalReviewer:
         anchor: AnchorCandidate,
     ) -> bool:
         event_time = (
-            event.event.event.semantic.effective_at or event.event.event.occurred_at or event.event.event.announced_at
+            event.event.event.semantic.time.occurred_at
+            or event.event.event.semantic.time.announced_at
+            or event.event.event.semantic.time.effective_at
         )
         assert event_time is not None
         expected_modality = {
             "FACT": "ACTUAL",
             "PLAN": "ANTICIPATED",
             "SPEC": "ASSUMED",
-        }[event.event.event.modality]
+        }[event.event.event.semantic.modality]
         latest_end = proposal.expected_end_latest or proposal.expected_end_earliest
         if latest_end is None:
             return False

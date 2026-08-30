@@ -15,6 +15,8 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from capabilities.event.internal.models import (
+    EventAgentExecutionJournal,
+    EventAgentExecutionRecord,
     EventExtractionBatch,
     EventExtractionBusy,
     EventExtractionDraft,
@@ -258,6 +260,47 @@ def load_draft(batch_id: str) -> EventExtractionDraft:
         )
     except (OSError, ValidationError) as exc:
         raise ValueError("frozen Event extraction draft is invalid") from exc
+
+
+def load_agent_execution_journal(batch_id: str) -> EventAgentExecutionJournal:
+    """Load the durable exact Agent bindings for one pending Event batch."""
+
+    path = pending_directory(batch_id) / "agent-executions.json"
+    if not path.exists():
+        return EventAgentExecutionJournal(batch_id=batch_id, executions=[])
+    try:
+        journal = EventAgentExecutionJournal.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        raise ValueError("Event Agent execution journal is invalid") from exc
+    if journal.batch_id != batch_id:
+        raise ValueError("Event Agent execution journal batch identity conflict")
+    return journal
+
+
+def freeze_agent_execution(
+    batch: EventExtractionBatch,
+    execution: EventAgentExecutionRecord,
+) -> EventAgentExecutionRecord:
+    """Bind one recoverable semantic operation to one exact published Agent version."""
+
+    with _owned_batch_lock(batch):
+        journal = load_agent_execution_journal(batch.batch_id)
+        executions = {item.operation_key: item for item in journal.executions}
+        existing = executions.get(execution.operation_key)
+        if existing is not None:
+            if existing != execution:
+                raise ValueError("frozen Event Agent execution binding is immutable")
+            return existing
+        executions[execution.operation_key] = execution
+        updated = EventAgentExecutionJournal(
+            batch_id=batch.batch_id,
+            executions=[executions[key] for key in sorted(executions)],
+        )
+        _atomic_write_json(
+            pending_directory(batch.batch_id) / "agent-executions.json",
+            updated.model_dump(mode="json"),
+        )
+        return execution
 
 
 def load_identity_request_journal(batch_id: str) -> EventIdentityRequestJournal:

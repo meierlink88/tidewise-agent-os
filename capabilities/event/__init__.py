@@ -2,6 +2,11 @@
 
 from capabilities.event.internal.local_runtime import create_local_event_workflow_runtime
 from capabilities.event.internal.models import (
+    EVENT_AGENT_IDS,
+    EVENT_EXTRACTOR_AGENT_ID,
+    EVENT_IDENTITY_AGENT_ID,
+    EVENT_SIGNAL_ANALYST_AGENT_ID,
+    EventAgentVersions,
     EventCandidate,
     EventCandidateSubmission,
     EventDisposition,
@@ -25,6 +30,11 @@ from capabilities.event.internal.models import (
 from capabilities.event.internal.runtime import configure_event_workflow_runtime
 
 __all__ = [
+    "EVENT_AGENT_IDS",
+    "EVENT_EXTRACTOR_AGENT_ID",
+    "EVENT_IDENTITY_AGENT_ID",
+    "EVENT_SIGNAL_ANALYST_AGENT_ID",
+    "EventAgentVersions",
     "EventCandidate",
     "EventCandidateSubmission",
     "EventDisposition",

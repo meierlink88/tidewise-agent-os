@@ -110,7 +110,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     event_runtime = None
     investment_runtime = None
     try:
-        event_runtime = create_local_event_workflow_runtime(model)
+        event_runtime = create_local_event_workflow_runtime(model, registry)
         configure_event_workflow_runtime(event_runtime)
         investment_runtime = create_local_investment_workflow_runtime(
             model,

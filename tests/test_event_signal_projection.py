@@ -173,13 +173,18 @@ class GraphitiSignalFactProjectionTest(unittest.IsolatedAsyncioTestCase):
                     "action": "扩大出口限制",
                     "objects": ["高带宽内存"],
                     "stage": "ANNOUNCED",
+                    "modality": "FACT",
+                    "time": {
+                        "occurred_at": None,
+                        "announced_at": cls.EVENT_TIME,
+                        "effective_at": None,
+                        "precision": "DAY",
+                    },
                     "jurisdictions": ["中国"],
-                    "effective_at": None,
-                    "time_precision": "DAY",
+                    "reason": "国家安全限制",
+                    "method": "扩大出口管制范围",
+                    "metrics": [],
                 },
-                "modality": "FACT",
-                "occurred_at": None,
-                "announced_at": cls.EVENT_TIME,
             }
         )
         return EventAnalysisInput(

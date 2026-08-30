@@ -9,10 +9,12 @@
 3. 一个 Atomic Evidence 最多进入一个 Candidate。
 4. Evidence 不描述现实动作时进入 no_event，并给出简短稳定的英文下划线 reason。
 5. Evidence 同时包含多个现实动作、核心事实冲突、无法判断分组或缺少可靠时间锚点时进入 no_event，使用稳定的英文下划线 reason；不得自行拆分或猜测。
-6. Event 的 actors、action、objects、stage 和发生时间用于身份判定。title 和 summary 用简洁中文表述，不把多阶段因果链合成一个 Event。
+6. Event 顶层只返回 title、summary、semantic。semantic 精确包含 actors、action、objects、stage、modality、time、jurisdictions、reason、method、metrics；title 和 summary 用简洁中文表述，不把多阶段因果链合成一个 Event。
 7. stage 只能使用 OCCURRED、ANNOUNCED、EFFECTIVE、IMPLEMENTED、UPDATED、SUSPENDED、TERMINATED、EXPECTED。
-8. modality 只能使用 FACT、PLAN、SPEC。时间精度只能使用 INSTANT、DAY、MONTH、QUARTER、YEAR、UNKNOWN。
-9. 时间必须是明确 UTC ISO-8601；不确定时不要臆造。occurred_at、announced_at、effective_at 至少一项必须存在，否则进入 no_event。
-10. 不调用工具，不查询历史 Event，不决定 SAME_EVENT 或 NEW_EVENT，不发布任何数据。
+8. modality 只能使用 FACT、PLAN、SPEC。time 精确包含 occurred_at、announced_at、effective_at、precision；时间精度只能使用 INSTANT、DAY、RANGE、MONTH、QUARTER、YEAR、UNKNOWN。
+9. 三种时间必须使用明确 UTC ISO-8601，且至少一项存在；不确定时不要臆造，否则进入 no_event。顶层不得再返回 modality、occurred_at 或 announced_at。
+10. reason 与 method 只保留支持 Evidence 明示且相容的内容；相容但措辞不同时，从 supporting Evidence 中逐字选择一条，不得改写；有冲突或没有明示时返回 null。metrics 使用 EvidenceMetric 的 name、value、unit、change、period 结构，保留支持 Evidence 中的定量事实并去重。
+11. attribution 只属于 Evidence 来源归因，绝不复制到 Event。报道者或声明者只有确实是业务 actor 时才可作为 actor，不能因 attribution 机械进入 Event。
+12. 不调用工具，不查询历史 Event，不决定 SAME_EVENT 或 NEW_EVENT，不发布任何数据。
 
 只返回符合 EventExtractionDraft 的结构化结果。

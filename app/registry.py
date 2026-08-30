@@ -37,8 +37,11 @@ from capabilities.event import (
     EventSignalClassificationRequest,
 )
 from capabilities.event.functions import (
+    analyze_signals,
+    event_extraction_complete,
     event_extraction_required,
     event_resolution_complete,
+    extract_events,
     freeze_event_extraction,
     has_pending_event_resolution,
     has_pending_signal_analysis,
@@ -49,6 +52,7 @@ from capabilities.event.functions import (
     prepare_signal_task,
     publish_events,
     publish_signals,
+    resolve_events,
     signal_analysis_complete,
 )
 from capabilities.evidence import (
@@ -170,6 +174,12 @@ registry = TidewiseRegistry(
         evidence_extraction_complete,
         curate_evidence,
         publish_evidence,
+        extract_events,
+        resolve_events,
+        analyze_signals,
+        event_extraction_complete,
+        # Preserve these registrations so previously published Event Workflow
+        # versions remain strict-rehydratable after the five-Step flattening.
         prepare_event_extraction,
         event_extraction_required,
         freeze_event_extraction,

@@ -6,6 +6,12 @@ import os
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
+from agno.agent import Agent
+from agno.db.base import BaseDb
+from agno.registry import Registry
+from agno.run import RunContext
+from agno.run.agent import RunOutput
+
 from capabilities.event.internal.models import (
     EventCandidateSubmission,
     EventPublicationRecord,
@@ -23,7 +29,7 @@ from sematica.analysis.event.contracts import (
 )
 from sematica.analysis.event.graphiti import GraphitiCandidateRetriever, GraphitiSignalFactProjector
 from sematica.graphiti.runtime import create_agentos_graphiti
-from sematica.ingestion.episcode.event.adapters import CompositeEventHistory, DataEventClient
+from sematica.ingestion.episcode.event.adapters import DataEventClient, GraphitiEventHistory
 from sematica.ingestion.episcode.event.contracts import (
     EventCandidateDTO,
     EventCandidateRequest,
@@ -53,13 +59,52 @@ def _published(event: HistoricalEvent) -> PublishedEvent:
 class LocalEventWorkflowRuntime:
     """Expose native Graphiti ingestion/search and the existing Data contract only."""
 
-    def __init__(self, graphiti: Any, data: DataEventClient) -> None:
+    def __init__(self, graphiti: Any, data: DataEventClient, db: BaseDb, registry: Registry) -> None:
         self._graphiti = graphiti
         self._data = data
-        self._history = CompositeEventHistory(graphiti, data)
+        self._db = db
+        self._registry = registry
+        self._history = GraphitiEventHistory(graphiti)
         self._episode_stage = GraphitiEpisodeStage(graphiti)
         self._candidate_retriever = GraphitiCandidateRetriever(graphiti)
         self._signal_projector = GraphitiSignalFactProjector(graphiti)
+
+    async def invoke_agent(
+        self,
+        agent_id: str,
+        version: int,
+        request: Any,
+        run_context: RunContext,
+    ) -> RunOutput:
+        """Load and execute only the exact Studio Agent version pinned by this Workflow run."""
+
+        agent = Agent.load(
+            agent_id,
+            db=self._db,
+            registry=self._registry,
+            version=version,
+            strict=True,
+            published_only=True,
+        )
+        if agent is None or agent.id != agent_id:
+            raise ValueError(f"pinned Event Agent {agent_id}@{version} could not be rehydrated")
+        agent.db = None
+        response = await agent.arun(
+            input=request,
+            stream=False,
+            session_id=f"{run_context.session_id}:{agent_id}",
+            user_id=run_context.user_id,
+            run_context=run_context,
+            metadata={"event_agent_id": agent_id, "event_agent_version": version},
+        )
+        if not isinstance(response, RunOutput):
+            raise TypeError(f"pinned Event Agent {agent_id}@{version} returned a streaming response")
+        response.metadata = {
+            **dict(response.metadata or {}),
+            "event_agent_id": agent_id,
+            "event_agent_version": version,
+        }
+        return response
 
     async def retrieve_history(self, candidate: EventCandidateSubmission) -> list[HistoricalEvent]:
         request = EventCandidateRequest.model_validate(candidate.model_dump(mode="json"))
@@ -158,7 +203,7 @@ class LocalEventWorkflowRuntime:
         await self._graphiti.close()
 
 
-def create_local_event_workflow_runtime(model: Any) -> LocalEventWorkflowRuntime:
+def create_local_event_workflow_runtime(model: Any, registry: Registry) -> LocalEventWorkflowRuntime:
     """Compose the app-owned runtime from environment and Graphiti-native model plumbing."""
 
     base_url = os.getenv("DATA_SERVICE_BASE_URL", "http://data:9011")
@@ -167,4 +212,6 @@ def create_local_event_workflow_runtime(model: Any) -> LocalEventWorkflowRuntime
         raise ValueError("DATA_SERVICE_TOKEN must be configured")
     graphiti = create_agentos_graphiti(model)
     data = DataEventClient(base_url, service_token)
-    return LocalEventWorkflowRuntime(graphiti, data)
+    from db import get_postgres_db
+
+    return LocalEventWorkflowRuntime(graphiti, data, get_postgres_db(), registry)

@@ -9,20 +9,19 @@ from agno.db.base import ComponentType
 from agno.registry import Registry
 
 from app.settings import default_model
-from capabilities.event import EventIdentityDecision
+from capabilities.event import EVENT_IDENTITY_AGENT_ID, EventIdentityDecision
 from db import get_postgres_db
 
-EVENT_IDENTITY_AGENT_ID = "event-identity"
-EVENT_IDENTITY_CONTRACT_VERSION = 1
+EVENT_IDENTITY_CONTRACT_VERSION = 2
 EVENT_IDENTITY_SEED_SHA256_KEY = "event_identity_seed_sha256"
-EVENT_IDENTITY_DESCRIPTION = (
-    "Assesses Event atomicity and resolves identity against a bounded, authoritative Event history."
-)
+EVENT_IDENTITY_DESCRIPTION = "Assesses Event atomicity against bounded Graphiti Event recall."
 _SEED_PROMPT = Path(__file__).with_name("event_identity.seed.md")
-_RUNTIME_CONTRACT = """Event Identity runtime contract version 1:
-- Consume exactly one prepared Event Candidate and its bounded authoritative historical Event candidates.
+_RUNTIME_CONTRACT = """Event Identity runtime contract version 2:
+- Consume exactly one prepared Event Candidate and its bounded Graphiti historical Event candidates.
 - Decide only NEW_EVENT, SAME_EVENT, RELATED_BUT_DISTINCT, or IGNORED.
 - Treat actor, one real-world action, direct object, stage, and occurrence time as the Event identity dimensions.
+- Treat reason, method, metrics, jurisdictions, modality, title, and summary as context,
+  never extra SAME_EVENT dimensions.
 - Return IGNORED when the Candidate is not atomic or when identity cannot be resolved safely.
 - Reference only historical Event IDs supplied in the input; never invent or retrieve an identity.
 - Do not call Tools, query history, publish data, project a graph, or perform any write.

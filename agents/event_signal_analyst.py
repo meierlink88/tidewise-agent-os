@@ -9,21 +9,22 @@ from agno.db.base import ComponentType
 from agno.registry import Registry
 
 from app.settings import default_model
-from capabilities.event import EventSignalAnalysisDraft
+from capabilities.event import EVENT_SIGNAL_ANALYST_AGENT_ID, EventSignalAnalysisDraft
 from db import get_postgres_db
 
-EVENT_SIGNAL_ANALYST_AGENT_ID = "event-signal-analyst"
-EVENT_SIGNAL_ANALYST_CONTRACT_VERSION = 1
+EVENT_SIGNAL_ANALYST_CONTRACT_VERSION = 2
 EVENT_SIGNAL_ANALYST_SEED_SHA256_KEY = "event_signal_analyst_seed_sha256"
 EVENT_SIGNAL_ANALYST_DESCRIPTION = (
     "Classifies one published Event and proposes bounded direct Signals against supplied graph identities."
 )
 _SEED_PROMPT = Path(__file__).with_name("event_signal_analyst.seed.md")
-_RUNTIME_CONTRACT = """Event Signal Analyst runtime contract version 1:
+_RUNTIME_CONTRACT = """Event Signal Analyst runtime contract version 2:
 - Consume exactly one successfully projected new Event and its bounded, deterministically retrieved candidates.
 - For task CLASSIFY, return the Event classification and no Signal proposals.
 - For task PROPOSE_SIGNALS, preserve the supplied frozen classification and propose only from supplied candidates.
 - Always return the Event classification, including when no supported Signal exists.
+- Use Event reason, method, and metrics only as direct supporting business semantics;
+  Event attribution is unavailable by design.
 - Propose only direct Signals between supplied existing Anchor and Variable UUIDs.
 - Never create or alter an Anchor, Variable, Company, security, or other graph identity.
 - Do not perform topology propagation or produce investment, valuation, or trading conclusions.

@@ -15,7 +15,7 @@ def _terms(values: list[str]) -> set[str]:
 
 
 def _time(event: Any) -> Any:
-    return event.occurred_at or event.announced_at or event.semantic.effective_at
+    return event.semantic.time.occurred_at or event.semantic.time.announced_at or event.semantic.time.effective_at
 
 
 def same_occurrence(candidate: Any, historical: Any) -> bool:

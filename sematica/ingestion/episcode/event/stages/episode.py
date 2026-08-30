@@ -125,7 +125,9 @@ class GraphitiEpisodeStage:
                 native_projection_required = False
 
         valid_at = (
-            historical.event.occurred_at or historical.event.announced_at or historical.event.semantic.effective_at
+            historical.event.semantic.time.occurred_at
+            or historical.event.semantic.time.announced_at
+            or historical.event.semantic.time.effective_at
         )
         assert valid_at is not None
         if native_projection_required:
