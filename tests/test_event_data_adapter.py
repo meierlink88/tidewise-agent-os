@@ -176,8 +176,8 @@ class GraphitiEventHistoryTest(unittest.IsolatedAsyncioTestCase):
             "status": "ACTIVE",
             **candidate.model_dump(mode="json"),
         }
-        search_interface = MagicMock()
-        search_interface.episode_fulltext_search = AsyncMock(
+        search_ops = MagicMock()
+        search_ops.episode_fulltext_search = AsyncMock(
             return_value=[
                 SimpleNamespace(
                     content=json.dumps(event_payload, ensure_ascii=False),
@@ -185,7 +185,7 @@ class GraphitiEventHistoryTest(unittest.IsolatedAsyncioTestCase):
                 )
             ]
         )
-        driver = MagicMock(search_interface=search_interface)
+        driver = MagicMock(search_interface=None, search_ops=search_ops)
         driver.execute_query = AsyncMock(return_value=([], None, None))
         graphiti = MagicMock(driver=driver)
 
@@ -194,11 +194,19 @@ class GraphitiEventHistoryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([event.id for event in result], [event_payload["id"]])
         self.assertEqual(result[0].event.semantic.reason, "扩建算力基础设施")
 
+    async def test_fails_closed_when_search_operations_are_unavailable(self) -> None:
+        candidate = DataEventClientPublicationTest.submission().event
+        driver = MagicMock(search_ops=None)
+        graphiti = MagicMock(driver=driver)
+
+        with self.assertRaisesRegex(EventRecallUnavailable, "full-text search is unavailable"):
+            await GraphitiEventHistory(graphiti).retrieve(candidate)
+
     async def test_fails_closed_when_all_graphiti_history_queries_fail(self) -> None:
         candidate = DataEventClientPublicationTest.submission().event
-        search_interface = MagicMock()
-        search_interface.episode_fulltext_search = AsyncMock(side_effect=RuntimeError("fulltext unavailable"))
-        driver = MagicMock(search_interface=search_interface)
+        search_ops = MagicMock()
+        search_ops.episode_fulltext_search = AsyncMock(side_effect=RuntimeError("fulltext unavailable"))
+        driver = MagicMock(search_ops=search_ops)
         driver.execute_query = AsyncMock(side_effect=RuntimeError("anchor query unavailable"))
         graphiti = MagicMock(driver=driver)
 
@@ -213,12 +221,12 @@ class GraphitiEventHistoryTest(unittest.IsolatedAsyncioTestCase):
         )
         for fulltext_result, anchor_result in cases:
             with self.subTest(fulltext_result=fulltext_result, anchor_result=anchor_result):
-                search_interface = MagicMock()
+                search_ops = MagicMock()
                 if isinstance(fulltext_result, Exception):
-                    search_interface.episode_fulltext_search = AsyncMock(side_effect=fulltext_result)
+                    search_ops.episode_fulltext_search = AsyncMock(side_effect=fulltext_result)
                 else:
-                    search_interface.episode_fulltext_search = AsyncMock(return_value=fulltext_result)
-                driver = MagicMock(search_interface=search_interface)
+                    search_ops.episode_fulltext_search = AsyncMock(return_value=fulltext_result)
+                driver = MagicMock(search_ops=search_ops)
                 if isinstance(anchor_result, Exception):
                     driver.execute_query = AsyncMock(side_effect=anchor_result)
                 else:
@@ -230,8 +238,8 @@ class GraphitiEventHistoryTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_fails_closed_when_graphiti_matches_are_all_malformed(self) -> None:
         candidate = DataEventClientPublicationTest.submission().event
-        search_interface = MagicMock()
-        search_interface.episode_fulltext_search = AsyncMock(
+        search_ops = MagicMock()
+        search_ops.episode_fulltext_search = AsyncMock(
             return_value=[
                 SimpleNamespace(
                     content='{"id":"not-a-formal-event"}',
@@ -239,7 +247,7 @@ class GraphitiEventHistoryTest(unittest.IsolatedAsyncioTestCase):
                 )
             ]
         )
-        driver = MagicMock(search_interface=search_interface)
+        driver = MagicMock(search_ops=search_ops)
         driver.execute_query = AsyncMock(return_value=([], None, None))
         graphiti = MagicMock(driver=driver)
 
@@ -253,8 +261,8 @@ class GraphitiEventHistoryTest(unittest.IsolatedAsyncioTestCase):
             "status": "ACTIVE",
             **candidate.model_dump(mode="json"),
         }
-        search_interface = MagicMock()
-        search_interface.episode_fulltext_search = AsyncMock(
+        search_ops = MagicMock()
+        search_ops.episode_fulltext_search = AsyncMock(
             return_value=[
                 SimpleNamespace(content="not-json", source_description=EVENT_SOURCE_DESCRIPTION),
                 SimpleNamespace(
@@ -263,7 +271,7 @@ class GraphitiEventHistoryTest(unittest.IsolatedAsyncioTestCase):
                 ),
             ]
         )
-        driver = MagicMock(search_interface=search_interface)
+        driver = MagicMock(search_ops=search_ops)
         driver.execute_query = AsyncMock(return_value=([], None, None))
         graphiti = MagicMock(driver=driver)
 
