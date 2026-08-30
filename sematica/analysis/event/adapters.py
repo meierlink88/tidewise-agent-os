@@ -19,7 +19,7 @@ from sematica.analysis.event.contracts import (
     EventClassification,
     SignalCritique,
     SignalDetailDraft,
-    SignalProposal,
+    SignalProposalBatch,
 )
 from sematica.projection.runtime import GRAPHITI_GROUP_ID
 
@@ -117,9 +117,10 @@ class GraphitiEventAnalysisLLM:
         event: EventAnalysisInput,
         classification: EventClassification,
         candidates: CandidateSet,
-    ) -> list[SignalProposal]:
+    ) -> SignalProposalBatch:
         variables = {f"V{index}": item for index, item in enumerate(candidates.variables, 1)}
         drafts: list[DirectSignalDraft] = []
+        reason_codes: list[str] = []
         variable_options = [
             {
                 "key": key,
@@ -245,6 +246,8 @@ class GraphitiEventAnalysisLLM:
                 prompt_name="tidewise_direct_signal_critic_v1",
             )
             if not critique.accepted:
+                reason_codes.append("SIGNAL_CRITIC_REJECTED")
+                reason_codes.extend(critique.reason_codes)
                 continue
             drafts.append(
                 DirectSignalDraft(
@@ -267,4 +270,7 @@ class GraphitiEventAnalysisLLM:
                 "SPEC": "ASSUMED",
             }[event.event.event.modality],
         )
-        return [draft.proposal(event_time=event_time, assertion_modality=modality) for draft in drafts]
+        return SignalProposalBatch(
+            proposals=[draft.proposal(event_time=event_time, assertion_modality=modality) for draft in drafts],
+            reason_codes=sorted(set(reason_codes)),
+        )

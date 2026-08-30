@@ -20,16 +20,20 @@ from sematica.ingestion.episcode.event.contracts import (
     PairComparison,
 )
 from sematica.ingestion.episcode.event.provenance import EVENT_SOURCE_DESCRIPTION
-from sematica.ingestion.episcode.event.resolver import (
-    EventHistoryUnavailable,
-    PublicationRejected,
-)
 from sematica.projection.runtime import GRAPHITI_GROUP_ID
 
 EVENTS_PATH = "/api/data/v1/events"
 MAX_DATA_HISTORY = 1_000
 MAX_RESOLUTION_CANDIDATES = 30
 EVENT_ID_PATTERN = re.compile(r"^EVT[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+
+
+class EventHistoryUnavailable(RuntimeError):
+    """The authoritative Data Event history could not be recalled safely."""
+
+
+class PublicationRejected(RuntimeError):
+    """Data rejected a publication with a permanent 4xx contract response."""
 
 
 class DataEventDTO(EventCandidateDTO):

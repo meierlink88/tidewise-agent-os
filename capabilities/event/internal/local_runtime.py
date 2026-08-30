@@ -9,7 +9,9 @@ from typing import Any, Literal, cast
 
 from agno.agent import Agent
 from agno.run.agent import RunOutput
+from agno.run.base import RunStatus
 
+from capabilities.event.internal.analysis import EventAnalysisPipeline
 from capabilities.event.internal.models import (
     EventCandidateSubmission,
     EventExtractionBatch,
@@ -17,12 +19,12 @@ from capabilities.event.internal.models import (
     EventSignalRecord,
     PublishedEvent,
 )
+from capabilities.event.internal.resolver import EventResolver
+from capabilities.event.internal.review import ControlledSignalReviewer
 from capabilities.event.internal.runtime import PublicationCheckpoint
 from sematica.analysis.event.adapters import GraphitiEventAnalysisLLM
 from sematica.analysis.event.contracts import EventAnalysisInput
 from sematica.analysis.event.graphiti import GraphitiCandidateRetriever, GraphitiSignalFactProjector
-from sematica.analysis.event.pipeline import EventAnalysisPipeline
-from sematica.analysis.event.review import ControlledSignalReviewer
 from sematica.graphiti.runtime import create_agentos_graphiti
 from sematica.ingestion.episcode.event.adapters import (
     CompositeEventHistory,
@@ -34,7 +36,6 @@ from sematica.ingestion.episcode.event.contracts import (
     EventCandidateRequest,
     HistoricalEvent,
 )
-from sematica.ingestion.episcode.event.resolver import EventResolver
 from sematica.ingestion.episcode.event.stages.episode import GraphitiEpisodeStage
 
 
@@ -90,6 +91,8 @@ class LocalEventWorkflowRuntime:
         result = await self._extractor.arun(batch, stream=False)
         if not isinstance(result, RunOutput):
             raise RuntimeError("Event Extractor returned a streaming response")
+        if result.status != RunStatus.completed:
+            raise RuntimeError(f"Event Extractor did not complete: {result.status.value}")
         return result.content
 
     async def publish(

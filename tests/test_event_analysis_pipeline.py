@@ -6,17 +6,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from graphiti_core.nodes import EntityNode
 
+from capabilities.event.internal.analysis import EventAnalysisPipeline
+from sematica.analysis.event.adapters import GraphitiEventAnalysisLLM
 from sematica.analysis.event.contracts import (
     AnchorCandidate,
+    AnchorSignalSelection,
     CandidateSet,
     EventAnalysisInput,
     EventClass,
     EventClassification,
+    SignalCritique,
+    SignalDetailDraft,
     SignalProposal,
+    SignalProposalBatch,
     VariableCandidate,
 )
 from sematica.analysis.event.graphiti.candidates import GraphitiCandidateRetriever
-from sematica.analysis.event.pipeline import EventAnalysisPipeline
 from sematica.ingestion.episcode.event.contracts import EventCandidateDTO, HistoricalEvent
 
 
@@ -122,7 +127,10 @@ class EventAnalysisPipelineTest(unittest.IsolatedAsyncioTestCase):
         retriever = AsyncMock()
         retriever.retrieve.return_value = self._candidates()
         extractor = AsyncMock()
-        extractor.extract.return_value = [self._proposal("anchor-hbm"), self._proposal("anchor-ai-card")]
+        extractor.extract.return_value = SignalProposalBatch(
+            proposals=[self._proposal("anchor-hbm"), self._proposal("anchor-ai-card")],
+            reason_codes=["SIGNAL_CRITIC_REJECTED", "UNSUPPORTED_MECHANISM"],
+        )
         reviewer = AsyncMock()
         reviewer.review.side_effect = [True, False]
         projector = AsyncMock()
@@ -135,7 +143,12 @@ class EventAnalysisPipelineTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(outcome.signal_fact_uuids, ["fact-hbm"])
         self.assertEqual(
             outcome.reason_codes,
-            ["DIRECT_SIGNAL_FACTS_PROJECTED", "SIGNAL_REVIEW_REJECTED"],
+            [
+                "DIRECT_SIGNAL_FACTS_PROJECTED",
+                "SIGNAL_CRITIC_REJECTED",
+                "SIGNAL_REVIEW_REJECTED",
+                "UNSUPPORTED_MECHANISM",
+            ],
         )
         projector.project.assert_awaited_once()
 
@@ -145,7 +158,7 @@ class EventAnalysisPipelineTest(unittest.IsolatedAsyncioTestCase):
         retriever = AsyncMock()
         retriever.retrieve.return_value = self._candidates()
         extractor = AsyncMock()
-        extractor.extract.return_value = [self._proposal("anchor-hbm")]
+        extractor.extract.return_value = SignalProposalBatch(proposals=[self._proposal("anchor-hbm")])
         reviewer = AsyncMock()
         reviewer.review.return_value = False
         projector = AsyncMock()
@@ -157,6 +170,37 @@ class EventAnalysisPipelineTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(outcome.signal_fact_uuids, [])
         self.assertEqual(outcome.reason_codes, ["SIGNAL_REVIEW_REJECTED"])
         projector.project.assert_not_awaited()
+
+    async def test_signal_critic_rejection_reason_is_preserved(self) -> None:
+        extractor = object.__new__(GraphitiEventAnalysisLLM)
+        extractor._structured = AsyncMock(
+            side_effect=[
+                AnchorSignalSelection(has_signal=True, variable_key="V1", rationale="直接涉及供给"),
+                SignalDetailDraft(
+                    fact="出口限制令有效供给下降。",
+                    direction="DOWN",
+                    magnitude="HIGH",
+                    impact_onset_days=0,
+                    impact_peak_days=7,
+                    expected_duration_days=90,
+                    mechanism="出口限制减少可交付供给。",
+                    duration_basis="政策约束持续期间。",
+                    assumptions=[],
+                    invalidation_conditions=["限制撤销"],
+                    provenance_confidence="HIGH",
+                    mechanism_confidence="HIGH",
+                    temporal_confidence="MEDIUM",
+                ),
+                SignalCritique(accepted=False, reason_codes=["UNSUPPORTED_MECHANISM"]),
+            ]
+        )
+
+        candidates = self._candidates()
+        candidates = candidates.model_copy(update={"anchors": candidates.anchors[:1]})
+        result = await extractor.extract(self._event(), self._classification(), candidates)
+
+        self.assertEqual(result.proposals, [])
+        self.assertEqual(result.reason_codes, ["SIGNAL_CRITIC_REJECTED", "UNSUPPORTED_MECHANISM"])
 
     async def test_retrieval_keeps_every_fundamental_variable_in_the_hinted_groups(self) -> None:
         graphiti = MagicMock()
@@ -171,7 +215,7 @@ class EventAnalysisPipelineTest(unittest.IsolatedAsyncioTestCase):
                 "allowed_anchor_types": ["IndustryChain"],
                 "definition": f"需求定义{index}",
             }
-            for index in range(1, 8)
+            for index in range(1, 36)
         ]
         unrelated_rows = [
             {
@@ -212,7 +256,7 @@ class EventAnalysisPipelineTest(unittest.IsolatedAsyncioTestCase):
         with patch.object(EntityNode, "get_by_uuid", new=AsyncMock(return_value=anchor)):
             candidates = await GraphitiCandidateRetriever(graphiti).retrieve(self._event(), classification)
 
-        self.assertEqual(len(candidates.variables), 7)
+        self.assertEqual(len(candidates.variables), 35)
         self.assertEqual({item.variable_group.value for item in candidates.variables}, {"DEMAND"})
 
     async def test_anchor_limit_is_applied_per_entity_type(self) -> None:
@@ -269,6 +313,14 @@ class EventAnalysisPipelineTest(unittest.IsolatedAsyncioTestCase):
             for entity_type in ("ChainNode", "IndustryChain")
         }
         self.assertEqual(type_counts, {"ChainNode": 4, "IndustryChain": 3})
+
+        narrowed = classification.model_copy(update={"anchor_type_hints": [classification.anchor_type_hints[0]]})
+        with patch.object(EntityNode, "get_by_uuid", new=get_by_uuid):
+            narrowed_candidates = await GraphitiCandidateRetriever(graphiti).retrieve(self._event(), narrowed)
+        self.assertEqual(
+            {item.entity_type.value for item in narrowed_candidates.anchors},
+            {"IndustryChain"},
+        )
 
 
 if __name__ == "__main__":

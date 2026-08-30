@@ -3,13 +3,13 @@
 import unittest
 from unittest.mock import AsyncMock
 
+from capabilities.event.internal.resolver import EventResolver
 from sematica.ingestion.episcode.event.contracts import (
     AtomicityAssessment,
     EventCandidateDTO,
     HistoricalEvent,
     PairComparison,
 )
-from sematica.ingestion.episcode.event.resolver import EventResolver
 
 
 def _event(*, actor: str, action: str, object_: str, announced_at: str) -> EventCandidateDTO:

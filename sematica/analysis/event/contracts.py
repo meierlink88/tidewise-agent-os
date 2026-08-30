@@ -92,7 +92,7 @@ class CandidateSet(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     anchors: list[AnchorCandidate] = Field(max_length=30)
-    variables: list[VariableCandidate] = Field(max_length=30)
+    variables: list[VariableCandidate]
 
 
 class SignalProposal(BaseModel):
@@ -191,6 +191,7 @@ class SignalProposalBatch(BaseModel):
 
     proposals: list[SignalProposal] = Field(max_length=12)
     no_signal_reason: str | None = Field(default=None, max_length=1000)
+    reason_codes: list[str] = Field(default_factory=list, max_length=24)
 
 
 class SignalDetailDraft(BaseModel):

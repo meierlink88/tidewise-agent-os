@@ -13,7 +13,7 @@ from capabilities.event.functions import (
 from db import get_postgres_db
 
 EVENT_EXTRACTION_WORKFLOW_ID = "event-extraction"
-EVENT_EXTRACTION_CONTRACT_VERSION = 6
+EVENT_EXTRACTION_CONTRACT_VERSION = 7
 
 
 def _fail_fast_review() -> HumanReview:
@@ -80,7 +80,6 @@ def ensure_event_extraction_workflow(registry: Registry) -> int:
         migrated = _seed_workflow()
         migrated.id = str(config.get("id") or EVENT_EXTRACTION_WORKFLOW_ID)
         migrated.name = str(config.get("name") or "Event Extraction")
-        migrated.description = str(config.get("description") or migrated.description)
         migrated.metadata = {**metadata, "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION}
         published = migrated.save(
             db=db,

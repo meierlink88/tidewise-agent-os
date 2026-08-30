@@ -24,7 +24,6 @@ from sematica.ontology.enums import AnalysisAnchorType, VariableGroup
 from sematica.projection.runtime import GRAPHITI_GROUP_ID
 
 MAX_ANCHORS_PER_TYPE = 4
-MAX_VARIABLE_CANDIDATES = 30
 SEARCH_LIMIT = 8
 SUPPORTED_ANCHOR_TYPES = frozenset(
     {
@@ -74,26 +73,32 @@ class GraphitiCandidateRetriever:
         self._graphiti = graphiti
 
     async def retrieve(self, event: EventAnalysisInput, classification: EventClassification) -> CandidateSet:
-        allowed = CLASS_ANCHOR_TYPES[classification.event_class]
+        class_allowed = CLASS_ANCHOR_TYPES[classification.event_class]
+        hinted = set(classification.anchor_type_hints)
+        allowed = class_allowed & hinted if hinted else class_allowed
         if not allowed:
             return CandidateSet(anchors=[], variables=[])
         labels = sorted(item.value for item in allowed)
-        anchor_query_limit = MAX_ANCHORS_PER_TYPE * len(labels)
         nodes_by_uuid: dict[str, EntityNode] = {}
 
         records, _, _ = await self._graphiti.driver.execute_query(
             """
             /* event_analysis_mentioned_anchor_candidates */
-            MATCH (episode:Episodic {uuid: $episode_uuid, group_id: $group_id})
-                  -[:MENTIONS]->(anchor:Entity)
-            WHERE any(label IN labels(anchor) WHERE label IN $labels)
-            RETURN DISTINCT anchor.uuid AS uuid
-            LIMIT $limit
+            UNWIND $labels AS candidate_label
+            CALL (candidate_label) {
+                MATCH (episode:Episodic {uuid: $episode_uuid, group_id: $group_id})
+                      -[:MENTIONS]->(anchor:Entity)
+                WHERE candidate_label IN labels(anchor)
+                RETURN DISTINCT anchor.uuid AS uuid
+                ORDER BY uuid
+                LIMIT $per_type_limit
+            }
+            RETURN DISTINCT uuid
             """,
             episode_uuid=event.episode_uuid,
             group_id=GRAPHITI_GROUP_ID,
             labels=labels,
-            limit=anchor_query_limit,
+            per_type_limit=MAX_ANCHORS_PER_TYPE,
             routing_="r",
         )
         for record in records:
@@ -103,20 +108,25 @@ class GraphitiCandidateRetriever:
         fact_records, _, _ = await self._graphiti.driver.execute_query(
             """
             /* event_analysis_fact_endpoint_candidates */
-            MATCH (episode:Episodic {uuid: $episode_uuid, group_id: $group_id})
-            MATCH (source:Entity)-[fact:RELATES_TO]->(target:Entity)
-            WHERE episode.uuid IN coalesce(fact.episodes, [])
-            WITH collect(source) + collect(target) AS endpoints
-            UNWIND endpoints AS anchor
-            WITH DISTINCT anchor
-            WHERE any(label IN labels(anchor) WHERE label IN $labels)
-            RETURN anchor.uuid AS uuid
-            LIMIT $limit
+            UNWIND $labels AS candidate_label
+            CALL (candidate_label) {
+                MATCH (episode:Episodic {uuid: $episode_uuid, group_id: $group_id})
+                MATCH (source:Entity)-[fact:RELATES_TO]->(target:Entity)
+                WHERE episode.uuid IN coalesce(fact.episodes, [])
+                WITH candidate_label, collect(source) + collect(target) AS endpoints
+                UNWIND endpoints AS anchor
+                WITH DISTINCT candidate_label, anchor
+                WHERE candidate_label IN labels(anchor)
+                RETURN anchor.uuid AS uuid
+                ORDER BY uuid
+                LIMIT $per_type_limit
+            }
+            RETURN DISTINCT uuid
             """,
             episode_uuid=event.episode_uuid,
             group_id=GRAPHITI_GROUP_ID,
             labels=labels,
-            limit=anchor_query_limit,
+            per_type_limit=MAX_ANCHORS_PER_TYPE,
             routing_="r",
         )
         for record in fact_records:
@@ -147,19 +157,24 @@ class GraphitiCandidateRetriever:
             expanded, _, _ = await self._graphiti.driver.execute_query(
                 """
                 /* event_analysis_topology_anchor_candidates */
-                UNWIND $anchor_uuids AS anchor_uuid
-                MATCH (anchor:Entity {uuid: anchor_uuid, group_id: $group_id})
-                      -[relation:RELATES_TO]-(neighbor:Entity)
-                WHERE relation.name IN $relation_names
-                  AND any(label IN labels(neighbor) WHERE label IN $labels)
-                RETURN DISTINCT neighbor.uuid AS uuid
-                LIMIT $limit
+                UNWIND $labels AS candidate_label
+                CALL (candidate_label) {
+                    UNWIND $anchor_uuids AS anchor_uuid
+                    MATCH (anchor:Entity {uuid: anchor_uuid, group_id: $group_id})
+                          -[relation:RELATES_TO]-(neighbor:Entity)
+                    WHERE relation.name IN $relation_names
+                      AND candidate_label IN labels(neighbor)
+                    RETURN DISTINCT neighbor.uuid AS uuid
+                    ORDER BY uuid
+                    LIMIT $per_type_limit
+                }
+                RETURN DISTINCT uuid
                 """,
                 anchor_uuids=sorted(nodes_by_uuid),
                 group_id=GRAPHITI_GROUP_ID,
                 relation_names=TOPOLOGY_RELATION_NAMES,
                 labels=labels,
-                limit=anchor_query_limit,
+                per_type_limit=MAX_ANCHORS_PER_TYPE,
                 routing_="r",
             )
             for record in expanded:
@@ -222,11 +237,9 @@ class GraphitiCandidateRetriever:
                    variable.definition AS definition
             ORDER BY CASE WHEN variable.variable_group IN $group_hints THEN 0 ELSE 1 END,
                      variable.variable_id
-            LIMIT $limit
             """,
             group_id=GRAPHITI_GROUP_ID,
             group_hints=[item.value for item in classification.variable_group_hints],
-            limit=MAX_VARIABLE_CANDIDATES,
             routing_="r",
         )
         fallback = [
@@ -252,7 +265,7 @@ class GraphitiCandidateRetriever:
                 0 if item.variable_group in hints else 1,
                 item.variable_id,
             ),
-        )[:MAX_VARIABLE_CANDIDATES]
+        )
 
     @staticmethod
     def _variable_candidate(node: EntityNode) -> VariableCandidate | None:

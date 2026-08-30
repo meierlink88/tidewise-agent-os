@@ -35,10 +35,10 @@ from capabilities.event.functions import (
 )
 from capabilities.event.internal.local_runtime import LocalEventWorkflowRuntime
 from capabilities.event.internal.queue import enqueue_evidence_artifact, queue_counts
+from capabilities.event.internal.resolver import EventResolver
 from capabilities.event.internal.storage import claim_event_batch, freeze_draft
 from capabilities.evidence import ResolvedEvidence
 from sematica.ingestion.episcode.event.contracts import AtomicityAssessment, HistoricalEvent
-from sematica.ingestion.episcode.event.resolver import EventResolver
 from workflows.event_extraction import (
     EVENT_EXTRACTION_CONTRACT_VERSION,
     _seed_workflow,
@@ -506,6 +506,7 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             agent_id="event-extractor",
             content=self._draft(),
             content_type="EventExtractionDraft",
+            status=RunStatus.completed,
         )
         runtime = object.__new__(LocalEventWorkflowRuntime)
         runtime._extractor = extractor
@@ -514,6 +515,20 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(EventExtractionDraft.model_validate(content), self._draft())
         extractor.arun.assert_awaited_once_with(batch, stream=False)
+
+    async def test_local_runtime_does_not_treat_agent_error_as_semantic_no_event(self) -> None:
+        batch = self._prepare()
+        extractor = AsyncMock()
+        extractor.arun.return_value = RunOutput(
+            agent_id="event-extractor",
+            content={"error": "provider unavailable"},
+            status=RunStatus.error,
+        )
+        runtime = object.__new__(LocalEventWorkflowRuntime)
+        runtime._extractor = extractor
+
+        with self.assertRaisesRegex(RuntimeError, "Event Extractor did not complete: ERROR"):
+            await runtime.extract(batch)
 
     async def test_resume_after_data_publication_skips_data_write_and_projects_episode(self) -> None:
         runtime = object.__new__(LocalEventWorkflowRuntime)
@@ -793,6 +808,7 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             "config": {
                 "id": "event-extraction",
                 "name": "Event Extraction",
+                "description": "Extracts Event Candidates and hands them to Reasoning Server.",
                 "metadata": {"event_extraction_contract_version": 0},
             }
         }
@@ -808,6 +824,7 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             migrated.metadata,
             {"event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION},
         )
+        self.assertNotIn("Reasoning Server", migrated.description or "")
         migrated_steps = cast(list[object], migrated.steps)
         self.assertEqual(
             [cast(Step, step).name for step in migrated_steps],
