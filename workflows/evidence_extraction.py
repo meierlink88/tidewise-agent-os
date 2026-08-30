@@ -16,7 +16,8 @@ from capabilities.evidence.functions import (
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTION_WORKFLOW_ID = "evidence-extraction"
-EVIDENCE_EXTRACTION_CONTRACT_VERSION = 10
+EVIDENCE_EXTRACTION_CONTRACT_VERSION = 11
+EVIDENCE_EXTRACTION_BATCH_LIMIT = 20
 
 
 def _fail_fast_review() -> HumanReview:
@@ -37,7 +38,7 @@ def _seed_workflow(agent: Agent) -> Workflow:
             Loop(
                 name="process-unpublished-raw-documents",
                 description="Process indexed Raw documents until no work remains or the safety cap is reached.",
-                max_iterations=100,
+                max_iterations=EVIDENCE_EXTRACTION_BATCH_LIMIT,
                 end_condition=evidence_extraction_complete,
                 steps=[
                     Step(

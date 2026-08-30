@@ -55,9 +55,11 @@ from capabilities.evidence.internal.models import (
     EvidencePublicationItem,
     EvidencePublicationResult,
     EvidenceSetPublicationResponse,
+    EvidenceSkipResult,
     PreparedEvidencePublication,
     PreparedRawDocument,
     RawEvidenceEnrichment,
+    SkippedEvidencePublication,
 )
 from capabilities.evidence.internal.storage import (
     checkpoint_path,
@@ -66,6 +68,7 @@ from capabilities.evidence.internal.storage import (
     read_next_raw_document,
 )
 from workflows.evidence_extraction import (
+    EVIDENCE_EXTRACTION_BATCH_LIMIT,
     EVIDENCE_EXTRACTION_CONTRACT_VERSION,
     _seed_workflow,
     ensure_evidence_extraction_workflow,
@@ -348,15 +351,30 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(output.content, EvidenceExtractionIdle)
         mocked.assert_not_called()
 
-    def test_unknown_category_code_fails_before_publication_is_prepared(self) -> None:
+    def test_unknown_category_code_is_skipped_before_publication_is_prepared(self) -> None:
         self._publish_raw_fixture()
         prepared = self._prepared()
         draft = self._draft().model_copy(deep=True)
         draft.raw_evidence.category_code = "UNKNOWN_CATEGORY"
         step_input = StepInput(previous_step_content=draft)
 
-        with self.assertRaisesRegex(ValueError, "unknown Evidence Category code"):
-            curate_evidence(step_input, self._run_context("run-unknown-category", prepared))
+        output = curate_evidence(step_input, self._run_context("run-unknown-category", prepared))
+
+        skip = SkippedEvidencePublication.model_validate(output.content)
+        self.assertEqual(skip.reason, "UNKNOWN_CATEGORY")
+        self.assertEqual(skip.prepared_raw, prepared)
+
+    def test_nonconforming_llm_envelope_is_skipped_instead_of_failing_workflow(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        output = curate_evidence(
+            StepInput(previous_step_content='{"raw_evidence": {}, "evidences": "invalid"}'),
+            self._run_context("run-invalid-envelope", prepared),
+        )
+
+        skip = SkippedEvidencePublication.model_validate(output.content)
+        self.assertEqual(skip.reason, "NONCOMPLIANT_LLM_OUTPUT")
+        self.assertEqual(skip.prepared_raw, prepared)
 
     def test_prepare_reads_manifest_index_and_strips_artifact_wrapper(self) -> None:
         self._publish_raw_fixture()
@@ -719,17 +737,30 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(publication.evidences[0].keywords, ["捷豹路虎", "奇瑞", "预售价格", "上市日期"])
 
-    def test_curation_rejects_evidence_when_no_valid_keyword_remains(self) -> None:
+    def test_curation_skips_document_when_no_valid_candidate_remains(self) -> None:
         self._publish_raw_fixture()
         prepared = self._prepared()
         draft = self._draft().model_dump(mode="json")
         draft["evidences"][0]["keywords"] = ["Freelander 8", "9500万立方米", "   "]
 
-        with self.assertRaisesRegex(ValueError, "at least one valid keyword"):
-            curate_evidence(
-                StepInput(previous_step_content=json.dumps(draft, ensure_ascii=False)),
-                self._run_context("run-no-valid-keyword", prepared),
-            )
+        output = curate_evidence(
+            StepInput(previous_step_content=json.dumps(draft, ensure_ascii=False)),
+            self._run_context("run-no-valid-keyword", prepared),
+        )
+
+        skip = SkippedEvidencePublication.model_validate(output.content)
+        self.assertEqual(skip.reason, "NO_CANONICAL_PROPOSITION")
+
+    def test_draft_discards_invalid_candidate_without_losing_valid_sibling(self) -> None:
+        payload = self._draft().model_dump(mode="json")
+        invalid = payload["evidences"][0].copy()
+        invalid["semantic"] = {**invalid["semantic"], "stage": "UNSUPPORTED_STAGE"}
+        payload["evidences"].insert(0, invalid)
+
+        draft = EvidenceExtractionDraft.model_validate(payload)
+
+        self.assertEqual(len(draft.evidences), 1)
+        self.assertEqual(draft.evidences[0].summary, payload["evidences"][1]["summary"])
 
     def test_curation_downgrades_unsupported_time_precision_without_losing_evidence(self) -> None:
         self._publish_raw_fixture()
@@ -885,6 +916,30 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             EvidencePublicationResult.model_validate(repeated_output.content).checkpoint, read_checkpoint()
         )
         self.assertEqual(len(list(queue_marker.parent.glob("*.json"))), 1)
+
+    async def test_skipped_document_is_audited_without_data_publication_and_advances_checkpoint(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        skip = SkippedEvidencePublication(
+            prepared_raw=prepared,
+            reason="NO_CANONICAL_PROPOSITION",
+        )
+        step_input = StepInput(previous_step_content=skip)
+
+        with patch("capabilities.evidence.functions.extraction.post_publication") as mocked:
+            output = await publish_evidence(step_input)
+
+        mocked.assert_not_called()
+        result = EvidenceSkipResult.model_validate(output.content)
+        self.assertEqual(result.status, "skipped")
+        self.assertEqual(result.reason, "NO_CANONICAL_PROPOSITION")
+        self.assertTrue(Path(result.artifact_path).is_file())
+        self.assertEqual(result.checkpoint, read_checkpoint())
+        self.assertGreater(result.checkpoint.manifest_offset, 0)
+        self.assertEqual(list((evidence_artifact_root() / "documents").glob("*/manifest.json")), [])
+
+        repeated = await publish_evidence(step_input)
+        self.assertEqual(EvidenceSkipResult.model_validate(repeated.content).checkpoint, read_checkpoint())
 
     async def test_failed_evidence_publication_does_not_advance_checkpoint(self) -> None:
         self._publish_raw_fixture()
@@ -1370,6 +1425,8 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(restored_steps, list)
         loop = cast(Loop, cast(list[object], restored_steps)[0])
         self.assertIsInstance(loop, Loop)
+        self.assertEqual(loop.max_iterations, EVIDENCE_EXTRACTION_BATCH_LIMIT)
+        self.assertEqual(loop.max_iterations, 20)
         steps = cast(list[Step], loop.steps)
         self.assertEqual(
             [step.name for step in steps],

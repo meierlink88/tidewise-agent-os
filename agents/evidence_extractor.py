@@ -12,13 +12,13 @@ from capabilities.evidence import EvidenceExtractionDraft
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTOR_AGENT_ID = "evidence-extractor"
-EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 8
+EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 9
 EVIDENCE_EXTRACTOR_SEED_SHA256_KEY = "evidence_extractor_seed_sha256"
 EVIDENCE_EXTRACTOR_DESCRIPTION = (
     "投研事实分析师：从一篇原始资讯中提炼可供事件识别和变量信号构建使用的最小完整业务命题。"
 )
 _SEED_PROMPT = Path(__file__).with_name("evidence_extractor.seed.md")
-_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 8:
+_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 9:
 - Read the supplied EvidenceAnalysisRequest exactly once.
 - It contains one document and the complete allowed Category vocabulary.
 - Choose exactly one category and return its code as raw_evidence.category_code.
@@ -31,7 +31,8 @@ _RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 8:
 - Treat reporting attribution separately from the business actors. Keep normalized time bounds null for the
   deterministic Workflow to derive from semantic.time.raw.
 - Do not call Tools or publish data.
-- The deterministic Workflow validates the code, resolves the formal ID and owns all side effects.
+- The deterministic Workflow validates each candidate independently, ignores nonconforming candidate data, resolves
+  formal IDs for accepted Evidence and owns all side effects.
 """
 
 
