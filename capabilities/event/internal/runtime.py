@@ -1,35 +1,57 @@
-"""Local runtime seam used by the deterministic Event Workflow functions."""
+"""Local runtime seam used by deterministic Event Workflow Functions."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Protocol
 
 from capabilities.event.internal.models import (
     EventCandidateSubmission,
-    EventExtractionBatch,
     EventPublicationRecord,
-    EventSignalRecord,
+    EventResolutionRecord,
 )
+from sematica.analysis.event.contracts import (
+    AnchorCandidate,
+    CandidateSet,
+    EventAnalysisInput,
+    EventClassification,
+    SignalProposal,
+    VariableCandidate,
+)
+from sematica.ingestion.episcode.event.contracts import HistoricalEvent
 
 PublicationCheckpoint = Callable[[EventPublicationRecord], None]
 
 
 class EventWorkflowRuntime(Protocol):
-    """Deep interface hiding resolution, Data publication and Graphiti mechanics."""
+    """Deep interface containing only deterministic I/O and Graphiti-native operations."""
 
-    async def extract(self, batch: EventExtractionBatch) -> Any: ...
+    async def retrieve_history(self, candidate: EventCandidateSubmission) -> list[HistoricalEvent]: ...
 
     async def publish(
         self,
         candidate: EventCandidateSubmission,
         candidate_key: str,
+        resolution: EventResolutionRecord,
         *,
         existing: EventPublicationRecord | None,
         checkpoint: PublicationCheckpoint,
     ) -> EventPublicationRecord: ...
 
-    async def construct_signals(self, publication: EventPublicationRecord) -> EventSignalRecord: ...
+    async def retrieve_signal_candidates(
+        self,
+        event: EventAnalysisInput,
+        classification: EventClassification,
+    ) -> CandidateSet: ...
+
+    async def project_signal(
+        self,
+        event: EventAnalysisInput,
+        classification: EventClassification,
+        variable: VariableCandidate,
+        anchor: AnchorCandidate,
+        proposal: SignalProposal,
+    ) -> str: ...
 
     async def close(self) -> None: ...
 

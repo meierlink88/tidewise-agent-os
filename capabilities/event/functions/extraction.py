@@ -1,16 +1,21 @@
-"""Deterministic functions backing the three-stage Event Workflow."""
+"""Deterministic Functions backing the five-phase Event Workflow."""
+
+from __future__ import annotations
 
 import hashlib
 import json
 import logging
 import traceback
 from collections import Counter
-from typing import Any, NoReturn
+from datetime import UTC, datetime
+from typing import Any, Literal, NoReturn, cast
 from uuid import uuid4
 
+from agno.run import RunContext
 from agno.workflow import StepInput, StepOutput
 from pydantic import ValidationError
 
+from capabilities.event.internal.identity import same_occurrence
 from capabilities.event.internal.models import (
     EventCandidateSubmission,
     EventDisposition,
@@ -19,26 +24,61 @@ from capabilities.event.internal.models import (
     EventExtractionDraft,
     EventExtractionIdle,
     EventExtractionResult,
+    EventIdentityDecision,
+    EventIdentityRequest,
     EventPublicationJournal,
     EventPublicationRecord,
-    EventPublicationStageResult,
+    EventResolutionRecord,
+    EventSignalAnalysisDraft,
+    EventSignalAnalysisRecord,
+    EventSignalAnalysisRequest,
+    EventSignalCandidateRecord,
+    EventSignalClassificationRecord,
+    EventSignalClassificationRequest,
     EventSignalJournal,
+    EventSignalProjectionRecord,
+    EventSignalRecord,
+    EventWorkflowProgress,
 )
+from capabilities.event.internal.review import ControlledSignalReviewer
 from capabilities.event.internal.runtime import event_workflow_runtime
 from capabilities.event.internal.storage import (
     claim_event_batch,
     complete_batch,
     freeze_draft,
+    freeze_identity_request,
+    freeze_resolution,
+    freeze_signal_analysis,
+    freeze_signal_candidates,
+    freeze_signal_classification,
+    freeze_signal_preparation,
+    freeze_signal_projection,
     load_draft,
+    load_identity_request_journal,
     load_publication_journal,
+    load_resolution_journal,
+    load_signal_analysis_journal,
+    load_signal_candidate_journal,
+    load_signal_classification_journal,
     load_signal_journal,
+    load_signal_preparation_journal,
+    load_signal_projection_journal,
     release_event_batch_lease,
     renew_event_batch_lease,
     write_publication_journal,
     write_signal_journal,
 )
+from sematica.analysis.event.contracts import EventAnalysisInput, EventClassification, SignalProposal
+from sematica.analysis.event.errors import PermanentEventAnalysisFailure
+from sematica.ingestion.episcode.event.adapters import PublicationRejected
+from sematica.ingestion.episcode.event.contracts import EventCandidateDTO, HistoricalEvent
 
 logger = logging.getLogger(__name__)
+
+_EVENT_RUN_STATE = "event_workflow_state"
+_BATCH = "batch"
+_IDENTITY_REQUEST = "identity_request"
+_SIGNAL_REQUEST = "signal_request"
 
 
 def _raise_stage_failure(stage: str, batch_id: str, error: Exception) -> NoReturn:
@@ -75,7 +115,7 @@ def _model_from_content(model: type[Any], content: Any) -> Any:
 
 
 def _previous_content(step_input: StepInput) -> Any:
-    """Return the direct predecessor output without coupling to a display name."""
+    """Return direct predecessor content without coupling to a display name."""
 
     content = step_input.previous_step_content
     if content is None:
@@ -85,8 +125,45 @@ def _previous_content(step_input: StepInput) -> Any:
     return content
 
 
+def _direct_predecessor(step_input: StepInput) -> StepOutput:
+    """Return the last actual Step output by order, never by mutable display name."""
+
+    outputs = step_input.previous_step_outputs
+    if outputs:
+        return list(outputs.values())[-1]
+    return StepOutput(content=_previous_content(step_input))
+
+
+def _event_run_state(run_context: RunContext) -> dict[str, Any]:
+    """Return mutable state shared by shallow RunContext copies in one run."""
+
+    dependencies = run_context.dependencies
+    if dependencies is not None:
+        state = dependencies.get(_EVENT_RUN_STATE)
+        if not isinstance(state, dict):
+            state = {}
+            dependencies[_EVENT_RUN_STATE] = state
+        return cast(dict[str, Any], state)
+    session_state = run_context.session_state
+    if session_state is None:
+        session_state = {}
+        run_context.session_state = session_state
+    state = session_state.get(_EVENT_RUN_STATE)
+    if not isinstance(state, dict) or state.get("run_id") != run_context.run_id:
+        state = {"run_id": run_context.run_id}
+        session_state[_EVENT_RUN_STATE] = state
+    return cast(dict[str, Any], state)
+
+
+def _batch(run_context: RunContext) -> EventExtractionBatch:
+    payload = _event_run_state(run_context).get(_BATCH)
+    if payload is None:
+        raise ValueError("run-scoped Event extraction batch is missing")
+    return EventExtractionBatch.model_validate(payload)
+
+
 def _event_draft_from_content(content: Any) -> EventExtractionDraft:
-    """Normalize the one recoverable LLM contract violation without losing the batch."""
+    """Normalize recoverable Candidate defects without weakening the formal contract."""
 
     if isinstance(content, EventExtractionDraft):
         return content
@@ -122,61 +199,50 @@ def _event_draft_from_content(content: Any) -> EventExtractionDraft:
                 for error in exc.errors()
             )
             evidence_ids = item.get("evidence_ids") if isinstance(item, dict) else None
-            if not isinstance(evidence_ids, list) or not evidence_ids:
-                raise
             reason = "missing_reliable_time" if missing_time else "invalid_event_semantics"
-            dispositions.extend(
-                EventDisposition(evidence_id=evidence_id, reason=reason) for evidence_id in evidence_ids
-            )
-    dispositions.extend(EventDisposition.model_validate(item) for item in no_event_payload)
+            if isinstance(evidence_ids, list):
+                for evidence_id in evidence_ids:
+                    try:
+                        dispositions.append(EventDisposition(evidence_id=evidence_id, reason=reason))
+                    except ValidationError:
+                        continue
+    for item in no_event_payload:
+        try:
+            dispositions.append(EventDisposition.model_validate(item))
+        except ValidationError:
+            continue
     return EventExtractionDraft(candidates=candidates, no_event=dispositions)
-
-
-async def extract_events(step_input: StepInput) -> StepOutput:
-    """Claim Evidence, run semantic extraction when needed, and freeze one draft."""
-
-    del step_input
-    batch = claim_event_batch()
-    if batch is None:
-        return StepOutput(content=EventExtractionIdle(), stop=True)
-    if isinstance(batch, EventExtractionBusy):
-        return StepOutput(content=batch, stop=True)
-    try:
-        renew_event_batch_lease(batch)
-        if batch.needs_analysis:
-            content = await event_workflow_runtime().extract(batch)
-            try:
-                draft = _event_draft_from_content(content)
-            except (ValidationError, ValueError, TypeError, json.JSONDecodeError):
-                draft = EventExtractionDraft(
-                    candidates=[],
-                    no_event=[
-                        EventDisposition(
-                            evidence_id=evidence.id,
-                            reason="noncompliant_event_extraction",
-                        )
-                        for evidence in batch.evidences
-                    ],
-                )
-            freeze_draft(batch, _validate_partition(batch, draft))
-        renew_event_batch_lease(batch)
-        return StepOutput(content=batch)
-    except Exception as exc:
-        release_event_batch_lease(batch)
-        _raise_stage_failure("EVENT_EXTRACTION", batch.batch_id, exc)
 
 
 def _validate_partition(batch: EventExtractionBatch, draft: EventExtractionDraft) -> EventExtractionDraft:
     expected = {item.id for item in batch.evidences}
+    occurrence_merged: list[EventCandidateSubmission] = []
+    for candidate in draft.candidates:
+        duplicate_index = next(
+            (
+                index
+                for index, existing in enumerate(occurrence_merged)
+                if same_occurrence(candidate.event, existing.event)
+            ),
+            None,
+        )
+        if duplicate_index is None:
+            occurrence_merged.append(candidate)
+            continue
+        existing = occurrence_merged[duplicate_index]
+        occurrence_merged[duplicate_index] = existing.model_copy(
+            update={"evidence_ids": sorted(set(existing.evidence_ids) | set(candidate.evidence_ids))}
+        )
+
     candidate_counts = Counter(
         evidence_id
-        for candidate in draft.candidates
+        for candidate in occurrence_merged
         for evidence_id in candidate.evidence_ids
         if evidence_id in expected
     )
     ambiguous = {evidence_id for evidence_id, count in candidate_counts.items() if count > 1}
     normalized_candidates: list[EventCandidateSubmission] = []
-    for candidate in draft.candidates:
+    for candidate in occurrence_merged:
         retained = sorted(
             evidence_id
             for evidence_id in candidate.evidence_ids
@@ -196,10 +262,7 @@ def _validate_partition(batch: EventExtractionBatch, draft: EventExtractionDraft
             reason="ambiguous_candidate_assignment",
         )
     for evidence_id in expected - candidate_ids - set(dispositions_by_id):
-        dispositions_by_id[evidence_id] = EventDisposition(
-            evidence_id=evidence_id,
-            reason="unassigned_by_model",
-        )
+        dispositions_by_id[evidence_id] = EventDisposition(evidence_id=evidence_id, reason="unassigned_by_model")
     return EventExtractionDraft(
         candidates=normalized_candidates,
         no_event=[dispositions_by_id[evidence_id] for evidence_id in sorted(dispositions_by_id)],
@@ -216,18 +279,248 @@ def _candidate_key(candidate: EventCandidateSubmission) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-async def publish_events(step_input: StepInput) -> StepOutput:
-    """Resolve, publish and project frozen Candidates through the local runtime."""
-    batch = _model_from_content(EventExtractionBatch, _previous_content(step_input))
+def _recover_pre_v8_publication_checkpoints(batch: EventExtractionBatch) -> None:
+    """Rebuild missing identity decisions from durable pre-v8 publication ACKs.
+
+    Older pending batches could contain a Data or Graphiti checkpoint without a
+    separate resolution journal. Re-running identity after that external write
+    can relabel the Candidate as a duplicate and skip its unfinished Episode.
+    """
+
+    draft_keys = {_candidate_key(candidate) for candidate in load_draft(batch.batch_id).candidates}
+    publication_records = load_publication_journal(batch.batch_id).publications
+    if any(record.candidate_key not in draft_keys for record in publication_records):
+        raise ValueError("legacy Event publication checkpoint does not belong to the frozen draft")
+    resolutions = {item.candidate_key: item for item in load_resolution_journal(batch.batch_id).resolutions}
+    resolved = set(resolutions)
+    for publication in publication_records:
+        if publication.candidate_key in resolved:
+            resolution = resolutions[publication.candidate_key]
+            compatible = publication.decision == resolution.decision or (
+                publication.decision == "FAILED"
+                and resolution.decision in {"NEW_EVENT", "RELATED_BUT_DISTINCT", "IGNORED"}
+            )
+            if not compatible or publication.matched_event_ids != resolution.matched_event_ids:
+                raise ValueError("durable Event publication checkpoint conflicts with its frozen resolution")
+            continue
+        decision = publication.decision if publication.decision != "FAILED" else "IGNORED"
+        matched_event_ids = list(publication.matched_event_ids)
+        if decision == "SAME_EVENT" and not matched_event_ids and publication.event_id is not None:
+            matched_event_ids = [publication.event_id]
+        if decision == "NEW_EVENT":
+            matched_event_ids = []
+        freeze_resolution(
+            batch,
+            EventResolutionRecord(
+                candidate_key=publication.candidate_key,
+                decision=decision,
+                atomic=True,
+                matched_event_ids=matched_event_ids,
+                reason_codes=publication.reason_codes or ["RECOVERED_PUBLICATION_CHECKPOINT"],
+                summary="Recovered from a durable pre-v8 publication checkpoint.",
+            ),
+        )
+        resolved.add(publication.candidate_key)
+
+
+async def prepare_event_extraction(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Claim one bounded batch and expose it directly to the Event Extractor Agent."""
+
+    del step_input
+    claimed = claim_event_batch()
+    if claimed is None:
+        return StepOutput(content=EventExtractionIdle(), stop=True)
+    if isinstance(claimed, EventExtractionBusy):
+        return StepOutput(content=claimed, stop=True)
+    try:
+        renew_event_batch_lease(claimed)
+        if not claimed.needs_analysis:
+            _recover_pre_v8_publication_checkpoints(claimed)
+        _event_run_state(run_context)[_BATCH] = claimed.model_dump(mode="json")
+        return StepOutput(content=claimed)
+    except Exception as exc:
+        release_event_batch_lease(claimed)
+        _raise_stage_failure("EVENT_PREPARATION", claimed.batch_id, exc)
+
+
+def event_extraction_required(step_input: StepInput, run_context: RunContext) -> bool:
+    """Skip the semantic Agent when a crash-safe draft already exists."""
+
+    del step_input
+    return _batch(run_context).needs_analysis
+
+
+def freeze_event_extraction(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Validate the direct Agent output and freeze a complete Evidence partition."""
+
+    batch = _batch(run_context)
+    predecessor = _direct_predecessor(step_input)
+    try:
+        if not predecessor.success:
+            raise RuntimeError("Event Extractor Agent did not complete")
+        try:
+            draft = _event_draft_from_content(predecessor.content)
+        except (ValidationError, ValueError, TypeError, json.JSONDecodeError):
+            draft = EventExtractionDraft(
+                candidates=[],
+                no_event=[
+                    EventDisposition(evidence_id=evidence.id, reason="noncompliant_event_extraction")
+                    for evidence in batch.evidences
+                ],
+            )
+        frozen = freeze_draft(batch, _validate_partition(batch, draft))
+        renew_event_batch_lease(batch)
+        return StepOutput(content=frozen)
+    except Exception as exc:
+        release_event_batch_lease(batch)
+        _raise_stage_failure("EVENT_EXTRACTION", batch.batch_id, exc)
+
+
+def has_pending_event_resolution(step_input: StepInput, run_context: RunContext) -> bool:
+    """Run the identity phase only while frozen Candidates remain unresolved."""
+
+    del step_input
+    batch = _batch(run_context)
+    draft = load_draft(batch.batch_id)
+    resolved = {item.candidate_key for item in load_resolution_journal(batch.batch_id).resolutions}
+    return any(_candidate_key(candidate) not in resolved for candidate in draft.candidates)
+
+
+async def prepare_event_resolution(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Freeze one bounded identity request before invoking the Event Identity Agent."""
+
+    del step_input
+    batch = _batch(run_context)
     try:
         renew_event_batch_lease(batch)
         draft = load_draft(batch.batch_id)
+        resolved = {item.candidate_key for item in load_resolution_journal(batch.batch_id).resolutions}
+        pending = [(candidate, _candidate_key(candidate)) for candidate in draft.candidates]
+        candidate, key = next(item for item in pending if item[1] not in resolved)
+        prepared = {item.candidate_key: item for item in load_identity_request_journal(batch.batch_id).requests}.get(
+            key
+        )
+        if prepared is None:
+            history = await event_workflow_runtime().retrieve_history(candidate)
+            prepared = freeze_identity_request(
+                batch,
+                EventIdentityRequest(
+                    candidate_key=key,
+                    candidate=candidate,
+                    historical_candidates=history,
+                ),
+            )
+        _event_run_state(run_context)[_IDENTITY_REQUEST] = prepared.model_dump(mode="json")
+        renew_event_batch_lease(batch)
+        return StepOutput(content=prepared)
+    except Exception as exc:
+        release_event_batch_lease(batch)
+        _raise_stage_failure("EVENT_IDENTITY_PREPARATION", batch.batch_id, exc)
+
+
+def _validated_resolution(request: EventIdentityRequest, content: Any) -> EventResolutionRecord:
+    history_by_id = {item.id: item for item in request.historical_candidates}
+    exact_ids = sorted(
+        item.id
+        for item in request.historical_candidates
+        if same_occurrence(
+            EventCandidateDTO.model_validate(request.candidate.event.model_dump(mode="json")),
+            item.event,
+        )
+    )
+    if len(exact_ids) > 1:
+        return EventResolutionRecord(
+            candidate_key=request.candidate_key,
+            decision="IGNORED",
+            atomic=True,
+            matched_event_ids=exact_ids,
+            reason_codes=["MULTIPLE_STRONG_EVENT_MATCHES"],
+            summary="Multiple exact historical Event identities conflict.",
+        )
+    if len(exact_ids) == 1:
+        return EventResolutionRecord(
+            candidate_key=request.candidate_key,
+            decision="SAME_EVENT",
+            atomic=True,
+            matched_event_ids=exact_ids,
+            reason_codes=["SAME_REAL_WORLD_OCCURRENCE"],
+            summary="The exact formal Event occurrence already exists.",
+        )
+    try:
+        decision = _model_from_content(EventIdentityDecision, content)
+        if not set(decision.matched_event_ids) <= set(history_by_id):
+            raise ValueError("Event Identity referenced a historical Event outside the frozen request")
+        return EventResolutionRecord(candidate_key=request.candidate_key, **decision.model_dump())
+    except (ValidationError, ValueError, TypeError, json.JSONDecodeError):
+        return EventResolutionRecord(
+            candidate_key=request.candidate_key,
+            decision="IGNORED",
+            atomic=False,
+            matched_event_ids=[],
+            reason_codes=["NONCOMPLIANT_IDENTITY_OUTPUT"],
+            summary="The Event Identity Agent output did not satisfy the frozen contract.",
+        )
+
+
+def persist_event_resolution(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Freeze one validated identity decision without any external side effect."""
+
+    batch = _batch(run_context)
+    predecessor = _direct_predecessor(step_input)
+    try:
+        if not predecessor.success:
+            raise RuntimeError("Event Identity Agent did not complete")
+        payload = _event_run_state(run_context).get(_IDENTITY_REQUEST)
+        if payload is None:
+            raise ValueError("run-scoped Event Identity request is missing")
+        request = EventIdentityRequest.model_validate(payload)
+        freeze_resolution(batch, _validated_resolution(request, predecessor.content))
+        renew_event_batch_lease(batch)
+        total = len(load_draft(batch.batch_id).candidates)
+        processed = len(load_resolution_journal(batch.batch_id).resolutions)
+        return StepOutput(
+            content=EventWorkflowProgress(
+                phase="RESOLVE_EVENTS",
+                processed=processed,
+                total=total,
+                done=processed == total,
+            )
+        )
+    except Exception as exc:
+        release_event_batch_lease(batch)
+        _raise_stage_failure("EVENT_IDENTITY", batch.batch_id, exc)
+
+
+def event_resolution_complete(iteration_outputs: list[StepOutput]) -> bool:
+    return _phase_complete(iteration_outputs, "RESOLVE_EVENTS")
+
+
+def _phase_complete(iteration_outputs: list[StepOutput], phase: str) -> bool:
+    for output in reversed(iteration_outputs):
+        candidates = [output, *(reversed(output.steps or []))]
+        for candidate in candidates:
+            try:
+                progress = _model_from_content(EventWorkflowProgress, candidate.content)
+            except (ValidationError, ValueError, TypeError, json.JSONDecodeError):
+                continue
+            if progress.phase == phase:
+                return bool(progress.done)
+    return False
+
+
+async def publish_events(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Apply frozen resolutions, then checkpoint Data and native Event Episode writes."""
+
+    del step_input
+    batch = _batch(run_context)
+    try:
+        renew_event_batch_lease(batch)
+        draft = load_draft(batch.batch_id)
+        resolutions = {item.candidate_key: item for item in load_resolution_journal(batch.batch_id).resolutions}
         journal = load_publication_journal(batch.batch_id)
-        completed = {item.candidate_key: item for item in journal.publications}
-        ordered_keys = [_candidate_key(candidate) for candidate in draft.candidates]
-        if not set(completed) <= set(ordered_keys):
-            raise ValueError("Event publication journal contains an unknown Candidate key")
-        runtime = event_workflow_runtime()
+        ordered = [(candidate, _candidate_key(candidate)) for candidate in draft.candidates]
+        if set(resolutions) != {key for _, key in ordered}:
+            raise ValueError("every Event Candidate must have one frozen resolution before publication")
 
         def checkpoint(record: EventPublicationRecord) -> None:
             nonlocal journal
@@ -235,59 +528,425 @@ async def publish_events(step_input: StepInput) -> StepOutput:
             records[record.candidate_key] = record
             journal = EventPublicationJournal(
                 batch_id=batch.batch_id,
-                publications=[records[key] for key in ordered_keys if key in records],
+                publications=[records[key] for _, key in ordered if key in records],
             )
-            write_publication_journal(journal)
+            write_publication_journal(batch, journal)
 
-        for candidate, key in zip(draft.candidates, ordered_keys, strict=True):
-            existing = completed.get(key)
-            if existing is not None and existing.decision in {"SAME_EVENT", "IGNORED", "FAILED"}:
-                continue
-            if existing is not None and existing.graph_projection_status == "SUCCEEDED":
+        runtime = event_workflow_runtime()
+        for candidate, key in ordered:
+            resolution = resolutions[key]
+            existing = {item.candidate_key: item for item in journal.publications}.get(key)
+            if existing is not None and (
+                existing.decision in {"SAME_EVENT", "IGNORED", "FAILED"}
+                or existing.graph_projection_status == "SUCCEEDED"
+            ):
                 continue
             renew_event_batch_lease(batch)
-            record = await runtime.publish(
-                candidate,
-                key,
-                existing=existing,
-                checkpoint=checkpoint,
-            )
-            checkpoint(record)
+            if resolution.decision == "SAME_EVENT":
+                checkpoint(
+                    EventPublicationRecord(
+                        candidate_key=key,
+                        decision="SAME_EVENT",
+                        event_id=resolution.matched_event_ids[0],
+                        event_created=False,
+                        evidence_link_result="IGNORED",
+                        graph_projection_status="IGNORED",
+                        reason_codes=resolution.reason_codes,
+                        matched_event_ids=resolution.matched_event_ids,
+                    )
+                )
+                continue
+            if resolution.decision == "IGNORED":
+                checkpoint(
+                    EventPublicationRecord(
+                        candidate_key=key,
+                        decision="IGNORED",
+                        event_id=None,
+                        event_created=False,
+                        evidence_link_result="NOT_ATTEMPTED",
+                        graph_projection_status="NOT_ATTEMPTED",
+                        reason_codes=resolution.reason_codes,
+                        matched_event_ids=resolution.matched_event_ids,
+                    )
+                )
+                continue
+            try:
+                checkpoint(
+                    await runtime.publish(
+                        candidate,
+                        key,
+                        resolution,
+                        existing=existing,
+                        checkpoint=checkpoint,
+                    )
+                )
+            except PublicationRejected:
+                checkpoint(
+                    EventPublicationRecord(
+                        candidate_key=key,
+                        decision="FAILED",
+                        publication_started=True,
+                        event_id=None,
+                        event_created=False,
+                        evidence_link_result="NOT_ATTEMPTED",
+                        graph_projection_status="NOT_ATTEMPTED",
+                        reason_codes=["DATA_PUBLICATION_REJECTED"],
+                        matched_event_ids=resolution.matched_event_ids,
+                    )
+                )
             renew_event_batch_lease(batch)
-            completed[key] = record
-        return StepOutput(content=EventPublicationStageResult(batch=batch, journal=journal))
+        return StepOutput(content=journal)
     except Exception as exc:
         release_event_batch_lease(batch)
         _raise_stage_failure("EVENT_PUBLICATION", batch.batch_id, exc)
 
 
-async def build_signals(step_input: StepInput) -> StepOutput:
-    """Build Signal Facts for newly projected Events and complete the frozen batch."""
-    stage = _model_from_content(EventPublicationStageResult, _previous_content(step_input))
-    batch = stage.batch
+def has_pending_signal_analysis(step_input: StepInput, run_context: RunContext) -> bool:
+    """Analyze only successfully projected Events created by this frozen batch."""
+
+    del step_input
+    batch = _batch(run_context)
+    projected = {
+        item.event_id
+        for item in load_publication_journal(batch.batch_id).publications
+        if item.event_created
+        and item.event_id is not None
+        and item.graph_projection_status == "SUCCEEDED"
+        and item.published_event is not None
+    }
+    terminal = _terminal_signal_event_ids(batch.batch_id)
+    return bool(projected - terminal)
+
+
+def _terminal_signal_event_ids(batch_id: str) -> set[str]:
+    """Recognize both current analysis records and legacy terminal Signal records."""
+
+    return {
+        *(item.event_id for item in load_signal_analysis_journal(batch_id).analyses),
+        *(item.event_id for item in load_signal_journal(batch_id).signals),
+    }
+
+
+def _analysis_input(publication: EventPublicationRecord) -> EventAnalysisInput:
+    if publication.published_event is None or publication.episode_uuid is None:
+        raise ValueError("Signal analysis requires a projected formal Event")
+    historical = HistoricalEvent(
+        id=publication.published_event.id,
+        event=EventCandidateDTO.model_validate(publication.published_event.event.model_dump(mode="json")),
+    )
+    return EventAnalysisInput(event=historical, episode_uuid=publication.episode_uuid, reference_time=datetime.now(UTC))
+
+
+async def prepare_signal_task(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Prepare either classification or proposal work for one projected Event."""
+
+    del step_input
+    batch = _batch(run_context)
+    try:
+        renew_event_batch_lease(batch)
+        publications = [
+            item
+            for item in load_publication_journal(batch.batch_id).publications
+            if item.event_created
+            and item.event_id is not None
+            and item.graph_projection_status == "SUCCEEDED"
+            and item.published_event is not None
+        ]
+        terminal = _terminal_signal_event_ids(batch.batch_id)
+        publication = next(item for item in publications if item.event_id not in terminal)
+        assert publication.event_id is not None
+        prepared = {item.event.id: item for item in load_signal_preparation_journal(batch.batch_id).analyses}.get(
+            publication.event_id
+        )
+        if prepared is None:
+            prepared = freeze_signal_preparation(batch, _analysis_input(publication))
+        classified = {
+            item.event_id: item for item in load_signal_classification_journal(batch.batch_id).classifications
+        }.get(publication.event_id)
+        request: EventSignalClassificationRequest | EventSignalAnalysisRequest
+        if classified is None:
+            request = EventSignalClassificationRequest(analysis=prepared)
+        else:
+            candidate_set = {
+                item.event_id: item for item in load_signal_candidate_journal(batch.batch_id).candidates
+            }.get(publication.event_id)
+            if candidate_set is None:
+                candidate_set = freeze_signal_candidates(
+                    batch,
+                    EventSignalCandidateRecord(
+                        event_id=publication.event_id,
+                        candidates=await event_workflow_runtime().retrieve_signal_candidates(
+                            prepared,
+                            classified.classification,
+                        ),
+                    ),
+                )
+            request = EventSignalAnalysisRequest(
+                analysis=prepared,
+                classification=classified.classification,
+                candidates=candidate_set.candidates,
+            )
+        _event_run_state(run_context)[_SIGNAL_REQUEST] = request.model_dump(mode="json")
+        renew_event_batch_lease(batch)
+        return StepOutput(content=request)
+    except Exception as exc:
+        release_event_batch_lease(batch)
+        _raise_stage_failure("SIGNAL_PREPARATION", batch.batch_id, exc)
+
+
+def _signal_request(run_context: RunContext) -> EventSignalClassificationRequest | EventSignalAnalysisRequest:
+    payload = _event_run_state(run_context).get(_SIGNAL_REQUEST)
+    if not isinstance(payload, dict):
+        raise ValueError("run-scoped Event Signal request is missing")
+    if payload.get("task") == "CLASSIFY":
+        return EventSignalClassificationRequest.model_validate(payload)
+    return EventSignalAnalysisRequest.model_validate(payload)
+
+
+def _noncompliant_signal(
+    event_id: str,
+    classification: EventClassification | None = None,
+) -> EventSignalAnalysisRecord:
+    return EventSignalAnalysisRecord(
+        event_id=event_id,
+        status="NONCOMPLIANT",
+        classification=classification,
+        proposals=[],
+        reason_codes=["NONCOMPLIANT_SIGNAL_OUTPUT"],
+    )
+
+
+def _persist_classification(
+    batch: EventExtractionBatch,
+    request: EventSignalClassificationRequest,
+    content: Any,
+) -> None:
+    try:
+        draft = _model_from_content(EventSignalAnalysisDraft, content)
+        if draft.proposals:
+            raise ValueError("classification pass cannot propose Signals")
+        if draft.no_signal_reason is not None:
+            raise ValueError("classification pass cannot decide that no Signal exists")
+    except (ValidationError, ValueError, TypeError, json.JSONDecodeError):
+        freeze_signal_analysis(batch, _noncompliant_signal(request.analysis.event.id))
+        return
+    freeze_signal_classification(
+        batch,
+        EventSignalClassificationRecord(
+            event_id=request.analysis.event.id,
+            classification=draft.classification,
+        ),
+    )
+
+
+async def _validated_signal_analysis(
+    request: EventSignalAnalysisRequest,
+    content: Any,
+) -> EventSignalAnalysisRecord:
+    event_id = request.analysis.event.id
+    try:
+        draft = _model_from_content(EventSignalAnalysisDraft, content)
+        if draft.classification != request.classification:
+            raise ValueError("Signal Agent changed the frozen Event classification")
+        if draft.proposals and draft.no_signal_reason is not None:
+            raise ValueError("Signal proposals cannot coexist with a no-Signal reason")
+        if not draft.proposals and not (draft.no_signal_reason or "").strip():
+            raise ValueError("an empty Signal proposal set requires a no-Signal reason")
+    except (ValidationError, ValueError, TypeError, json.JSONDecodeError):
+        return _noncompliant_signal(event_id, request.classification)
+
+    anchors = {item.uuid: item for item in request.candidates.anchors}
+    variables = {item.uuid: item for item in request.candidates.variables}
+    event_time = (
+        request.analysis.event.event.semantic.effective_at
+        or request.analysis.event.event.occurred_at
+        or request.analysis.event.event.announced_at
+    )
+    assert event_time is not None
+    assertion_modality = cast(
+        Literal["ACTUAL", "ANTICIPATED", "SOURCE_FORECAST", "ASSUMED"],
+        {"FACT": "ACTUAL", "PLAN": "ANTICIPATED", "SPEC": "ASSUMED"}[request.analysis.event.event.modality],
+    )
+    reviewer = ControlledSignalReviewer()
+    accepted: list[SignalProposal] = []
+    pairs: set[tuple[str, str]] = set()
+    reason_codes = set(draft.reason_codes)
+    for source in draft.proposals:
+        pair = (source.anchor_uuid, source.variable_uuid)
+        anchor = anchors.get(source.anchor_uuid)
+        variable = variables.get(source.variable_uuid)
+        if anchor is None or variable is None or pair in pairs:
+            reason_codes.add("SIGNAL_REVIEW_REJECTED")
+            continue
+        pairs.add(pair)
+        try:
+            proposal = source.proposal(event_time=event_time, assertion_modality=assertion_modality)
+        except (ValidationError, ValueError, TypeError):
+            reason_codes.add("SIGNAL_REVIEW_REJECTED")
+            continue
+        if not await reviewer.review(request.analysis, request.classification, proposal, variable, anchor):
+            reason_codes.add("SIGNAL_REVIEW_REJECTED")
+            continue
+        accepted.append(proposal)
+
+    if accepted:
+        status = "SUCCEEDED"
+        reason_codes.add("DIRECT_SIGNAL_FACTS_VALIDATED")
+    elif not request.candidates.anchors or not request.candidates.variables:
+        status = "NO_SUPPORTED_ANCHOR"
+        reason_codes.add("NO_SUPPORTED_ANCHOR")
+    else:
+        status = "NO_SIGNAL"
+        reason_codes.add("NO_DIRECT_SIGNAL")
+    return EventSignalAnalysisRecord(
+        event_id=event_id,
+        status=status,
+        classification=request.classification,
+        proposals=accepted,
+        reason_codes=sorted(reason_codes),
+    )
+
+
+async def persist_signal_task(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Freeze classification/candidates or a terminal validated Signal analysis."""
+
+    batch = _batch(run_context)
+    predecessor = _direct_predecessor(step_input)
+    try:
+        if not predecessor.success:
+            raise RuntimeError("Event Signal Analyst Agent did not complete")
+        request = _signal_request(run_context)
+        if isinstance(request, EventSignalClassificationRequest):
+            _persist_classification(batch, request, predecessor.content)
+        else:
+            freeze_signal_analysis(
+                batch,
+                await _validated_signal_analysis(request, predecessor.content),
+            )
+        renew_event_batch_lease(batch)
+        total = sum(
+            item.event_created and item.graph_projection_status == "SUCCEEDED"
+            for item in load_publication_journal(batch.batch_id).publications
+        )
+        processed = len(_terminal_signal_event_ids(batch.batch_id))
+        return StepOutput(
+            content=EventWorkflowProgress(
+                phase="ANALYZE_SIGNALS",
+                processed=processed,
+                total=total,
+                done=processed == total,
+            )
+        )
+    except Exception as exc:
+        release_event_batch_lease(batch)
+        _raise_stage_failure("SIGNAL_ANALYSIS", batch.batch_id, exc)
+
+
+def signal_analysis_complete(iteration_outputs: list[StepOutput]) -> bool:
+    return _phase_complete(iteration_outputs, "ANALYZE_SIGNALS")
+
+
+def _proposal_key(event_id: str, proposal: SignalProposal) -> str:
+    encoded = json.dumps(
+        {"event_id": event_id, "proposal": proposal.model_dump(mode="json")},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+async def publish_signals(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Project validated Signals with per-Fact acknowledgements, then complete the batch."""
+
+    del step_input
+    batch = _batch(run_context)
     try:
         renew_event_batch_lease(batch)
         draft = load_draft(batch.batch_id)
         publications = load_publication_journal(batch.batch_id)
+        analyses = load_signal_analysis_journal(batch.batch_id)
+        preparations = {item.event.id: item for item in load_signal_preparation_journal(batch.batch_id).analyses}
+        classifications = {
+            item.event_id: item for item in load_signal_classification_journal(batch.batch_id).classifications
+        }
+        candidate_sets = {item.event_id: item for item in load_signal_candidate_journal(batch.batch_id).candidates}
         signals = load_signal_journal(batch.batch_id)
-        completed = {item.event_id: item for item in signals.signals}
+        terminal = {item.event_id: item for item in signals.signals}
         runtime = event_workflow_runtime()
-        for publication in publications.publications:
-            if not publication.event_created or publication.published_event is None:
+
+        for analysis in analyses.analyses:
+            if analysis.event_id in terminal:
                 continue
-            if publication.graph_projection_status != "SUCCEEDED" or publication.episode_uuid is None:
-                raise ValueError("new Event must be projected before Signal construction")
-            assert publication.event_id is not None
-            if publication.event_id in completed:
-                continue
-            renew_event_batch_lease(batch)
-            signal = await runtime.construct_signals(publication)
-            completed[signal.event_id] = signal
+            fact_uuids: list[str] = []
+            signal_reason_codes = set(analysis.reason_codes)
+            if analysis.status == "SUCCEEDED":
+                prepared = preparations[analysis.event_id]
+                classified = classifications[analysis.event_id]
+                candidates = candidate_sets[analysis.event_id].candidates
+                anchors = {item.uuid: item for item in candidates.anchors}
+                variables = {item.uuid: item for item in candidates.variables}
+                projected = {
+                    (item.event_id, item.proposal_key): item
+                    for item in load_signal_projection_journal(batch.batch_id).projections
+                }
+                for proposal in analysis.proposals:
+                    key = _proposal_key(analysis.event_id, proposal)
+                    record = projected.get((analysis.event_id, key))
+                    if record is None:
+                        renew_event_batch_lease(batch)
+                        try:
+                            fact_uuid = await runtime.project_signal(
+                                prepared,
+                                classified.classification,
+                                variables[proposal.variable_uuid],
+                                anchors[proposal.anchor_uuid],
+                                proposal,
+                            )
+                            pending_record = EventSignalProjectionRecord(
+                                event_id=analysis.event_id,
+                                proposal_key=key,
+                                status="SUCCEEDED",
+                                fact_uuid=fact_uuid,
+                            )
+                        except PermanentEventAnalysisFailure:
+                            pending_record = EventSignalProjectionRecord(
+                                event_id=analysis.event_id,
+                                proposal_key=key,
+                                status="REJECTED",
+                                reason_code="PERMANENT_SIGNAL_PROJECTION_REJECTED",
+                            )
+                        record = freeze_signal_projection(
+                            batch,
+                            pending_record,
+                        )
+                        projected[(analysis.event_id, key)] = record
+                        renew_event_batch_lease(batch)
+                    if record.status == "SUCCEEDED":
+                        assert record.fact_uuid is not None
+                        fact_uuids.append(record.fact_uuid)
+                    else:
+                        assert record.reason_code is not None
+                        signal_reason_codes.add(record.reason_code)
+            if analysis.status == "SUCCEEDED":
+                public_status = "SUCCEEDED" if fact_uuids else "NO_SIGNAL"
+                if not fact_uuids:
+                    signal_reason_codes.add("NO_PROJECTABLE_SIGNAL")
+            elif analysis.status in {"NO_SIGNAL", "NO_SUPPORTED_ANCHOR"}:
+                public_status = analysis.status
+            else:
+                public_status = "NO_SIGNAL"
+            terminal[analysis.event_id] = EventSignalRecord(
+                event_id=analysis.event_id,
+                status=public_status,
+                signal_fact_uuids=sorted(fact_uuids),
+                reason_codes=sorted(signal_reason_codes),
+            )
             signals = EventSignalJournal(
                 batch_id=batch.batch_id,
-                signals=[completed[key] for key in sorted(completed)],
+                signals=[terminal[key] for key in sorted(terminal)],
             )
-            write_signal_journal(signals)
+            write_signal_journal(batch, signals)
             renew_event_batch_lease(batch)
 
         publications_by_key = {item.candidate_key: item for item in publications.publications}
@@ -322,4 +981,4 @@ async def build_signals(step_input: StepInput) -> StepOutput:
         return StepOutput(content=result)
     except Exception as exc:
         release_event_batch_lease(batch)
-        _raise_stage_failure("SIGNAL_CONSTRUCTION", batch.batch_id, exc)
+        _raise_stage_failure("SIGNAL_PUBLICATION", batch.batch_id, exc)

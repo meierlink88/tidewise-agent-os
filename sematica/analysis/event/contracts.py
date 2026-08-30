@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from sematica.ingestion.episcode.event.contracts import HistoricalEvent
 from sematica.ontology.enums import AnalysisAnchorType, VariableGroup
 
+MAX_CANDIDATE_VARIABLES = 64
+
 
 class EventClass(StrEnum):
     GEOPOLITICAL = "GEOPOLITICAL"
@@ -92,7 +94,7 @@ class CandidateSet(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     anchors: list[AnchorCandidate] = Field(max_length=30)
-    variables: list[VariableCandidate]
+    variables: list[VariableCandidate] = Field(max_length=MAX_CANDIDATE_VARIABLES)
 
 
 class SignalProposal(BaseModel):
@@ -186,14 +188,6 @@ class SignalFactAttributes(BaseModel):
     methodology_version: str = Field(min_length=1)
 
 
-class SignalProposalBatch(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    proposals: list[SignalProposal] = Field(max_length=12)
-    no_signal_reason: str | None = Field(default=None, max_length=1000)
-    reason_codes: list[str] = Field(default_factory=list, max_length=24)
-
-
 class SignalDetailDraft(BaseModel):
     """Small LLM contract for one already-grounded Variable/Anchor pair."""
 
@@ -267,35 +261,3 @@ class DirectSignalDraft(SignalDetailDraft):
             mechanism_confidence=self.mechanism_confidence,
             temporal_confidence=self.temporal_confidence,
         )
-
-
-class AnchorSignalSelection(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    has_signal: bool
-    variable_key: str | None = Field(default=None, pattern=r"^V[1-9][0-9]*$")
-    rationale: str = Field(min_length=1, max_length=500)
-
-    @model_validator(mode="after")
-    def selected_variable_matches_decision(self) -> AnchorSignalSelection:
-        if self.has_signal != (self.variable_key is not None):
-            raise ValueError("variable_key must exist exactly when has_signal is true")
-        return self
-
-
-class SignalCritique(BaseModel):
-    """Independent semantic gate for directness and evidence support."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    accepted: bool
-    reason_codes: list[str] = Field(max_length=6)
-
-
-class EventAnalysisOutcome(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    status: Literal["SUCCEEDED", "NO_SIGNAL", "NO_SUPPORTED_ANCHOR"]
-    classification: EventClassification
-    signal_fact_uuids: list[str]
-    reason_codes: list[str]

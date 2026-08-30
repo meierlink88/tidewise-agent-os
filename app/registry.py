@@ -4,6 +4,8 @@ from agno.agent import Agent
 from agno.registry import Registry
 
 from agents.event_extractor import EVENT_EXTRACTOR_AGENT_ID, load_event_extractor_agent
+from agents.event_identity import EVENT_IDENTITY_AGENT_ID, load_event_identity_agent
+from agents.event_signal_analyst import EVENT_SIGNAL_ANALYST_AGENT_ID, load_event_signal_analyst_agent
 from agents.evidence_extractor import EVIDENCE_EXTRACTOR_AGENT_ID, load_evidence_extractor_agent
 from agents.investment_reasoner import INVESTMENT_REASONER_AGENT_ID, load_investment_reasoner_agent
 from agents.investment_reviewer import INVESTMENT_REVIEWER_AGENT_ID, load_investment_reviewer_agent
@@ -28,12 +30,26 @@ from capabilities.event import (
     EventExtractionBatch,
     EventExtractionDraft,
     EventExtractionResult,
-    EventPublicationStageResult,
+    EventIdentityDecision,
+    EventIdentityRequest,
+    EventSignalAnalysisDraft,
+    EventSignalAnalysisRequest,
+    EventSignalClassificationRequest,
 )
 from capabilities.event.functions import (
-    build_signals,
-    extract_events,
+    event_extraction_required,
+    event_resolution_complete,
+    freeze_event_extraction,
+    has_pending_event_resolution,
+    has_pending_signal_analysis,
+    persist_event_resolution,
+    persist_signal_task,
+    prepare_event_extraction,
+    prepare_event_resolution,
+    prepare_signal_task,
     publish_events,
+    publish_signals,
+    signal_analysis_complete,
 )
 from capabilities.evidence import (
     EvidenceAnalysisRequest,
@@ -92,7 +108,11 @@ class TidewiseRegistry(Registry):
         if agent_id == EVIDENCE_EXTRACTOR_AGENT_ID:
             return load_evidence_extractor_agent(self)
         if agent_id == EVENT_EXTRACTOR_AGENT_ID:
-            return load_event_extractor_agent(self)
+            return load_event_extractor_agent(self).agent
+        if agent_id == EVENT_IDENTITY_AGENT_ID:
+            return load_event_identity_agent(self).agent
+        if agent_id == EVENT_SIGNAL_ANALYST_AGENT_ID:
+            return load_event_signal_analyst_agent(self).agent
         if agent_id == INVESTMENT_REASONER_AGENT_ID:
             return load_investment_reasoner_agent(self)
         if agent_id == INVESTMENT_REVIEWER_AGENT_ID:
@@ -118,7 +138,11 @@ registry = TidewiseRegistry(
         EventExtractionBatch,
         EventExtractionDraft,
         EventExtractionResult,
-        EventPublicationStageResult,
+        EventIdentityRequest,
+        EventIdentityDecision,
+        EventSignalClassificationRequest,
+        EventSignalAnalysisRequest,
+        EventSignalAnalysisDraft,
         InvestmentReasoningInput,
         InvestmentAnalysisContext,
         PreparedInvestmentContext,
@@ -146,9 +170,19 @@ registry = TidewiseRegistry(
         evidence_extraction_complete,
         curate_evidence,
         publish_evidence,
-        extract_events,
+        prepare_event_extraction,
+        event_extraction_required,
+        freeze_event_extraction,
+        has_pending_event_resolution,
+        prepare_event_resolution,
+        persist_event_resolution,
+        event_resolution_complete,
         publish_events,
-        build_signals,
+        has_pending_signal_analysis,
+        prepare_signal_task,
+        persist_signal_task,
+        signal_analysis_complete,
+        publish_signals,
         prepare_investment_context,
         analyze_geopolitical_impact,
         analyze_macro_impact,

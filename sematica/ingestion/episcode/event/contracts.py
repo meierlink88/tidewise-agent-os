@@ -18,14 +18,6 @@ EventStage = Literal[
     "EXPECTED",
 ]
 TimePrecision = Literal["INSTANT", "DAY", "MONTH", "QUARTER", "YEAR", "UNKNOWN"]
-Decision = Literal[
-    "SAME_EVENT",
-    "NEW_EVENT",
-    "RELATED_BUT_DISTINCT",
-    "IGNORED",
-    "FAILED",
-    "SAME_EVENT_REVISION",
-]
 
 
 class EventSemanticDTO(BaseModel):
@@ -112,40 +104,7 @@ class EventCandidateRequest(BaseModel):
         return values
 
 
-class EventResolutionOutcome(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    decision: Decision
-    event_id: str | None
-    event_created: bool
-    evidence_link_result: Literal["CREATED", "IGNORED", "NOT_ATTEMPTED"]
-    graph_projection_status: Literal["SUCCEEDED", "IGNORED", "NOT_ATTEMPTED"]
-    reason_codes: list[str]
-    matched_event_ids: list[str]
-
-
 class HistoricalEvent(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     id: str
     event: EventCandidateDTO
-
-
-class PairComparison(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    decision: Literal["SAME_EVENT", "RELATED_BUT_DISTINCT", "NEEDS_REVIEW", "SAME_EVENT_REVISION"]
-    same_actor: bool
-    same_action: bool
-    same_object: bool
-    same_stage: bool
-    same_occurrence_time: bool
-    material_conflicts: list[str]
-    reason_codes: list[str]
-    summary: str = Field(min_length=1, max_length=500)
-
-
-class AtomicityAssessment(BaseModel):
-    """Constrained model result for the one-real-world-action invariant."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    atomic: bool
-    reason_codes: list[str] = Field(min_length=1)
-    summary: str = Field(min_length=1, max_length=500)

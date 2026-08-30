@@ -63,6 +63,7 @@ class GraphitiSignalFactProjector:
         self._validate_variable(variable_node, variable)
         self._validate_anchor(anchor_node, anchor)
         self._validate_episode(episode, event)
+        await self._require_formal_event_episode(event)
 
         attributes = SignalFactAttributes(
             source_event_ids=[event.event.id],
@@ -111,10 +112,13 @@ class GraphitiSignalFactProjector:
         resolved = result.edges[0]
         if resolved.source_node_uuid != variable.uuid or resolved.target_node_uuid != anchor.uuid:
             raise PermanentEventAnalysisFailure("Graphiti resolved Signal Fact to unexpected endpoints")
+        if resolved.group_id != GRAPHITI_GROUP_ID:
+            raise PermanentEventAnalysisFailure("Graphiti resolved Signal Fact to an unexpected group")
 
         existing_source_ids = resolved.attributes.get("source_event_ids", [])
         if not isinstance(existing_source_ids, list):
             raise PermanentEventAnalysisFailure("resolved Signal Fact has invalid source_event_ids")
+        resolved.name = SIGNAL_RELATION_NAME
         resolved.attributes.update(attributes)
         resolved.attributes["source_event_ids"] = sorted(
             {str(value) for value in existing_source_ids} | {event.event.id}
@@ -175,6 +179,29 @@ class GraphitiSignalFactProjector:
             or fact_uuid not in row["entity_edges"]
         ):
             raise PermanentEventAnalysisFailure("Signal provenance was not linked to the formal Event Episode")
+
+    async def _require_formal_event_episode(self, event: EventAnalysisInput) -> None:
+        """Validate Tidewise's extension fields before native add_triplet can write."""
+
+        records, _, _ = await self._graphiti.driver.execute_query(
+            """
+            /* signal_fact_require_formal_event_episode */
+            MATCH (episode:Episodic {
+                uuid: $episode_uuid,
+                group_id: $group_id,
+                episode_kind: 'EVENT',
+                domain_object_id: $event_id
+            })
+            WHERE episode.source_description = $source_description
+            RETURN episode.uuid AS uuid
+            """,
+            episode_uuid=event.episode_uuid,
+            event_id=event.event.id,
+            group_id=GRAPHITI_GROUP_ID,
+            source_description=EVENT_SOURCE_DESCRIPTION,
+        )
+        if len(records) != 1 or str(records[0]["uuid"]) != event.episode_uuid:
+            raise PermanentEventAnalysisFailure("Signal provenance requires formal Event Episode metadata")
 
     async def _existing_event_episode_ids(self, episode_uuids: list[str], *, current: EpisodicNode) -> list[str]:
         candidates = sorted(set(episode_uuids) | {current.uuid})

@@ -1,44 +1,74 @@
-"""Behavior tests for local Evidence to Reason Event Candidate handoff."""
+"""Vertical behavior tests for the Studio-managed five-phase Event Workflow."""
 
-import json
+from __future__ import annotations
+
+import asyncio
 import os
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import NAMESPACE_URL, uuid5
+from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
-from agno.registry import Registry
+from agno.agent import Agent
 from agno.run.agent import RunOutput
 from agno.run.base import RunStatus
-from agno.workflow import Step, StepInput, Workflow
+from agno.workflow import Step, Workflow
 
 from agents.event_extractor import (
     EVENT_EXTRACTOR_CONTRACT_VERSION,
-    build_event_extractor_agent,
+    LoadedEventExtractorAgent,
     ensure_event_extractor_agent,
 )
-from app.registry import TidewiseRegistry
+from agents.event_identity import (
+    EVENT_IDENTITY_CONTRACT_VERSION,
+    LoadedEventIdentityAgent,
+    ensure_event_identity_agent,
+)
+from agents.event_signal_analyst import (
+    EVENT_SIGNAL_ANALYST_CONTRACT_VERSION,
+    LoadedEventSignalAnalystAgent,
+    ensure_event_signal_analyst_agent,
+)
 from capabilities.event import (
     EventExtractionBatch,
     EventExtractionDraft,
     EventExtractionResult,
+    EventIdentityDecision,
+    EventIdentityRequest,
     EventPublicationRecord,
-    EventSignalRecord,
+    EventSignalAnalysisDraft,
+    EventSignalAnalysisRequest,
+    EventSignalClassificationRequest,
     configure_event_workflow_runtime,
 )
-from capabilities.event.functions import (
-    build_signals,
-    extract_events,
-    publish_events,
+from capabilities.event.functions import enqueue_evidence_artifact
+from capabilities.event.functions.extraction import _candidate_key
+from capabilities.event.internal.models import (
+    EventPublicationJournal,
+    EventResolutionRecord,
+    EventSignalJournal,
+    EventSignalRecord,
 )
-from capabilities.event.internal.local_runtime import LocalEventWorkflowRuntime
-from capabilities.event.internal.queue import enqueue_evidence_artifact, queue_counts
-from capabilities.event.internal.resolver import EventResolver
-from capabilities.event.internal.storage import claim_event_batch, freeze_draft
+from capabilities.event.internal.storage import (
+    claim_event_batch,
+    freeze_draft,
+    freeze_resolution,
+    release_event_batch_lease,
+    write_publication_journal,
+    write_signal_journal,
+)
 from capabilities.evidence import ResolvedEvidence
-from sematica.ingestion.episcode.event.contracts import AtomicityAssessment, HistoricalEvent
+from sematica.analysis.event.contracts import (
+    AnchorCandidate,
+    CandidateSet,
+    DirectSignalDraft,
+    EventClassification,
+    VariableCandidate,
+)
+from sematica.analysis.event.errors import PermanentEventAnalysisFailure
+from sematica.ingestion.episcode.event.contracts import EventCandidateDTO, HistoricalEvent
 from workflows.event_extraction import (
     EVENT_EXTRACTION_CONTRACT_VERSION,
     _seed_workflow,
@@ -46,36 +76,209 @@ from workflows.event_extraction import (
 )
 
 
-class GraphWriteTracer:
-    """Stateful Episode writer seam exposing externally observable graph counts."""
+class FakeEventWorkflowRuntime:
+    """Stateful external-I/O seam for Data and native Graphiti operations."""
 
-    def __init__(self, *, counts: dict[str, int] | None = None, fail_after_first_write: bool = False) -> None:
-        self.counts = (
-            counts
-            if counts is not None
-            else {"event_episodes": 0, "mentions": 0, "ordinary_facts": 0, "signal_facts": 0}
+    EVENT_ID = "EVT15bec7e3-998c-5434-aa5d-29712c4c67cf"
+
+    def __init__(self) -> None:
+        self.history: list[HistoricalEvent] = []
+        self.signal_candidates = CandidateSet(anchors=[], variables=[])
+        self.fail_before_data_ack_checkpoint_once = False
+        self.fail_signal_candidate_read_once = False
+        self.permanent_signal_rejections: set[int] = set()
+        self._published_by_key: dict[str, Any] = {}
+        self.history_reads = 0
+        self.data_publication_requests = 0
+        self.data_publications = 0
+        self.episode_projections = 0
+        self.signal_candidate_reads = 0
+        self.signal_projection_attempts = 0
+        self.signal_projections = 0
+
+    async def retrieve_history(self, candidate) -> list[HistoricalEvent]:
+        del candidate
+        self.history_reads += 1
+        return list(self.history)
+
+    async def publish(
+        self,
+        candidate,
+        candidate_key: str,
+        resolution,
+        *,
+        existing: EventPublicationRecord | None,
+        checkpoint,
+    ) -> EventPublicationRecord:
+        published: Any = existing.published_event if existing is not None else None
+        if published is None:
+            checkpoint(
+                EventPublicationRecord(
+                    candidate_key=candidate_key,
+                    decision=resolution.decision,
+                    publication_started=True,
+                    event_id=None,
+                    event_created=False,
+                    evidence_link_result="NOT_ATTEMPTED",
+                    graph_projection_status="NOT_ATTEMPTED",
+                    reason_codes=["PUBLICATION_STARTED", *resolution.reason_codes],
+                    matched_event_ids=resolution.matched_event_ids,
+                )
+            )
+            self.data_publication_requests += 1
+            published = self._published_by_key.get(candidate_key)
+            if published is None:
+                self.data_publications += 1
+                published = {
+                    "id": self.EVENT_ID,
+                    "event": candidate.event.model_dump(mode="json"),
+                }
+                self._published_by_key[candidate_key] = published
+            if self.fail_before_data_ack_checkpoint_once:
+                self.fail_before_data_ack_checkpoint_once = False
+                raise ConnectionError("Data acknowledgement was lost before the local ACK checkpoint")
+            checkpoint(
+                EventPublicationRecord(
+                    candidate_key=candidate_key,
+                    decision=resolution.decision,
+                    publication_started=True,
+                    event_id=self.EVENT_ID,
+                    event_created=True,
+                    evidence_link_result="CREATED",
+                    graph_projection_status="NOT_ATTEMPTED",
+                    reason_codes=resolution.reason_codes,
+                    matched_event_ids=resolution.matched_event_ids,
+                    published_event=published,
+                )
+            )
+
+        self.episode_projections += 1
+        return EventPublicationRecord(
+            candidate_key=candidate_key,
+            decision=resolution.decision,
+            publication_started=True,
+            event_id=self.EVENT_ID,
+            event_created=True,
+            evidence_link_result="CREATED",
+            graph_projection_status="SUCCEEDED",
+            reason_codes=resolution.reason_codes,
+            matched_event_ids=resolution.matched_event_ids,
+            episode_uuid=f"episode-{self.EVENT_ID}",
+            published_event=published,
         )
-        self._projected_events: set[str] = set()
-        self._fail_after_first_write = fail_after_first_write
-        self.calls = 0
 
-    async def execute(self, historical: HistoricalEvent) -> str:
-        self.calls += 1
-        if historical.id not in self._projected_events:
-            self._projected_events.add(historical.id)
-            self.counts["event_episodes"] += 1
-            self.counts["mentions"] += 3
-            self.counts["ordinary_facts"] += 2
-        if self._fail_after_first_write:
-            self._fail_after_first_write = False
-            raise ConnectionError("Episode acknowledgement lost after graph side effects")
-        return f"episode-{historical.id}"
+    async def retrieve_signal_candidates(self, event, classification) -> CandidateSet:
+        del event, classification
+        self.signal_candidate_reads += 1
+        if self.fail_signal_candidate_read_once:
+            self.fail_signal_candidate_read_once = False
+            raise ConnectionError("Graph candidate retrieval temporarily unavailable")
+        return self.signal_candidates
+
+    async def project_signal(self, event, classification, variable, anchor, proposal) -> str:
+        del event, classification, variable, anchor, proposal
+        self.signal_projection_attempts += 1
+        if self.signal_projection_attempts in self.permanent_signal_rejections:
+            raise PermanentEventAnalysisFailure("formal Signal endpoint is permanently invalid")
+        self.signal_projections += 1
+        return f"signal-fact-{self.signal_projections}"
+
+    async def close(self) -> None:
+        return None
 
 
-class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
-    FIRST_ID = "EVD15bec7e3-998c-5434-aa5d-29712c4c67cf"
-    SECOND_ID = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
-    RAW_ID = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+class FakeStudioResponses:
+    """Three Studio Agent boundaries with deterministic reviewed outputs."""
+
+    def __init__(
+        self,
+        *,
+        extraction: Any,
+        identity: EventIdentityDecision | list[Any],
+        classification: EventClassification,
+        proposals: list[DirectSignalDraft],
+        signal_outputs: list[Any] | None = None,
+    ) -> None:
+        self.extraction = extraction
+        self.identity_outputs = identity if isinstance(identity, list) else [identity]
+        self.classification = classification
+        self.proposals = proposals
+        self.signal_outputs = signal_outputs
+        self.extraction_inputs: list[EventExtractionBatch] = []
+        self.identity_inputs: list[EventIdentityRequest] = []
+        self.signal_inputs: list[EventSignalClassificationRequest | EventSignalAnalysisRequest] = []
+
+    @staticmethod
+    def _input(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
+        if "input" in kwargs:
+            return kwargs["input"]
+        if args:
+            return args[0]
+        raise AssertionError("Studio Agent did not receive a Workflow input")
+
+    async def run_extractor(self, *args: Any, **kwargs: Any) -> RunOutput:
+        self.extraction_inputs.append(EventExtractionBatch.model_validate(self._input(args, kwargs)))
+        return RunOutput(
+            agent_id="event-extractor",
+            content=self.extraction,
+            content_type="EventExtractionDraft",
+            status=RunStatus.completed,
+        )
+
+    async def run_identity(self, *args: Any, **kwargs: Any) -> RunOutput:
+        self.identity_inputs.append(EventIdentityRequest.model_validate(self._input(args, kwargs)))
+        output_index = min(len(self.identity_inputs) - 1, len(self.identity_outputs) - 1)
+        return RunOutput(
+            agent_id="event-identity",
+            content=self.identity_outputs[output_index],
+            content_type="EventIdentityDecision",
+            status=RunStatus.completed,
+        )
+
+    async def run_signal_analyst(self, *args: Any, **kwargs: Any) -> RunOutput:
+        payload = self._input(args, kwargs)
+        task = (
+            payload.task
+            if isinstance(payload, (EventSignalClassificationRequest, EventSignalAnalysisRequest))
+            else None
+        )
+        if task is None and isinstance(payload, dict):
+            task = payload.get("task")
+        request: EventSignalClassificationRequest | EventSignalAnalysisRequest
+        if task == "CLASSIFY":
+            request = EventSignalClassificationRequest.model_validate(payload)
+            proposals: list[DirectSignalDraft] = []
+        else:
+            request = EventSignalAnalysisRequest.model_validate(payload)
+            proposals = self.proposals
+        self.signal_inputs.append(request)
+        if self.signal_outputs is not None:
+            output_index = min(len(self.signal_inputs) - 1, len(self.signal_outputs) - 1)
+            content = self.signal_outputs[output_index]
+        else:
+            content = EventSignalAnalysisDraft(
+                classification=self.classification,
+                proposals=proposals,
+                no_signal_reason=(None if task == "CLASSIFY" or proposals else "事件没有直接支持的 Signal。"),
+            )
+        return RunOutput(
+            agent_id="event-signal-analyst",
+            content=content,
+            content_type="EventSignalAnalysisDraft",
+            status=RunStatus.completed,
+        )
+
+
+class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
+    FIRST_EVIDENCE_ID = "EVD15bec7e3-998c-5434-aa5d-29712c4c67cf"
+    SECOND_EVIDENCE_ID = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+    RAW_EVIDENCE_ID = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+    HISTORICAL_EVENT_ID = "EVT5cb71bef-5b1d-5995-add0-7408eaa2be15"
+    AGENT_VERSIONS = {
+        "event-extractor": 11,
+        "event-identity": 13,
+        "event-signal-analyst": 17,
+    }
 
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -93,7 +296,7 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             },
         )
         self.environment.start()
-        self.runtime = AsyncMock()
+        self.runtime = FakeEventWorkflowRuntime()
         configure_event_workflow_runtime(self.runtime)
 
     def tearDown(self) -> None:
@@ -102,744 +305,1325 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.temporary.cleanup()
 
     @classmethod
-    def _evidences(cls) -> list[ResolvedEvidence]:
+    def evidences(cls) -> list[ResolvedEvidence]:
+        semantic = {
+            "actors": ["示例公司"],
+            "action": "签署",
+            "objects": ["服务器订单"],
+            "stage": "ANNOUNCED",
+            "modality": "FACT",
+            "time": {
+                "raw": "2026-08-25",
+                "start_at": "2026-08-24T16:00:00Z",
+                "end_at": "2026-08-25T15:59:59.999999Z",
+                "precision": "DAY",
+            },
+            "jurisdictions": ["中国"],
+            "reason": None,
+            "method": "公告宣布",
+            "metrics": [],
+            "attribution": {"reported_by": None, "claimed_by": "示例公司"},
+        }
         return [
             ResolvedEvidence(
-                id=cls.FIRST_ID,
-                raw_evidence_id=cls.RAW_ID,
+                id=cls.FIRST_EVIDENCE_ID,
+                raw_evidence_id=cls.RAW_EVIDENCE_ID,
                 summary="示例公司宣布签署服务器订单",
                 keywords=["服务器", "订单"],
-                semantic={
-                    "actors": ["示例公司"],
-                    "action": "签署",
-                    "objects": ["服务器订单"],
-                    "stage": "ANNOUNCED",
-                    "modality": "FACT",
-                    "time": {
-                        "raw": "2026-08-25",
-                        "start_at": "2026-08-24T16:00:00Z",
-                        "end_at": "2026-08-25T15:59:59.999999Z",
-                        "precision": "DAY",
-                    },
-                    "jurisdictions": ["中国"],
-                    "reason": None,
-                    "method": "公告宣布",
-                    "metrics": [],
-                    "attribution": {"reported_by": None, "claimed_by": "示例公司"},
-                },
+                semantic=semantic,
             ),
             ResolvedEvidence(
-                id=cls.SECOND_ID,
-                raw_evidence_id=cls.RAW_ID,
+                id=cls.SECOND_EVIDENCE_ID,
+                raw_evidence_id=cls.RAW_EVIDENCE_ID,
                 summary="示例公司的同一服务器订单公告",
                 keywords=["服务器", "订单"],
-                semantic={
-                    "actors": ["示例公司"],
-                    "action": "签署",
-                    "objects": ["服务器订单"],
-                    "stage": "ANNOUNCED",
-                    "modality": "FACT",
-                    "time": {
-                        "raw": "2026-08-25",
-                        "start_at": "2026-08-24T16:00:00Z",
-                        "end_at": "2026-08-25T15:59:59.999999Z",
-                        "precision": "DAY",
-                    },
-                    "jurisdictions": ["中国"],
-                    "reason": None,
-                    "method": "媒体转述",
-                    "metrics": [],
-                    "attribution": {"reported_by": "媒体", "claimed_by": "示例公司"},
-                },
+                semantic={**semantic, "method": "媒体转述"},
             ),
         ]
 
     @classmethod
-    def _draft(cls, *, separate: bool = False) -> EventExtractionDraft:
-        base_event = {
-            "title": "示例公司签署服务器订单",
-            "summary": "示例公司于 2026 年 8 月 25 日宣布签署服务器订单。",
-            "semantic": {
-                "actors": ["示例公司"],
-                "action": "签署",
-                "objects": ["服务器订单"],
-                "stage": "ANNOUNCED",
-                "jurisdictions": ["中国"],
-                "effective_at": None,
-                "time_precision": "DAY",
-            },
-            "modality": "FACT",
-            "occurred_at": None,
-            "announced_at": "2026-08-25T00:00:00Z",
-        }
-        evidence_sets = [[cls.FIRST_ID], [cls.SECOND_ID]] if separate else [[cls.FIRST_ID, cls.SECOND_ID]]
+    def extraction_draft(cls) -> EventExtractionDraft:
         return EventExtractionDraft(
-            candidates=[{"event": base_event, "evidence_ids": ids} for ids in evidence_sets],
+            candidates=[
+                {
+                    "event": {
+                        "title": "示例公司签署服务器订单",
+                        "summary": "示例公司于 2026 年 8 月 25 日宣布签署服务器订单。",
+                        "semantic": {
+                            "actors": ["示例公司"],
+                            "action": "签署",
+                            "objects": ["服务器订单"],
+                            "stage": "ANNOUNCED",
+                            "jurisdictions": ["中国"],
+                            "effective_at": None,
+                            "time_precision": "DAY",
+                        },
+                        "modality": "FACT",
+                        "occurred_at": None,
+                        "announced_at": "2026-08-25T00:00:00Z",
+                    },
+                    "evidence_ids": [cls.FIRST_EVIDENCE_ID, cls.SECOND_EVIDENCE_ID],
+                }
+            ],
             no_event=[],
         )
 
-    def _prepare(self) -> EventExtractionBatch:
-        with patch(
-            "capabilities.event.internal.queue.read_resolved_evidences",
-            return_value=self._evidences(),
-        ):
-            enqueue_evidence_artifact(
-                str(self.evidence_manifest),
-                [item.id for item in self._evidences()],
-            )
-            batch = claim_event_batch()
-        self.assertIsInstance(batch, EventExtractionBatch)
-        return cast(EventExtractionBatch, batch)
-
-    def _freeze(self, batch: EventExtractionBatch, draft: EventExtractionDraft) -> EventExtractionDraft:
-        freeze_draft(batch, draft)
-        frozen = json.loads((self.event_root / ".pending" / batch.batch_id / "draft.json").read_text())
-        return EventExtractionDraft.model_validate(frozen)
-
-    async def _extract(self, content) -> EventExtractionBatch:
-        self.runtime.extract.return_value = content
-        with patch(
-            "capabilities.event.internal.queue.read_resolved_evidences",
-            return_value=self._evidences(),
-        ):
-            enqueue_evidence_artifact(
-                str(self.evidence_manifest),
-                [item.id for item in self._evidences()],
-            )
-            output = await extract_events(StepInput(input="处理未提炼 Evidence"))
-        self.assertFalse(output.stop)
-        return EventExtractionBatch.model_validate(output.content)
-
-    async def test_freezes_one_grouped_candidate_and_partitions_every_evidence(self) -> None:
-        draft = self._draft()
-        batch = await self._extract(draft)
-        self.assertTrue(batch.needs_analysis)
-
-        frozen = json.loads((self.event_root / ".pending" / batch.batch_id / "draft.json").read_text())
-        self.assertEqual(frozen, draft.model_dump(mode="json"))
-
-    async def test_missing_agent_assignment_becomes_no_event(self) -> None:
-        draft = self._draft().model_copy(deep=True)
-        draft.candidates[0].evidence_ids = [self.FIRST_ID]
-
-        batch = await self._extract(draft)
-        frozen = EventExtractionDraft.model_validate_json(
-            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
-        )
-        self.assertEqual(frozen.candidates[0].evidence_ids, [self.FIRST_ID])
-        self.assertEqual(
-            [(item.evidence_id, item.reason) for item in frozen.no_event],
-            [(self.SECOND_ID, "unassigned_by_model")],
+    @staticmethod
+    def classification() -> EventClassification:
+        return EventClassification(
+            event_class="CHAIN_NODE",
+            confidence="HIGH",
+            anchor_type_hints=["ChainNode"],
+            variable_group_hints=["SUPPLY_CAPACITY"],
+            retrieval_queries=["服务器 供给"],
+            rationale="事件直接发生在产业链节点。",
         )
 
-    async def test_batch_external_evidence_assignment_is_ignored_without_failing(self) -> None:
-        draft = self._draft().model_copy(deep=True)
-        draft.candidates[0].evidence_ids.append("EVDa4eb9cc8-3d8a-5b16-972e-f88c797fa009")
-
-        batch = await self._extract(draft)
-        frozen = EventExtractionDraft.model_validate_json(
-            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
-        )
-        self.assertEqual(frozen.candidates[0].evidence_ids, [self.FIRST_ID, self.SECOND_ID])
-        self.assertEqual(frozen.no_event, [])
-
-    async def test_candidate_wins_over_duplicate_no_event_assignment(self) -> None:
-        payload = self._draft().model_dump(mode="json")
-        payload["no_event"] = [
-            {"evidence_id": self.FIRST_ID, "reason": "duplicate_of_other_candidate"},
-            {"evidence_id": self.SECOND_ID, "reason": "duplicate_of_other_candidate"},
-        ]
-
-        batch = await self._extract(EventExtractionDraft.model_validate(payload))
-        frozen = EventExtractionDraft.model_validate_json(
-            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
-        )
-        self.assertEqual(frozen.candidates[0].evidence_ids, [self.FIRST_ID, self.SECOND_ID])
-        self.assertEqual(frozen.no_event, [])
-
-    async def test_timeless_agent_candidate_becomes_no_event_without_failing_batch(self) -> None:
-        payload = self._draft().model_dump(mode="json")
-        payload["candidates"][0]["event"]["announced_at"] = None
-        batch = await self._extract(payload)
-        frozen = EventExtractionDraft.model_validate_json(
-            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
-        )
-        self.assertEqual(frozen.candidates, [])
-        self.assertEqual(
-            [(item.evidence_id, item.reason) for item in frozen.no_event],
-            [(self.FIRST_ID, "missing_reliable_time"), (self.SECOND_ID, "missing_reliable_time")],
-        )
-
-    async def test_incomplete_candidate_semantics_becomes_no_event_without_failing_batch(self) -> None:
-        payload = self._draft().model_dump(mode="json")
-        payload["candidates"][0]["event"]["semantic"]["actors"] = []
-        batch = await self._extract(payload)
-        frozen = EventExtractionDraft.model_validate_json(
-            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
-        )
-        self.assertEqual(frozen.candidates, [])
-        self.assertEqual(
-            [(item.evidence_id, item.reason) for item in frozen.no_event],
-            [(self.FIRST_ID, "invalid_event_semantics"), (self.SECOND_ID, "invalid_event_semantics")],
-        )
-
-    async def test_missing_nullable_semantic_fields_are_defaulted_without_losing_candidate(self) -> None:
-        payload = self._draft().model_dump(mode="json")
-        del payload["candidates"][0]["event"]["semantic"]["effective_at"]
-        del payload["candidates"][0]["event"]["semantic"]["time_precision"]
-        batch = await self._extract(payload)
-
-        frozen = EventExtractionDraft.model_validate_json(
-            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
-        )
-        self.assertEqual(len(frozen.candidates), 1)
-        self.assertIsNone(frozen.candidates[0].event.semantic.effective_at)
-        self.assertEqual(frozen.candidates[0].event.semantic.time_precision, "UNKNOWN")
-
-    async def test_concurrent_schedule_callback_stops_without_reprocessing_pending_batch(self) -> None:
-        batch = self._prepare()
-        concurrent = await extract_events(StepInput(input="concurrent"))
-
-        self.assertTrue(concurrent.stop)
-        self.assertEqual(concurrent.content.status, "busy")
-        self.assertEqual(concurrent.content.batch_id, batch.batch_id)
-
-    def test_expired_processing_lease_allows_crash_recovery_without_new_batch(self) -> None:
-        batch = self._prepare()
-        lease_path = self.event_root / ".pending" / batch.batch_id / "lease.json"
-        lease = json.loads(lease_path.read_text(encoding="utf-8"))
-        lease["expires_at"] = "2000-01-01T00:00:00Z"
-        lease_path.write_text(json.dumps(lease), encoding="utf-8")
-
-        resumed = self._prepare()
-        self.assertEqual(resumed.batch_id, batch.batch_id)
-        self.assertNotEqual(resumed.lease_id, batch.lease_id)
-        self.assertTrue(resumed.needs_analysis)
-
-    def test_claim_moves_pending_evidence_to_processing(self) -> None:
-        batch = self._prepare()
-
-        self.assertEqual(queue_counts(), {"pending": 0, "processing": 2, "completed": 0, "failed": 0})
-        self.assertTrue((self.event_root / "evidence-queue" / "processing" / batch.batch_id).is_dir())
-
-    def test_default_batch_claim_is_bounded_to_twenty_evidences(self) -> None:
-        template = self._evidences()[0]
-        evidences = [
-            template.model_copy(update={"id": f"EVD{uuid5(NAMESPACE_URL, f'event-batch-{index}')}"})
-            for index in range(21)
-        ]
-        with patch(
-            "capabilities.event.internal.queue.read_resolved_evidences",
-            return_value=evidences,
-        ):
-            enqueue_evidence_artifact(
-                str(self.evidence_manifest),
-                [item.id for item in evidences],
-            )
-            batch = claim_event_batch()
-
-        self.assertIsInstance(batch, EventExtractionBatch)
-        self.assertEqual(len(cast(EventExtractionBatch, batch).evidences), 20)
-        self.assertEqual(queue_counts(), {"pending": 1, "processing": 20, "completed": 0, "failed": 0})
-
-    async def test_noncompliant_agent_payload_is_terminal_no_event_not_workflow_failure(self) -> None:
-        batch = await self._extract({"unexpected": "shape"})
-
-        frozen = EventExtractionDraft.model_validate_json(
-            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
-        )
-        self.assertEqual(frozen.candidates, [])
-        self.assertEqual(
-            [(item.evidence_id, item.reason) for item in frozen.no_event],
-            [
-                (self.FIRST_ID, "noncompliant_event_extraction"),
-                (self.SECOND_ID, "noncompliant_event_extraction"),
+    @staticmethod
+    def candidates() -> CandidateSet:
+        return CandidateSet(
+            anchors=[
+                AnchorCandidate(
+                    uuid="anchor-server",
+                    name="服务器",
+                    entity_type="ChainNode",
+                    business_id="chain-node-server",
+                )
+            ],
+            variables=[
+                VariableCandidate(
+                    uuid="variable-supply",
+                    variable_id="effective_supply",
+                    name="有效供给",
+                    variable_group="SUPPLY_CAPACITY",
+                    allowed_anchor_types=["ChainNode"],
+                    definition="可向目标市场实际交付的供给能力。",
+                )
             ],
         )
 
-    async def test_malformed_pending_queue_item_fails_closed(self) -> None:
-        pending = self.event_root / "evidence-queue" / "pending" / f"{self.FIRST_ID}.json"
-        pending.parent.mkdir(parents=True)
-        pending.write_text("{}\n", encoding="utf-8")
+    @staticmethod
+    def signal_draft() -> DirectSignalDraft:
+        return DirectSignalDraft(
+            anchor_uuid="anchor-server",
+            variable_uuid="variable-supply",
+            fact="服务器订单提高有效供给需求。",
+            direction="UP",
+            magnitude="MEDIUM",
+            impact_onset_days=0,
+            impact_peak_days=30,
+            expected_duration_days=90,
+            mechanism="订单直接提高服务器供给需求。",
+            duration_basis="订单履行周期。",
+            assumptions=[],
+            invalidation_conditions=["订单取消"],
+            provenance_confidence="HIGH",
+            mechanism_confidence="HIGH",
+            temporal_confidence="MEDIUM",
+        )
 
-        with self.assertRaisesRegex(ValueError, "queue item is invalid"):
-            await extract_events(StepInput(input="again"))
+    @classmethod
+    def historical_event(cls) -> HistoricalEvent:
+        payload = cls.extraction_draft().candidates[0].event.model_dump(mode="json")
+        payload["semantic"]["action"] = "披露合作意向"
+        return HistoricalEvent(
+            id=cls.HISTORICAL_EVENT_ID,
+            event=EventCandidateDTO.model_validate(payload),
+        )
 
-    async def test_publishes_and_analyzes_each_candidate_then_does_not_select_evidence_again(self) -> None:
-        batch = self._prepare()
-        self._freeze(batch, self._draft(separate=True))
-        publications = [
-            EventPublicationRecord(
-                candidate_key=str(index) * 64,
+    @classmethod
+    def studio_agents(cls) -> tuple[Agent, Agent, Agent]:
+        return (
+            Agent(id="event-extractor", name="Event Extractor", instructions="test extractor"),
+            Agent(id="event-identity", name="Event Identity", instructions="test identity"),
+            Agent(id="event-signal-analyst", name="Event Signal Analyst", instructions="test signal analyst"),
+        )
+
+    @classmethod
+    def workflow(cls) -> tuple[Workflow, Agent, Agent, Agent]:
+        extractor, identity, signal_analyst = cls.studio_agents()
+        workflow = _seed_workflow(
+            extractor,
+            identity,
+            signal_analyst,
+            agent_versions=cls.AGENT_VERSIONS,
+        )
+        workflow.db = None
+        return workflow, extractor, identity, signal_analyst
+
+    @staticmethod
+    def direct_agent_ids(items: list[object]) -> list[str]:
+        result: list[str] = []
+        for item in items:
+            if isinstance(item, Step) and item.agent is not None:
+                result.append(str(item.agent.id))
+            nested = getattr(item, "steps", None)
+            if isinstance(nested, list):
+                result.extend(EventExtractionWorkflowTest.direct_agent_ids(cast(list[object], nested)))
+        return result
+
+    @staticmethod
+    def rename_every_display_name(items: list[object]) -> None:
+        serial = 0
+
+        def rename(nested_items: list[object]) -> None:
+            nonlocal serial
+            for item in nested_items:
+                serial += 1
+                item.name = f"Studio 可编辑名称 {serial}"  # type: ignore[attr-defined]
+                nested = getattr(item, "steps", None)
+                if isinstance(nested, list):
+                    rename(cast(list[object], nested))
+
+        rename(items)
+
+    async def execute_workflow(
+        self,
+        workflow: Workflow,
+        extractor: Agent,
+        identity: Agent,
+        signal_analyst: Agent,
+        studio: FakeStudioResponses,
+        *,
+        run_id: str,
+        enqueue: bool,
+    ):
+        with (
+            patch(
+                "capabilities.event.internal.queue.read_resolved_evidences",
+                return_value=self.evidences(),
+            ),
+            patch.object(extractor, "arun", new=studio.run_extractor),
+            patch.object(identity, "arun", new=studio.run_identity),
+            patch.object(signal_analyst, "arun", new=studio.run_signal_analyst),
+        ):
+            if enqueue:
+                enqueue_evidence_artifact(
+                    str(self.evidence_manifest),
+                    [item.id for item in self.evidences()],
+                )
+            return await workflow.arun(
+                input="处理所有已发布且尚未提炼 Event 的 Evidence",
+                run_id=run_id,
+                session_id=f"session-{run_id}",
+            )
+
+    def test_workflow_has_five_exact_business_phases_and_three_direct_studio_agents(self) -> None:
+        workflow, _, _, _ = self.workflow()
+        self.assertIsInstance(workflow.steps, list)
+        assert isinstance(workflow.steps, list)
+        phase_steps = cast(list[Any], workflow.steps)
+
+        self.assertEqual(
+            [step.name for step in phase_steps],
+            ["Extract Events", "Resolve Events", "Publish Events", "Analyze Signals", "Publish Signals"],
+        )
+        self.assertEqual(
+            self.direct_agent_ids(cast(list[object], workflow.steps)),
+            ["event-extractor", "event-identity", "event-signal-analyst"],
+        )
+        self.assertEqual(
+            workflow.metadata,
+            {
+                "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
+                "event_agent_versions": self.AGENT_VERSIONS,
+            },
+        )
+
+    async def test_stale_workflow_owner_cannot_freeze_agent_output_after_lease_takeover(self) -> None:
+        workflow, extractor, _, _ = self.workflow()
+        extractor_started = asyncio.Event()
+        allow_extractor_to_finish = asyncio.Event()
+
+        class ControlledClock:
+            current = datetime(2026, 8, 30, tzinfo=UTC)
+
+            @classmethod
+            def now(cls, tz=None):
+                del tz
+                return cls.current
+
+        async def delayed_extractor(*args: Any, **kwargs: Any) -> RunOutput:
+            del args, kwargs
+            extractor_started.set()
+            await allow_extractor_to_finish.wait()
+            return RunOutput(
+                agent_id="event-extractor",
+                content=self.extraction_draft(),
+                content_type="EventExtractionDraft",
+                status=RunStatus.completed,
+            )
+
+        replacement: EventExtractionBatch | None = None
+        with (
+            patch(
+                "capabilities.event.internal.queue.read_resolved_evidences",
+                return_value=self.evidences(),
+            ),
+            patch("capabilities.event.internal.storage.datetime", ControlledClock),
+            patch.object(extractor, "arun", new=delayed_extractor),
+        ):
+            enqueue_evidence_artifact(
+                str(self.evidence_manifest),
+                [item.id for item in self.evidences()],
+            )
+            stale_run = asyncio.create_task(
+                workflow.arun(
+                    input="处理所有已发布且尚未提炼 Event 的 Evidence",
+                    run_id="run-stale-lease-owner",
+                    session_id="session-stale-lease-owner",
+                )
+            )
+            await extractor_started.wait()
+            ControlledClock.current += timedelta(seconds=601)
+            claimed = claim_event_batch()
+            self.assertIsInstance(claimed, EventExtractionBatch)
+            replacement = cast(EventExtractionBatch, claimed)
+            allow_extractor_to_finish.set()
+            with self.assertRaisesRegex(RuntimeError, "Event Workflow stage EVENT_EXTRACTION failed"):
+                await stale_run
+
+            self.assertFalse((self.event_root / ".pending" / replacement.batch_id / "draft.json").exists())
+
+        assert replacement is not None
+        release_event_batch_lease(replacement)
+
+    async def test_agent_provider_exception_releases_the_batch_lease(self) -> None:
+        workflow, extractor, _, _ = self.workflow()
+
+        async def failed_extractor(*args: Any, **kwargs: Any) -> RunOutput:
+            del args, kwargs
+            raise ConnectionError("Studio Agent provider is unavailable")
+
+        with (
+            patch(
+                "capabilities.event.internal.queue.read_resolved_evidences",
+                return_value=self.evidences(),
+            ),
+            patch.object(extractor, "arun", new=failed_extractor),
+        ):
+            enqueue_evidence_artifact(
+                str(self.evidence_manifest),
+                [item.id for item in self.evidences()],
+            )
+            with self.assertRaisesRegex(RuntimeError, "Event Workflow stage EVENT_EXTRACTION failed"):
+                await workflow.arun(
+                    input="处理所有已发布且尚未提炼 Event 的 Evidence",
+                    run_id="run-agent-provider-failure",
+                    session_id="session-agent-provider-failure",
+                )
+
+        self.assertEqual(list((self.event_root / ".pending").glob("*/lease.json")), [])
+
+    async def test_renamed_workflow_completes_new_event_and_signal_as_v4_result(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        assert isinstance(workflow.steps, list)
+        self.rename_every_display_name(cast(list[object], workflow.steps))
+        self.runtime.signal_candidates = self.candidates()
+        studio = FakeStudioResponses(
+            extraction=self.extraction_draft(),
+            identity=EventIdentityDecision(
                 decision="NEW_EVENT",
-                event_id=f"EVT15bec7e3-998c-5434-aa5d-29712c4c67c{index}",
-                event_created=True,
-                evidence_link_result="CREATED",
-                graph_projection_status="SUCCEEDED",
-                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                atomic=True,
                 matched_event_ids=[],
-                episode_uuid=f"episode-{index}",
-                published_event={
-                    "id": f"EVT15bec7e3-998c-5434-aa5d-29712c4c67c{index}",
-                    "event": self._draft(separate=True).candidates[index - 1].event,
-                },
-            )
-            for index in (1, 2)
-        ]
-
-        async def publish(candidate, candidate_key, *, existing, checkpoint):
-            del candidate, existing, checkpoint
-            return publications[self.runtime.publish.await_count - 1].model_copy(
-                update={"candidate_key": candidate_key}
-            )
-
-        self.runtime.publish.side_effect = publish
-        self.runtime.construct_signals.side_effect = [
-            EventSignalRecord(event_id=item.event_id, status="SUCCEEDED", signal_fact_uuids=[f"signal-{index}"])
-            for index, item in enumerate(publications, 1)
-        ]
-        published = await publish_events(StepInput(previous_step_content=batch))
-        output = await build_signals(StepInput(previous_step_content=published.content))
-
-        result = EventExtractionResult.model_validate(output.content)
-        self.assertEqual(result.published_event_ids, [item.event_id for item in publications])
-        self.assertEqual(result.signal_fact_uuids, ["signal-1", "signal-2"])
-        self.assertEqual(self.runtime.publish.await_count, 2)
-        self.assertEqual(self.runtime.construct_signals.await_count, 2)
-
-        idle = await extract_events(StepInput(input="again"))
-        self.assertTrue(idle.stop)
-        self.assertEqual(queue_counts(), {"pending": 0, "processing": 0, "completed": 2, "failed": 0})
-
-    async def test_duplicate_event_is_terminal_without_projection_or_signal_analysis(self) -> None:
-        batch = self._prepare()
-        self._freeze(batch, self._draft())
-        historical = HistoricalEvent(
-            id="EVT15bec7e3-998c-5434-aa5d-29712c4c67cf",
-            event=self._draft().candidates[0].event.model_dump(mode="json"),
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[self.signal_draft()],
         )
-        history = AsyncMock()
-        history.retrieve.return_value = [historical]
-        comparator = AsyncMock()
-        comparator.assess_atomicity.return_value = AtomicityAssessment(
-            atomic=True,
-            reason_codes=["ATOMIC_EVENT"],
-            summary="one real-world action",
+
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-renamed-complete",
+            enqueue=True,
         )
-        publisher = AsyncMock()
-        runtime = object.__new__(LocalEventWorkflowRuntime)
-        runtime._resolver = EventResolver(history, comparator, publisher)
-        tracer = GraphWriteTracer(counts={"event_episodes": 1, "mentions": 12, "ordinary_facts": 10, "signal_facts": 3})
-        runtime._episode_stage = tracer
-        graph_counts_before = tracer.counts.copy()
-        configure_event_workflow_runtime(runtime)
-        published = await publish_events(StepInput(previous_step_content=batch))
-        output = await build_signals(StepInput(previous_step_content=published.content))
-        result = EventExtractionResult.model_validate(output.content)
+
+        self.assertEqual(response.status, RunStatus.completed)
+        self.assertEqual(response.metadata["event_agent_versions"], self.AGENT_VERSIONS)
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.schema_version, "event_extraction_result.v4")
+        self.assertEqual(result.evidence_ids, [self.FIRST_EVIDENCE_ID, self.SECOND_EVIDENCE_ID])
+        self.assertEqual(result.candidate_count, 1)
+        self.assertEqual(result.no_event_count, 0)
+        self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID])
+        self.assertEqual(result.duplicate_event_count, 0)
+        self.assertEqual(result.ignored_candidate_count, 0)
+        self.assertEqual(result.failed_candidate_count, 0)
+        self.assertEqual(result.signal_fact_uuids, ["signal-fact-1"])
+
+        self.assertEqual(len(studio.extraction_inputs), 1)
+        self.assertEqual(len(studio.identity_inputs), 1)
+        self.assertEqual([request.task for request in studio.signal_inputs], ["CLASSIFY", "PROPOSE_SIGNALS"])
+        proposed = cast(EventSignalAnalysisRequest, studio.signal_inputs[1])
+        self.assertEqual(proposed.classification, self.classification())
+        self.assertEqual(proposed.candidates, self.candidates())
+        self.assertEqual(
+            (
+                self.runtime.history_reads,
+                self.runtime.data_publications,
+                self.runtime.episode_projections,
+                self.runtime.signal_candidate_reads,
+                self.runtime.signal_projections,
+            ),
+            (1, 1, 1, 1, 1),
+        )
+
+    async def test_duplicate_event_completes_without_data_graph_or_signal_writes(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        self.runtime.history = [self.historical_event()]
+        studio = FakeStudioResponses(
+            extraction=self.extraction_draft(),
+            identity=EventIdentityDecision(
+                decision="SAME_EVENT",
+                atomic=True,
+                matched_event_ids=[self.HISTORICAL_EVENT_ID],
+                reason_codes=["SAME_REAL_WORLD_OCCURRENCE"],
+                summary="候选与给定历史 Event 是同一现实事件。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
+
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-duplicate",
+            enqueue=True,
+        )
+
+        self.assertEqual(response.status, RunStatus.completed)
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.schema_version, "event_extraction_result.v4")
+        self.assertEqual(result.candidate_count, 1)
         self.assertEqual(result.duplicate_event_count, 1)
         self.assertEqual(result.published_event_ids, [])
         self.assertEqual(result.signal_fact_uuids, [])
-        self.assertEqual(tracer.calls, 0)
-        self.assertEqual(tracer.counts, graph_counts_before)
-        publisher.publish.assert_not_awaited()
-        configure_event_workflow_runtime(self.runtime)
+        self.assertEqual(len(studio.extraction_inputs), 1)
+        self.assertEqual(len(studio.identity_inputs), 1)
+        self.assertEqual(studio.identity_inputs[0].historical_candidates, [self.historical_event()])
+        self.assertEqual(studio.signal_inputs, [])
+        self.assertEqual(
+            (
+                self.runtime.history_reads,
+                self.runtime.data_publications,
+                self.runtime.episode_projections,
+                self.runtime.signal_candidate_reads,
+                self.runtime.signal_projections,
+            ),
+            (1, 0, 0, 0, 0),
+        )
 
-    async def test_uncertain_candidate_is_ignored_and_completes_its_evidence(self) -> None:
-        batch = self._prepare()
-        self._freeze(batch, self._draft())
-
-        async def ignore_resolution(candidate, candidate_key, *, existing, checkpoint):
-            del candidate, existing, checkpoint
-            return EventPublicationRecord(
-                candidate_key=candidate_key,
-                decision="IGNORED",
-                event_id=None,
-                event_created=False,
-                evidence_link_result="NOT_ATTEMPTED",
-                graph_projection_status="NOT_ATTEMPTED",
-                reason_codes=["EVENT_IDENTITY_UNCERTAIN"],
+    async def test_no_signal_path_preserves_classification_in_the_frozen_proposal_request(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        self.runtime.signal_candidates = self.candidates()
+        studio = FakeStudioResponses(
+            extraction=self.extraction_draft(),
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
                 matched_event_ids=[],
-            )
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
 
-        self.runtime.publish.side_effect = ignore_resolution
-        published = await publish_events(StepInput(previous_step_content=batch))
-        output = await build_signals(StepInput(previous_step_content=published.content))
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-no-signal",
+            enqueue=True,
+        )
 
-        result = EventExtractionResult.model_validate(output.content)
+        self.assertEqual(response.status, RunStatus.completed)
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.schema_version, "event_extraction_result.v4")
+        self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID])
+        self.assertEqual(result.signal_fact_uuids, [])
+        self.assertEqual([request.task for request in studio.signal_inputs], ["CLASSIFY", "PROPOSE_SIGNALS"])
+        proposal_request = cast(EventSignalAnalysisRequest, studio.signal_inputs[1])
+        self.assertEqual(proposal_request.classification, self.classification())
+        self.assertEqual(proposal_request.candidates, self.candidates())
+        self.assertEqual(self.runtime.signal_candidate_reads, 1)
+        self.assertEqual(self.runtime.signal_projections, 0)
+
+    async def test_classification_output_cannot_include_a_no_signal_judgment(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        studio = FakeStudioResponses(
+            extraction=self.extraction_draft(),
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+            signal_outputs=[
+                EventSignalAnalysisDraft(
+                    classification=self.classification(),
+                    proposals=[],
+                    no_signal_reason="分类阶段越权作出了无 Signal 判断。",
+                )
+            ],
+        )
+
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-noncompliant-classification",
+            enqueue=True,
+        )
+
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID])
+        self.assertEqual(result.signal_fact_uuids, [])
+        self.assertEqual([request.task for request in studio.signal_inputs], ["CLASSIFY"])
+        self.assertEqual(self.runtime.signal_candidate_reads, 0)
+        self.assertEqual(self.runtime.signal_projections, 0)
+
+    async def test_signal_proposals_cannot_coexist_with_a_no_signal_reason(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        self.runtime.signal_candidates = self.candidates()
+        studio = FakeStudioResponses(
+            extraction=self.extraction_draft(),
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+            signal_outputs=[
+                EventSignalAnalysisDraft(
+                    classification=self.classification(),
+                    proposals=[],
+                    no_signal_reason=None,
+                ),
+                EventSignalAnalysisDraft(
+                    classification=self.classification(),
+                    proposals=[self.signal_draft()],
+                    no_signal_reason="与非空提案矛盾。",
+                ),
+            ],
+        )
+
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-inconsistent-signal-output",
+            enqueue=True,
+        )
+
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID])
+        self.assertEqual(result.signal_fact_uuids, [])
+        self.assertEqual(
+            [request.task for request in studio.signal_inputs],
+            ["CLASSIFY", "PROPOSE_SIGNALS"],
+        )
+        self.assertEqual(self.runtime.signal_candidate_reads, 1)
+        self.assertEqual(self.runtime.signal_projections, 0)
+
+    async def test_malformed_identity_output_ignores_only_its_candidate(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        first = self.extraction_draft().candidates[0].model_copy(deep=True)
+        first.evidence_ids = [self.FIRST_EVIDENCE_ID]
+        second = first.model_copy(deep=True)
+        second.evidence_ids = [self.SECOND_EVIDENCE_ID]
+        second.event.title = "示例公司开始交付服务器订单"
+        second.event.semantic.action = "交付"
+        extraction = EventExtractionDraft(candidates=[first, second], no_event=[])
+        studio = FakeStudioResponses(
+            extraction=extraction,
+            identity=[
+                {"unexpected": "noncompliant identity output"},
+                EventIdentityDecision(
+                    decision="NEW_EVENT",
+                    atomic=True,
+                    matched_event_ids=[],
+                    reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                    summary="没有同一正式 Event。",
+                ),
+            ],
+            classification=self.classification(),
+            proposals=[],
+        )
+
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-one-malformed-identity",
+            enqueue=True,
+        )
+
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.candidate_count, 2)
         self.assertEqual(result.ignored_candidate_count, 1)
-        self.assertEqual(result.ignored_evidence_ids, [self.FIRST_ID, self.SECOND_ID])
-        self.assertEqual(result.failed_candidate_count, 0)
-        self.assertEqual(result.failed_evidence_ids, [])
-        self.assertEqual(queue_counts(), {"pending": 0, "processing": 0, "completed": 2, "failed": 0})
+        self.assertEqual(result.ignored_evidence_ids, [self.FIRST_EVIDENCE_ID])
+        self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID])
+        self.assertEqual(len(studio.identity_inputs), 2)
+        self.assertEqual(self.runtime.data_publications, 1)
 
-    async def test_publication_intent_is_checkpointed_before_the_data_write(self) -> None:
-        runtime = object.__new__(LocalEventWorkflowRuntime)
-        resolver = AsyncMock()
-
-        async def fail_after_intent(submission, **callbacks):
-            del submission
-            callbacks["on_publication_started"]("NEW_EVENT")
-            raise ConnectionError("response lost after the Data write may have committed")
-
-        resolver.resolve.side_effect = fail_after_intent
-        runtime._resolver = resolver
-        checkpoints: list[EventPublicationRecord] = []
-
-        with self.assertRaises(ConnectionError):
-            await runtime.publish(
-                self._draft().candidates[0],
-                "a" * 64,
-                existing=None,
-                checkpoint=checkpoints.append,
-            )
-
-        self.assertEqual(len(checkpoints), 1)
-        self.assertTrue(checkpoints[0].publication_started)
-        self.assertEqual(checkpoints[0].decision, "NEW_EVENT")
-        self.assertIsNone(checkpoints[0].event_id)
-        self.assertEqual(checkpoints[0].reason_codes, ["PUBLICATION_STARTED"])
-
-    async def test_local_runtime_uses_registered_agno_agent_for_semantic_extraction(self) -> None:
-        batch = self._prepare()
-        extractor = AsyncMock()
-        extractor.arun.return_value = RunOutput(
-            agent_id="event-extractor",
-            content=self._draft(),
-            content_type="EventExtractionDraft",
-            status=RunStatus.completed,
-        )
-        runtime = object.__new__(LocalEventWorkflowRuntime)
-        runtime._extractor = extractor
-
-        content = await runtime.extract(batch)
-
-        self.assertEqual(EventExtractionDraft.model_validate(content), self._draft())
-        extractor.arun.assert_awaited_once_with(batch, stream=False)
-
-    async def test_local_runtime_does_not_treat_agent_error_as_semantic_no_event(self) -> None:
-        batch = self._prepare()
-        extractor = AsyncMock()
-        extractor.arun.return_value = RunOutput(
-            agent_id="event-extractor",
-            content={"error": "provider unavailable"},
-            status=RunStatus.error,
-        )
-        runtime = object.__new__(LocalEventWorkflowRuntime)
-        runtime._extractor = extractor
-
-        with self.assertRaisesRegex(RuntimeError, "Event Extractor did not complete: ERROR"):
-            await runtime.extract(batch)
-
-    async def test_resume_after_data_publication_skips_data_write_and_projects_episode(self) -> None:
-        runtime = object.__new__(LocalEventWorkflowRuntime)
-        history = AsyncMock()
-        comparator = AsyncMock()
-        publisher = AsyncMock()
-        runtime._resolver = EventResolver(history, comparator, publisher)
-        runtime._episode_stage = AsyncMock()
-        runtime._episode_stage.execute.return_value = "episode-resumed"
-        historical = HistoricalEvent(
-            id="EVT15bec7e3-998c-5434-aa5d-29712c4c67cf",
-            event=self._draft().candidates[0].event.model_dump(mode="json"),
-        )
-        existing = EventPublicationRecord(
-            candidate_key="b" * 64,
-            decision="NEW_EVENT",
-            publication_started=True,
-            event_id=historical.id,
-            event_created=True,
-            evidence_link_result="CREATED",
-            graph_projection_status="NOT_ATTEMPTED",
-            reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
-            matched_event_ids=[],
-            published_event={"id": historical.id, "event": historical.event.model_dump(mode="json")},
-        )
-
-        result = await runtime.publish(
-            self._draft().candidates[0],
-            "b" * 64,
-            existing=existing,
-            checkpoint=MagicMock(),
-        )
-
-        self.assertEqual(result.episode_uuid, "episode-resumed")
-        publisher.publish.assert_not_awaited()
-        comparator.assess_atomicity.assert_not_awaited()
-        history.retrieve.assert_not_awaited()
-        runtime._episode_stage.execute.assert_awaited_once_with(historical)
-
-    async def test_retry_after_episode_side_effect_reuses_published_event_and_deterministic_projection(self) -> None:
-        runtime = object.__new__(LocalEventWorkflowRuntime)
-        history = AsyncMock()
-        comparator = AsyncMock()
-        publisher = AsyncMock()
-        runtime._resolver = EventResolver(history, comparator, publisher)
-        tracer = GraphWriteTracer(fail_after_first_write=True)
-        runtime._episode_stage = tracer
-        historical = HistoricalEvent(
-            id="EVT15bec7e3-998c-5434-aa5d-29712c4c67cf",
-            event=self._draft().candidates[0].event.model_dump(mode="json"),
-        )
-        existing = EventPublicationRecord(
-            candidate_key="c" * 64,
-            decision="NEW_EVENT",
-            publication_started=True,
-            event_id=historical.id,
-            event_created=True,
-            evidence_link_result="CREATED",
-            graph_projection_status="NOT_ATTEMPTED",
-            reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
-            matched_event_ids=[],
-            published_event={"id": historical.id, "event": historical.event.model_dump(mode="json")},
-        )
-
-        with self.assertRaises(ConnectionError):
-            await runtime.publish(
-                self._draft().candidates[0],
-                "c" * 64,
-                existing=existing,
-                checkpoint=MagicMock(),
-            )
-        counts_after_lost_ack = tracer.counts.copy()
-        result = await runtime.publish(
-            self._draft().candidates[0],
-            "c" * 64,
-            existing=existing,
-            checkpoint=MagicMock(),
-        )
-
-        self.assertEqual(tracer.calls, 2)
-        self.assertEqual(result.episode_uuid, f"episode-{historical.id}")
-        self.assertEqual(tracer.counts, counts_after_lost_ack)
-        self.assertEqual(
-            tracer.counts,
-            {"event_episodes": 1, "mentions": 3, "ordinary_facts": 2, "signal_facts": 0},
-        )
-        publisher.publish.assert_not_awaited()
-
-    async def test_publication_failure_exposes_safe_stage_and_diagnostic_id(self) -> None:
-        batch = self._prepare()
-        self._freeze(batch, self._draft())
-        self.runtime.publish.side_effect = ConnectionError("secret provider payload")
-
-        with self.assertLogs("capabilities.event.functions.extraction", level="ERROR") as logs:
-            with self.assertRaisesRegex(RuntimeError, r"EVENT_PUBLICATION failed; diagnostic_id=") as raised:
-                await publish_events(StepInput(previous_step_content=batch))
-
-        self.assertNotIn("secret provider payload", str(raised.exception))
-        self.assertIsNone(raised.exception.__cause__)
-        self.assertTrue(raised.exception.__suppress_context__)
-        self.assertIn("error_types=ConnectionError", logs.output[0])
-
-    async def test_signal_failure_exposes_safe_stage_and_diagnostic_id(self) -> None:
-        batch = self._prepare()
-        self._freeze(batch, self._draft())
-        publication = EventPublicationRecord(
-            candidate_key="d" * 64,
-            decision="NEW_EVENT",
-            event_id="EVT15bec7e3-998c-5434-aa5d-29712c4c67cf",
-            event_created=True,
-            evidence_link_result="CREATED",
-            graph_projection_status="SUCCEEDED",
-            reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
-            matched_event_ids=[],
-            episode_uuid="episode-signal",
-            published_event={
-                "id": "EVT15bec7e3-998c-5434-aa5d-29712c4c67cf",
-                "event": self._draft().candidates[0].event,
-            },
-        )
-
-        async def publish(candidate, candidate_key, *, existing, checkpoint):
-            del candidate, existing, checkpoint
-            return publication.model_copy(update={"candidate_key": candidate_key})
-
-        self.runtime.publish.side_effect = publish
-        self.runtime.construct_signals.side_effect = ConnectionError("secret signal payload")
-        published = await publish_events(StepInput(previous_step_content=batch))
-
-        with self.assertLogs("capabilities.event.functions.extraction", level="ERROR") as logs:
-            with self.assertRaisesRegex(RuntimeError, r"SIGNAL_CONSTRUCTION failed; diagnostic_id=") as raised:
-                await build_signals(StepInput(previous_step_content=published.content))
-
-        self.assertNotIn("secret signal payload", str(raised.exception))
-        self.assertIsNone(raised.exception.__cause__)
-        self.assertTrue(raised.exception.__suppress_context__)
-        self.assertIn("error_types=ConnectionError", logs.output[0])
-
-    async def test_no_event_is_terminal_without_posting(self) -> None:
-        batch = self._prepare()
-        draft = EventExtractionDraft(
-            candidates=[],
-            no_event=[
-                {"evidence_id": self.FIRST_ID, "reason": "not_a_real_world_action"},
-                {"evidence_id": self.SECOND_ID, "reason": "compound_atomic_evidence"},
+    async def test_malformed_extractor_children_do_not_discard_a_valid_sibling(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        valid = self.extraction_draft().candidates[0].model_copy(deep=True)
+        valid.evidence_ids = [self.FIRST_EVIDENCE_ID]
+        extraction = {
+            "candidates": [
+                valid.model_dump(mode="json"),
+                {
+                    "event": {"title": "broken child"},
+                    "evidence_ids": [self.SECOND_EVIDENCE_ID],
+                },
             ],
-        )
-        self._freeze(batch, draft)
-
-        published = await publish_events(StepInput(previous_step_content=batch))
-        output = await build_signals(StepInput(previous_step_content=published.content))
-
-        self.runtime.publish.assert_not_awaited()
-        result = EventExtractionResult.model_validate(output.content)
-        self.assertEqual(result.candidate_count, 0)
-        self.assertEqual(result.no_event_count, 2)
-        self.assertEqual(result.failed_candidate_count, 0)
-
-    def test_agent_and_workflow_round_trip_has_three_rename_safe_business_steps(self) -> None:
-        agent = build_event_extractor_agent()
-        agent.db = None
-        self.assertEqual(agent.id, "event-extractor")
-        self.assertEqual(agent.output_schema, EventExtractionDraft)
-        self.assertEqual(agent.tools, [])
-
-        registry = Registry(
-            name="Event Test Registry",
-            agents=[agent],
-            schemas=[EventExtractionBatch, EventExtractionDraft, EventExtractionResult],
-            functions=[
-                extract_events,
-                publish_events,
-                build_signals,
-            ],
-        )
-        workflow = _seed_workflow()
-        workflow.db = None
-        self.assertEqual(
-            workflow.metadata,
-            {"event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION},
-        )
-        restored = Workflow.from_dict(workflow.to_dict(), registry=registry)
-        steps = restored.steps
-        self.assertIsInstance(steps, list)
-        assert isinstance(steps, list)
-        self.assertEqual(len(steps), 3)
-        self.assertTrue(all(isinstance(step, Step) for step in steps))
-        self.assertEqual(
-            [cast(Step, step).name for step in steps],
-            ["extract-events", "publish-events", "build-signals"],
-        )
-        self.assertTrue(all(cast(Step, step).agent is None for step in steps))
-
-    async def test_complete_workflow_analyzes_publishes_projects_and_builds_signals(self) -> None:
-        workflow = _seed_workflow()
-        workflow.db = None
-        assert isinstance(workflow.steps, list)
-        for step, renamed in zip(workflow.steps, ["任意提炼名", "任意发布名", "任意信号名"], strict=True):
-            cast(Step, step).name = renamed
-        publication = EventPublicationRecord(
-            candidate_key="1" * 64,
-            decision="NEW_EVENT",
-            event_id="EVT15bec7e3-998c-5434-aa5d-29712c4c67cf",
-            event_created=True,
-            evidence_link_result="CREATED",
-            graph_projection_status="SUCCEEDED",
-            reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
-            matched_event_ids=[],
-            episode_uuid="episode-complete",
-            published_event={
-                "id": "EVT15bec7e3-998c-5434-aa5d-29712c4c67cf",
-                "event": self._draft().candidates[0].event,
-            },
+            "no_event": [{"evidence_id": "not-a-formal-id", "reason": "bad sibling"}],
+        }
+        studio = FakeStudioResponses(
+            extraction=extraction,
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
         )
 
-        async def publish(candidate, candidate_key, *, existing, checkpoint):
-            del candidate, existing, checkpoint
-            return publication.model_copy(update={"candidate_key": candidate_key})
-
-        self.runtime.publish.side_effect = publish
-        self.runtime.extract.return_value = self._draft()
-        self.runtime.construct_signals.return_value = EventSignalRecord(
-            event_id=publication.event_id,
-            status="SUCCEEDED",
-            signal_fact_uuids=["signal-complete"],
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-malformed-extractor-child",
+            enqueue=True,
         )
+
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.candidate_count, 1)
+        self.assertEqual(result.no_event_count, 1)
+        self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID])
+        self.assertEqual(len(studio.identity_inputs), 1)
+        self.assertEqual(self.runtime.data_publications, 1)
+
+    async def test_same_occurrence_candidates_in_one_batch_publish_only_once(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        first = self.extraction_draft().candidates[0].model_copy(deep=True)
+        first.evidence_ids = [self.FIRST_EVIDENCE_ID]
+        second = first.model_copy(deep=True)
+        second.evidence_ids = [self.FIRST_EVIDENCE_ID, self.SECOND_EVIDENCE_ID]
+        studio = FakeStudioResponses(
+            extraction=EventExtractionDraft(candidates=[first, second], no_event=[]),
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
+
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-batch-duplicate",
+            enqueue=True,
+        )
+
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.candidate_count, 1)
+        self.assertEqual(result.evidence_ids, [self.FIRST_EVIDENCE_ID, self.SECOND_EVIDENCE_ID])
+        self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID])
+        self.assertEqual(len(studio.identity_inputs), 1)
+        self.assertEqual(self.runtime.data_publications, 1)
+        self.assertEqual(self.runtime.episode_projections, 1)
+
+    async def test_permanent_signal_rejection_is_terminal_per_proposal_and_keeps_sibling(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        candidates = self.candidates()
+        second_variable = candidates.variables[0].model_copy(
+            update={
+                "uuid": "variable-delivery",
+                "variable_id": "delivery_capacity",
+                "name": "交付能力",
+            }
+        )
+        self.runtime.signal_candidates = candidates.model_copy(
+            update={"variables": [*candidates.variables, second_variable]}
+        )
+        self.runtime.permanent_signal_rejections = {1}
+        second_signal = self.signal_draft().model_copy(
+            update={
+                "variable_uuid": "variable-delivery",
+                "fact": "服务器订单提高交付能力需求。",
+            }
+        )
+        studio = FakeStudioResponses(
+            extraction=self.extraction_draft(),
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[self.signal_draft(), second_signal],
+        )
+
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-one-permanent-signal-rejection",
+            enqueue=True,
+        )
+
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.signal_fact_uuids, ["signal-fact-1"])
+        self.assertEqual(self.runtime.signal_projection_attempts, 2)
+        self.assertEqual(self.runtime.signal_projections, 1)
+
+    async def test_pre_v8_publication_checkpoint_resumes_episode_without_rerunning_identity(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        draft = self.extraction_draft()
         with patch(
             "capabilities.event.internal.queue.read_resolved_evidences",
-            return_value=self._evidences(),
+            return_value=self.evidences(),
         ):
             enqueue_evidence_artifact(
                 str(self.evidence_manifest),
-                [item.id for item in self._evidences()],
+                [item.id for item in self.evidences()],
             )
-            response = await workflow.arun(
-                input="处理所有已发布且尚未提炼 Event 的 Evidence",
-                run_id="run-event-workflow",
-                session_id="session-event-workflow",
-            )
+            claimed = claim_event_batch()
+        self.assertIsInstance(claimed, EventExtractionBatch)
+        batch = cast(EventExtractionBatch, claimed)
+        freeze_draft(batch, draft)
+        key = _candidate_key(draft.candidates[0])
+        write_publication_journal(
+            batch,
+            EventPublicationJournal(
+                batch_id=batch.batch_id,
+                publications=[
+                    EventPublicationRecord(
+                        candidate_key=key,
+                        decision="NEW_EVENT",
+                        publication_started=True,
+                        event_id=self.runtime.EVENT_ID,
+                        event_created=True,
+                        evidence_link_result="CREATED",
+                        graph_projection_status="NOT_ATTEMPTED",
+                        reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                        matched_event_ids=[],
+                        published_event={
+                            "id": self.runtime.EVENT_ID,
+                            "event": draft.candidates[0].event.model_dump(mode="json"),
+                        },
+                    )
+                ],
+            ),
+        )
+        release_event_batch_lease(batch)
+        studio = FakeStudioResponses(
+            extraction=draft,
+            identity=EventIdentityDecision(
+                decision="SAME_EVENT",
+                atomic=True,
+                matched_event_ids=[self.runtime.EVENT_ID],
+                reason_codes=["SAME_REAL_WORLD_OCCURRENCE"],
+                summary="该 Event 已经可见。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
 
-        self.assertEqual(response.status, RunStatus.completed)
-        self.runtime.extract.assert_awaited_once()
-        analyzed = EventExtractionBatch.model_validate(self.runtime.extract.call_args.args[0])
-        self.assertEqual([item.id for item in analyzed.evidences], [self.FIRST_ID, self.SECOND_ID])
-        self.runtime.publish.assert_awaited_once()
-        self.runtime.construct_signals.assert_awaited_once()
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-pre-v8-publication-resume",
+            enqueue=False,
+        )
 
-    def test_agent_contract_migration_reapplies_reviewed_runtime_contract(self) -> None:
-        db = MagicMock()
-        db.get_component.return_value = {"current_version": 4}
-        current = MagicMock()
-        current.metadata = {"event_extractor_contract_version": 0}
-        current.save.return_value = 5
-        with (
-            patch("agents.event_extractor.get_postgres_db", return_value=db),
-            patch("agents.event_extractor.Agent.load", return_value=current),
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID])
+        self.assertEqual(studio.extraction_inputs, [])
+        self.assertEqual(studio.identity_inputs, [])
+        self.assertEqual(self.runtime.data_publication_requests, 0)
+        self.assertEqual(self.runtime.episode_projections, 1)
+
+    async def test_conflicting_publication_checkpoint_and_resolution_fail_closed(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        draft = self.extraction_draft()
+        with patch(
+            "capabilities.event.internal.queue.read_resolved_evidences",
+            return_value=self.evidences(),
         ):
-            version = ensure_event_extractor_agent(MagicMock())
-
-        self.assertEqual(version, 5)
-        self.assertEqual(current.output_schema, EventExtractionDraft)
-        self.assertEqual(current.tools, [])
-        self.assertEqual(
-            current.metadata["event_extractor_contract_version"],
-            EVENT_EXTRACTOR_CONTRACT_VERSION,
+            enqueue_evidence_artifact(
+                str(self.evidence_manifest),
+                [item.id for item in self.evidences()],
+            )
+            claimed = claim_event_batch()
+        self.assertIsInstance(claimed, EventExtractionBatch)
+        batch = cast(EventExtractionBatch, claimed)
+        freeze_draft(batch, draft)
+        key = _candidate_key(draft.candidates[0])
+        freeze_resolution(
+            batch,
+            EventResolutionRecord(
+                candidate_key=key,
+                decision="SAME_EVENT",
+                atomic=True,
+                matched_event_ids=[self.runtime.EVENT_ID],
+                reason_codes=["SAME_REAL_WORLD_OCCURRENCE"],
+                summary="冲突夹具把已发布 Event 错误标记成重复。",
+            ),
         )
-        current.save.assert_called_once_with(
-            db=db,
-            stage="published",
-            notes=f"Event Extractor runtime contract migration {EVENT_EXTRACTOR_CONTRACT_VERSION}",
+        write_publication_journal(
+            batch,
+            EventPublicationJournal(
+                batch_id=batch.batch_id,
+                publications=[
+                    EventPublicationRecord(
+                        candidate_key=key,
+                        decision="NEW_EVENT",
+                        publication_started=True,
+                        event_id=self.runtime.EVENT_ID,
+                        event_created=True,
+                        evidence_link_result="CREATED",
+                        graph_projection_status="NOT_ATTEMPTED",
+                        reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                        matched_event_ids=[],
+                        published_event={
+                            "id": self.runtime.EVENT_ID,
+                            "event": draft.candidates[0].event.model_dump(mode="json"),
+                        },
+                    )
+                ],
+            ),
+        )
+        release_event_batch_lease(batch)
+        studio = FakeStudioResponses(
+            extraction=draft,
+            identity=EventIdentityDecision(
+                decision="SAME_EVENT",
+                atomic=True,
+                matched_event_ids=[self.runtime.EVENT_ID],
+                reason_codes=["SAME_REAL_WORLD_OCCURRENCE"],
+                summary="该 Event 已经可见。",
+            ),
+            classification=self.classification(),
+            proposals=[],
         )
 
-    def test_workflow_contract_migration_publishes_three_business_steps(self) -> None:
-        db = MagicMock()
-        db.get_component.return_value = {"current_version": 7}
-        db.get_config.return_value = {
-            "config": {
-                "id": "event-extraction",
-                "name": "Event Extraction",
-                "description": "Extracts Event Candidates and hands them to Reasoning Server.",
-                "metadata": {"event_extraction_contract_version": 0},
-            }
-        }
+        with self.assertRaisesRegex(RuntimeError, "Event Workflow stage EVENT_PREPARATION failed"):
+            await self.execute_workflow(
+                workflow,
+                extractor,
+                identity,
+                signal_analyst,
+                studio,
+                run_id="run-conflicting-publication-resolution",
+                enqueue=False,
+            )
+
+        self.assertEqual(studio.extraction_inputs, [])
+        self.assertEqual(studio.identity_inputs, [])
+        self.assertEqual(self.runtime.data_publication_requests, 0)
+        self.assertEqual(self.runtime.episode_projections, 0)
+
+    async def test_legacy_failed_publication_recovery_is_repeatable_after_later_crash(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        draft = self.extraction_draft()
+        with patch(
+            "capabilities.event.internal.queue.read_resolved_evidences",
+            return_value=self.evidences(),
+        ):
+            enqueue_evidence_artifact(
+                str(self.evidence_manifest),
+                [item.id for item in self.evidences()],
+            )
+            claimed = claim_event_batch()
+        self.assertIsInstance(claimed, EventExtractionBatch)
+        batch = cast(EventExtractionBatch, claimed)
+        freeze_draft(batch, draft)
+        key = _candidate_key(draft.candidates[0])
+        write_publication_journal(
+            batch,
+            EventPublicationJournal(
+                batch_id=batch.batch_id,
+                publications=[
+                    EventPublicationRecord(
+                        candidate_key=key,
+                        decision="FAILED",
+                        publication_started=True,
+                        event_id=None,
+                        event_created=False,
+                        evidence_link_result="NOT_ATTEMPTED",
+                        graph_projection_status="NOT_ATTEMPTED",
+                        reason_codes=["DATA_PUBLICATION_REJECTED"],
+                        matched_event_ids=[],
+                    )
+                ],
+            ),
+        )
+        release_event_batch_lease(batch)
+        studio = FakeStudioResponses(
+            extraction=draft,
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
+
         with (
-            patch("workflows.event_extraction.get_postgres_db", return_value=db),
-            patch.object(Workflow, "save", autospec=True, return_value=8) as saved,
+            patch(
+                "capabilities.event.functions.extraction.complete_batch",
+                side_effect=OSError("manifest persistence interrupted after legacy recovery"),
+            ),
+            self.assertRaisesRegex(RuntimeError, "Event Workflow stage SIGNAL_PUBLICATION failed"),
+        ):
+            await self.execute_workflow(
+                workflow,
+                extractor,
+                identity,
+                signal_analyst,
+                studio,
+                run_id="run-legacy-failed-recovery-crash",
+                enqueue=False,
+            )
+
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-legacy-failed-recovery-resume",
+            enqueue=False,
+        )
+
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.failed_candidate_count, 1)
+        self.assertEqual(result.failed_evidence_ids, [self.FIRST_EVIDENCE_ID, self.SECOND_EVIDENCE_ID])
+        self.assertEqual(studio.extraction_inputs, [])
+        self.assertEqual(studio.identity_inputs, [])
+        self.assertEqual(self.runtime.data_publication_requests, 0)
+
+    async def test_legacy_terminal_signal_journal_skips_signal_agent_on_resume(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        draft = self.extraction_draft()
+        with patch(
+            "capabilities.event.internal.queue.read_resolved_evidences",
+            return_value=self.evidences(),
+        ):
+            enqueue_evidence_artifact(
+                str(self.evidence_manifest),
+                [item.id for item in self.evidences()],
+            )
+            claimed = claim_event_batch()
+        self.assertIsInstance(claimed, EventExtractionBatch)
+        batch = cast(EventExtractionBatch, claimed)
+        freeze_draft(batch, draft)
+        key = _candidate_key(draft.candidates[0])
+        write_publication_journal(
+            batch,
+            EventPublicationJournal(
+                batch_id=batch.batch_id,
+                publications=[
+                    EventPublicationRecord(
+                        candidate_key=key,
+                        decision="NEW_EVENT",
+                        publication_started=True,
+                        event_id=self.runtime.EVENT_ID,
+                        event_created=True,
+                        evidence_link_result="CREATED",
+                        graph_projection_status="SUCCEEDED",
+                        reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                        matched_event_ids=[],
+                        episode_uuid=f"episode-{self.runtime.EVENT_ID}",
+                        published_event={
+                            "id": self.runtime.EVENT_ID,
+                            "event": draft.candidates[0].event.model_dump(mode="json"),
+                        },
+                    )
+                ],
+            ),
+        )
+        write_signal_journal(
+            batch,
+            EventSignalJournal(
+                batch_id=batch.batch_id,
+                signals=[
+                    EventSignalRecord(
+                        event_id=self.runtime.EVENT_ID,
+                        status="SUCCEEDED",
+                        signal_fact_uuids=["legacy-signal-fact"],
+                        reason_codes=["DIRECT_SIGNAL_FACTS_PROJECTED"],
+                    )
+                ],
+            ),
+        )
+        release_event_batch_lease(batch)
+        studio = FakeStudioResponses(
+            extraction=draft,
+            identity=EventIdentityDecision(
+                decision="SAME_EVENT",
+                atomic=True,
+                matched_event_ids=[self.runtime.EVENT_ID],
+                reason_codes=["SAME_REAL_WORLD_OCCURRENCE"],
+                summary="该 Event 已经可见。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
+
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-legacy-signal-terminal-resume",
+            enqueue=False,
+        )
+
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.signal_fact_uuids, ["legacy-signal-fact"])
+        self.assertEqual(studio.extraction_inputs, [])
+        self.assertEqual(studio.identity_inputs, [])
+        self.assertEqual(studio.signal_inputs, [])
+        self.assertEqual(self.runtime.signal_projections, 0)
+
+    async def test_retry_replays_same_key_after_data_ack_is_lost_before_local_checkpoint(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        self.runtime.signal_candidates = self.candidates()
+        self.runtime.fail_before_data_ack_checkpoint_once = True
+        studio = FakeStudioResponses(
+            extraction=self.extraction_draft(),
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[self.signal_draft()],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "Event Workflow stage EVENT_PUBLICATION failed"):
+            await self.execute_workflow(
+                workflow,
+                extractor,
+                identity,
+                signal_analyst,
+                studio,
+                run_id="run-lost-data-ack",
+                enqueue=True,
+            )
+
+        self.assertEqual(len(studio.extraction_inputs), 1)
+        self.assertEqual(len(studio.identity_inputs), 1)
+        self.assertEqual(studio.signal_inputs, [])
+        self.assertEqual(
+            (
+                self.runtime.history_reads,
+                self.runtime.data_publication_requests,
+                self.runtime.data_publications,
+                self.runtime.episode_projections,
+            ),
+            (1, 1, 1, 0),
+        )
+
+        resumed = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-resume-data-checkpoint",
+            enqueue=False,
+        )
+
+        self.assertEqual(resumed.status, RunStatus.completed)
+        result = EventExtractionResult.model_validate(resumed.content)
+        self.assertEqual(result.schema_version, "event_extraction_result.v4")
+        self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID])
+        self.assertEqual(result.signal_fact_uuids, ["signal-fact-1"])
+        self.assertEqual(len(studio.extraction_inputs), 1)
+        self.assertEqual(len(studio.identity_inputs), 1)
+        self.assertEqual([request.task for request in studio.signal_inputs], ["CLASSIFY", "PROPOSE_SIGNALS"])
+        self.assertEqual(
+            (
+                self.runtime.history_reads,
+                self.runtime.data_publication_requests,
+                self.runtime.data_publications,
+                self.runtime.episode_projections,
+                self.runtime.signal_candidate_reads,
+                self.runtime.signal_projections,
+            ),
+            (1, 2, 1, 1, 1, 1),
+        )
+
+    async def test_candidate_retrieval_retry_reuses_frozen_classification(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        self.runtime.signal_candidates = self.candidates()
+        self.runtime.fail_signal_candidate_read_once = True
+        studio = FakeStudioResponses(
+            extraction=self.extraction_draft(),
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "Event Workflow stage SIGNAL_PREPARATION failed"):
+            await self.execute_workflow(
+                workflow,
+                extractor,
+                identity,
+                signal_analyst,
+                studio,
+                run_id="run-candidate-retrieval-failure",
+                enqueue=True,
+            )
+        self.assertEqual([request.task for request in studio.signal_inputs], ["CLASSIFY"])
+
+        resumed = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-candidate-retrieval-resume",
+            enqueue=False,
+        )
+
+        self.assertEqual(resumed.status, RunStatus.completed)
+        self.assertEqual([request.task for request in studio.signal_inputs], ["CLASSIFY", "PROPOSE_SIGNALS"])
+        self.assertEqual(len(studio.extraction_inputs), 1)
+        self.assertEqual(len(studio.identity_inputs), 1)
+        self.assertEqual(self.runtime.signal_candidate_reads, 2)
+        self.assertEqual(
+            (self.runtime.data_publications, self.runtime.episode_projections, self.runtime.signal_projections),
+            (1, 1, 0),
+        )
+
+    def test_workflow_publication_pins_exact_agent_versions_without_saving_agents(self) -> None:
+        extractor, identity, signal_analyst = self.studio_agents()
+        database = MagicMock()
+        database.get_component.return_value = None
+        database.upsert_config.return_value = {"version": 23}
+        loaded = (
+            LoadedEventExtractorAgent(extractor, 11, "a" * 64),
+            LoadedEventIdentityAgent(identity, 13, "b" * 64),
+            LoadedEventSignalAnalystAgent(signal_analyst, 17, "c" * 64),
+        )
+
+        with (
+            patch("workflows.event_extraction.get_postgres_db", return_value=database),
+            patch("workflows.event_extraction.load_event_extractor_agent", return_value=loaded[0]),
+            patch("workflows.event_extraction.load_event_identity_agent", return_value=loaded[1]),
+            patch("workflows.event_extraction.load_event_signal_analyst_agent", return_value=loaded[2]),
+            patch.object(Agent, "save", autospec=True) as agent_save,
         ):
             version = ensure_event_extraction_workflow(MagicMock())
 
-        self.assertEqual(version, 8)
-        migrated = cast(Workflow, saved.call_args.args[0])
+        self.assertEqual(version, 23)
+        agent_save.assert_not_called()
+        component_metadata = database.upsert_component.call_args.kwargs["metadata"]
         self.assertEqual(
-            migrated.metadata,
-            {"event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION},
+            component_metadata,
+            {
+                "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
+                "event_agent_versions": self.AGENT_VERSIONS,
+            },
         )
-        self.assertNotIn("Reasoning Server", migrated.description or "")
-        migrated_steps = cast(list[object], migrated.steps)
+        publication = database.upsert_config.call_args.kwargs
+        self.assertEqual(publication["stage"], "published")
+        self.assertEqual(publication["config"]["metadata"], component_metadata)
         self.assertEqual(
-            [cast(Step, step).name for step in migrated_steps],
-            ["extract-events", "publish-events", "build-signals"],
+            publication["links"],
+            [
+                {
+                    "link_kind": "step_agent",
+                    "link_key": "event-extract-agent",
+                    "child_component_id": "event-extractor",
+                    "child_version": 11,
+                    "position": 0,
+                },
+                {
+                    "link_kind": "step_agent",
+                    "link_key": "event-identity-agent",
+                    "child_component_id": "event-identity",
+                    "child_version": 13,
+                    "position": 1,
+                },
+                {
+                    "link_kind": "step_agent",
+                    "link_key": "event-signal-agent",
+                    "child_component_id": "event-signal-analyst",
+                    "child_version": 17,
+                    "position": 1,
+                },
+            ],
         )
 
-    def test_tidewise_registry_resolves_published_event_extractor(self) -> None:
-        runtime_agent = build_event_extractor_agent()
-        runtime_agent.db = None
-        registry = TidewiseRegistry(name="Event Registry Test")
-        with patch("app.registry.load_event_extractor_agent", return_value=runtime_agent) as loaded:
-            resolved = registry.get_agent("event-extractor")
+    def test_agent_contract_migrations_reconfigure_code_fields_without_replacing_studio_instructions(self) -> None:
+        cases = (
+            (
+                "agents.event_extractor",
+                "event-extractor",
+                "event_extractor_contract_version",
+                EVENT_EXTRACTOR_CONTRACT_VERSION,
+                EventExtractionDraft,
+                ensure_event_extractor_agent,
+            ),
+            (
+                "agents.event_identity",
+                "event-identity",
+                "event_identity_contract_version",
+                EVENT_IDENTITY_CONTRACT_VERSION,
+                EventIdentityDecision,
+                ensure_event_identity_agent,
+            ),
+            (
+                "agents.event_signal_analyst",
+                "event-signal-analyst",
+                "event_signal_analyst_contract_version",
+                EVENT_SIGNAL_ANALYST_CONTRACT_VERSION,
+                EventSignalAnalysisDraft,
+                ensure_event_signal_analyst_agent,
+            ),
+        )
+        for module, agent_id, contract_key, contract_version, output_schema, ensure in cases:
+            with self.subTest(agent_id=agent_id):
+                database = MagicMock()
+                database.get_component.return_value = {"current_version": 41}
+                instructions = f"Studio customized prompt for {agent_id}"
+                current = Agent(
+                    id=agent_id,
+                    instructions=instructions,
+                    additional_context="stale runtime contract",
+                    metadata={contract_key: 0},
+                )
+                with (
+                    patch(f"{module}.get_postgres_db", return_value=database),
+                    patch(f"{module}.Agent.load", return_value=current),
+                    patch.object(current, "save", autospec=True, return_value=42) as save,
+                ):
+                    version = ensure(MagicMock())
 
-        self.assertIs(resolved, runtime_agent)
-        loaded.assert_called_once_with(registry)
+                self.assertEqual(version, 42)
+                self.assertEqual(current.instructions, instructions)
+                self.assertEqual(current.output_schema, output_schema)
+                self.assertEqual(current.tools, [])
+                self.assertIsNotNone(current.metadata)
+                assert current.metadata is not None
+                self.assertEqual(current.metadata[contract_key], contract_version)
+                self.assertNotEqual(current.additional_context, "stale runtime contract")
+                agent_name = {
+                    "event-extractor": "Event Extractor",
+                    "event-identity": "Event Identity",
+                    "event-signal-analyst": "Event Signal Analyst",
+                }[agent_id]
+                save.assert_called_once_with(
+                    db=database,
+                    stage="published",
+                    notes=f"{agent_name} runtime contract migration {contract_version}",
+                )
+
+    def test_current_workflow_rejects_incomplete_agent_version_metadata_or_links(self) -> None:
+        complete_versions = dict(self.AGENT_VERSIONS)
+        complete_links = [
+            {
+                "link_kind": "step_agent",
+                "child_component_id": agent_id,
+                "child_version": version,
+            }
+            for agent_id, version in complete_versions.items()
+        ]
+        cases = (
+            (
+                {"event-extractor": 11, "event-identity": 13},
+                complete_links,
+                "version metadata is incomplete",
+            ),
+            (
+                complete_versions,
+                complete_links[:-1],
+                "does not pin all exact Agent versions",
+            ),
+        )
+        for metadata_versions, links, error in cases:
+            with self.subTest(error=error):
+                database = MagicMock()
+                database.get_component.return_value = {"current_version": 29}
+                database.get_config.return_value = {
+                    "config": {
+                        "id": "event-extraction",
+                        "metadata": {
+                            "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
+                            "event_agent_versions": metadata_versions,
+                        },
+                    }
+                }
+                database.get_links.return_value = links
+                with (
+                    patch("workflows.event_extraction.get_postgres_db", return_value=database),
+                    patch.object(Workflow, "load", autospec=True) as workflow_load,
+                    self.assertRaisesRegex(ValueError, error),
+                ):
+                    ensure_event_extraction_workflow(MagicMock())
+
+                workflow_load.assert_not_called()
 
 
 if __name__ == "__main__":

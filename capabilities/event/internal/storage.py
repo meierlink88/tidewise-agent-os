@@ -20,8 +20,21 @@ from capabilities.event.internal.models import (
     EventExtractionDraft,
     EventExtractionLease,
     EventExtractionResult,
+    EventIdentityRequest,
+    EventIdentityRequestJournal,
     EventPublicationJournal,
+    EventResolutionJournal,
+    EventResolutionRecord,
+    EventSignalAnalysisJournal,
+    EventSignalAnalysisRecord,
+    EventSignalCandidateJournal,
+    EventSignalCandidateRecord,
+    EventSignalClassificationJournal,
+    EventSignalClassificationRecord,
     EventSignalJournal,
+    EventSignalPreparationJournal,
+    EventSignalProjectionJournal,
+    EventSignalProjectionRecord,
     FrozenEventExtractionBatch,
 )
 from capabilities.event.internal.queue import (
@@ -30,6 +43,7 @@ from capabilities.event.internal.queue import (
     pending_queue_items,
     resolve_queue_item,
 )
+from sematica.analysis.event.contracts import EventAnalysisInput
 
 
 def event_artifact_root() -> Path:
@@ -191,6 +205,15 @@ def _assert_event_batch_lease(batch: EventExtractionBatch, *, now: datetime) -> 
         raise ValueError("Event extraction batch lease is not owned by this run")
 
 
+@contextmanager
+def _owned_batch_lock(batch: EventExtractionBatch) -> Iterator[None]:
+    """Fence one local mutation by the current unexpired batch lease."""
+
+    with _claim_lock():
+        _assert_event_batch_lease(batch, now=datetime.now(UTC))
+        yield
+
+
 def renew_event_batch_lease(batch: EventExtractionBatch) -> None:
     """Extend the current lease after durable progress."""
     with _claim_lock():
@@ -214,17 +237,18 @@ def release_event_batch_lease(batch: EventExtractionBatch) -> None:
 
 
 def freeze_draft(batch: EventExtractionBatch, draft: EventExtractionDraft) -> EventExtractionDraft:
-    path = pending_directory(batch.batch_id) / "draft.json"
-    if path.exists():
-        try:
-            existing = EventExtractionDraft.model_validate_json(path.read_text(encoding="utf-8"))
-        except (OSError, ValidationError) as exc:
-            raise ValueError("frozen Event extraction draft is invalid") from exc
-        if existing != draft:
-            raise ValueError("frozen Event extraction draft is immutable")
-        return existing
-    _atomic_write_json(path, draft.model_dump(mode="json"))
-    return draft
+    with _owned_batch_lock(batch):
+        path = pending_directory(batch.batch_id) / "draft.json"
+        if path.exists():
+            try:
+                existing = EventExtractionDraft.model_validate_json(path.read_text(encoding="utf-8"))
+            except (OSError, ValidationError) as exc:
+                raise ValueError("frozen Event extraction draft is invalid") from exc
+            if existing != draft:
+                raise ValueError("frozen Event extraction draft is immutable")
+            return existing
+        _atomic_write_json(path, draft.model_dump(mode="json"))
+        return draft
 
 
 def load_draft(batch_id: str) -> EventExtractionDraft:
@@ -234,6 +258,74 @@ def load_draft(batch_id: str) -> EventExtractionDraft:
         )
     except (OSError, ValidationError) as exc:
         raise ValueError("frozen Event extraction draft is invalid") from exc
+
+
+def load_identity_request_journal(batch_id: str) -> EventIdentityRequestJournal:
+    path = pending_directory(batch_id) / "identity-requests.json"
+    if not path.exists():
+        return EventIdentityRequestJournal(batch_id=batch_id, requests=[])
+    try:
+        journal = EventIdentityRequestJournal.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        raise ValueError("Event identity request journal is invalid") from exc
+    if journal.batch_id != batch_id:
+        raise ValueError("Event identity request journal batch identity conflict")
+    return journal
+
+
+def freeze_identity_request(batch: EventExtractionBatch, request: EventIdentityRequest) -> EventIdentityRequest:
+    with _owned_batch_lock(batch):
+        journal = load_identity_request_journal(batch.batch_id)
+        requests = {item.candidate_key: item for item in journal.requests}
+        existing = requests.get(request.candidate_key)
+        if existing is not None:
+            if existing != request:
+                raise ValueError("frozen Event identity request is immutable")
+            return existing
+        requests[request.candidate_key] = request
+        updated = EventIdentityRequestJournal(
+            batch_id=batch.batch_id,
+            requests=[requests[key] for key in sorted(requests)],
+        )
+        _atomic_write_json(
+            pending_directory(batch.batch_id) / "identity-requests.json",
+            updated.model_dump(mode="json"),
+        )
+        return request
+
+
+def load_resolution_journal(batch_id: str) -> EventResolutionJournal:
+    path = pending_directory(batch_id) / "resolutions.json"
+    if not path.exists():
+        return EventResolutionJournal(batch_id=batch_id, resolutions=[])
+    try:
+        journal = EventResolutionJournal.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        raise ValueError("Event resolution journal is invalid") from exc
+    if journal.batch_id != batch_id:
+        raise ValueError("Event resolution journal batch identity conflict")
+    return journal
+
+
+def freeze_resolution(batch: EventExtractionBatch, resolution: EventResolutionRecord) -> EventResolutionRecord:
+    with _owned_batch_lock(batch):
+        journal = load_resolution_journal(batch.batch_id)
+        resolutions = {item.candidate_key: item for item in journal.resolutions}
+        existing = resolutions.get(resolution.candidate_key)
+        if existing is not None:
+            if existing != resolution:
+                raise ValueError("frozen Event resolution is immutable")
+            return existing
+        resolutions[resolution.candidate_key] = resolution
+        updated = EventResolutionJournal(
+            batch_id=batch.batch_id,
+            resolutions=[resolutions[key] for key in sorted(resolutions)],
+        )
+        _atomic_write_json(
+            pending_directory(batch.batch_id) / "resolutions.json",
+            updated.model_dump(mode="json"),
+        )
+        return resolution
 
 
 def load_publication_journal(batch_id: str) -> EventPublicationJournal:
@@ -249,11 +341,197 @@ def load_publication_journal(batch_id: str) -> EventPublicationJournal:
     return journal
 
 
-def write_publication_journal(journal: EventPublicationJournal) -> None:
-    _atomic_write_json(
-        pending_directory(journal.batch_id) / "publications.json",
-        journal.model_dump(mode="json"),
-    )
+def write_publication_journal(batch: EventExtractionBatch, journal: EventPublicationJournal) -> None:
+    with _owned_batch_lock(batch):
+        if journal.batch_id != batch.batch_id:
+            raise ValueError("Event publication journal batch identity conflict")
+        _atomic_write_json(
+            pending_directory(journal.batch_id) / "publications.json",
+            journal.model_dump(mode="json"),
+        )
+
+
+def load_signal_preparation_journal(batch_id: str) -> EventSignalPreparationJournal:
+    path = pending_directory(batch_id) / "signal-preparations.json"
+    if not path.exists():
+        return EventSignalPreparationJournal(batch_id=batch_id, analyses=[])
+    try:
+        journal = EventSignalPreparationJournal.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        raise ValueError("Event Signal preparation journal is invalid") from exc
+    if journal.batch_id != batch_id:
+        raise ValueError("Event Signal preparation journal batch identity conflict")
+    return journal
+
+
+def freeze_signal_preparation(batch: EventExtractionBatch, analysis: EventAnalysisInput) -> EventAnalysisInput:
+    with _owned_batch_lock(batch):
+        journal = load_signal_preparation_journal(batch.batch_id)
+        analyses = {item.event.id: item for item in journal.analyses}
+        existing = analyses.get(analysis.event.id)
+        if existing is not None:
+            if existing != analysis:
+                raise ValueError("frozen Event Signal preparation is immutable")
+            return existing
+        analyses[analysis.event.id] = analysis
+        updated = EventSignalPreparationJournal(
+            batch_id=batch.batch_id,
+            analyses=[analyses[key] for key in sorted(analyses)],
+        )
+        _atomic_write_json(
+            pending_directory(batch.batch_id) / "signal-preparations.json",
+            updated.model_dump(mode="json"),
+        )
+        return analysis
+
+
+def load_signal_classification_journal(batch_id: str) -> EventSignalClassificationJournal:
+    path = pending_directory(batch_id) / "signal-classifications.json"
+    if not path.exists():
+        return EventSignalClassificationJournal(batch_id=batch_id, classifications=[])
+    try:
+        journal = EventSignalClassificationJournal.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        raise ValueError("Event Signal classification journal is invalid") from exc
+    if journal.batch_id != batch_id:
+        raise ValueError("Event Signal classification journal batch identity conflict")
+    return journal
+
+
+def freeze_signal_classification(
+    batch: EventExtractionBatch,
+    classification: EventSignalClassificationRecord,
+) -> EventSignalClassificationRecord:
+    with _owned_batch_lock(batch):
+        journal = load_signal_classification_journal(batch.batch_id)
+        classifications = {item.event_id: item for item in journal.classifications}
+        existing = classifications.get(classification.event_id)
+        if existing is not None:
+            if existing != classification:
+                raise ValueError("frozen Event Signal classification is immutable")
+            return existing
+        classifications[classification.event_id] = classification
+        updated = EventSignalClassificationJournal(
+            batch_id=batch.batch_id,
+            classifications=[classifications[key] for key in sorted(classifications)],
+        )
+        _atomic_write_json(
+            pending_directory(batch.batch_id) / "signal-classifications.json",
+            updated.model_dump(mode="json"),
+        )
+        return classification
+
+
+def load_signal_candidate_journal(batch_id: str) -> EventSignalCandidateJournal:
+    path = pending_directory(batch_id) / "signal-candidates.json"
+    if not path.exists():
+        return EventSignalCandidateJournal(batch_id=batch_id, candidates=[])
+    try:
+        journal = EventSignalCandidateJournal.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        raise ValueError("Event Signal candidate journal is invalid") from exc
+    if journal.batch_id != batch_id:
+        raise ValueError("Event Signal candidate journal batch identity conflict")
+    return journal
+
+
+def freeze_signal_candidates(
+    batch: EventExtractionBatch,
+    candidate_set: EventSignalCandidateRecord,
+) -> EventSignalCandidateRecord:
+    with _owned_batch_lock(batch):
+        journal = load_signal_candidate_journal(batch.batch_id)
+        candidate_sets = {item.event_id: item for item in journal.candidates}
+        existing = candidate_sets.get(candidate_set.event_id)
+        if existing is not None:
+            if existing != candidate_set:
+                raise ValueError("frozen Event Signal candidates are immutable")
+            return existing
+        candidate_sets[candidate_set.event_id] = candidate_set
+        updated = EventSignalCandidateJournal(
+            batch_id=batch.batch_id,
+            candidates=[candidate_sets[key] for key in sorted(candidate_sets)],
+        )
+        _atomic_write_json(
+            pending_directory(batch.batch_id) / "signal-candidates.json",
+            updated.model_dump(mode="json"),
+        )
+        return candidate_set
+
+
+def load_signal_analysis_journal(batch_id: str) -> EventSignalAnalysisJournal:
+    path = pending_directory(batch_id) / "signal-analyses.json"
+    if not path.exists():
+        return EventSignalAnalysisJournal(batch_id=batch_id, analyses=[])
+    try:
+        journal = EventSignalAnalysisJournal.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        raise ValueError("Event Signal analysis journal is invalid") from exc
+    if journal.batch_id != batch_id:
+        raise ValueError("Event Signal analysis journal batch identity conflict")
+    return journal
+
+
+def freeze_signal_analysis(
+    batch: EventExtractionBatch,
+    analysis: EventSignalAnalysisRecord,
+) -> EventSignalAnalysisRecord:
+    with _owned_batch_lock(batch):
+        journal = load_signal_analysis_journal(batch.batch_id)
+        analyses = {item.event_id: item for item in journal.analyses}
+        existing = analyses.get(analysis.event_id)
+        if existing is not None:
+            if existing != analysis:
+                raise ValueError("frozen Event Signal analysis is immutable")
+            return existing
+        analyses[analysis.event_id] = analysis
+        updated = EventSignalAnalysisJournal(
+            batch_id=batch.batch_id,
+            analyses=[analyses[key] for key in sorted(analyses)],
+        )
+        _atomic_write_json(
+            pending_directory(batch.batch_id) / "signal-analyses.json",
+            updated.model_dump(mode="json"),
+        )
+        return analysis
+
+
+def load_signal_projection_journal(batch_id: str) -> EventSignalProjectionJournal:
+    path = pending_directory(batch_id) / "signal-projections.json"
+    if not path.exists():
+        return EventSignalProjectionJournal(batch_id=batch_id, projections=[])
+    try:
+        journal = EventSignalProjectionJournal.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        raise ValueError("Event Signal projection journal is invalid") from exc
+    if journal.batch_id != batch_id:
+        raise ValueError("Event Signal projection journal batch identity conflict")
+    return journal
+
+
+def freeze_signal_projection(
+    batch: EventExtractionBatch,
+    projection: EventSignalProjectionRecord,
+) -> EventSignalProjectionRecord:
+    with _owned_batch_lock(batch):
+        journal = load_signal_projection_journal(batch.batch_id)
+        projections = {(item.event_id, item.proposal_key): item for item in journal.projections}
+        key = (projection.event_id, projection.proposal_key)
+        existing = projections.get(key)
+        if existing is not None:
+            if existing != projection:
+                raise ValueError("frozen Event Signal projection is immutable")
+            return existing
+        projections[key] = projection
+        updated = EventSignalProjectionJournal(
+            batch_id=batch.batch_id,
+            projections=[projections[key] for key in sorted(projections)],
+        )
+        _atomic_write_json(
+            pending_directory(batch.batch_id) / "signal-projections.json",
+            updated.model_dump(mode="json"),
+        )
+        return projection
 
 
 def load_signal_journal(batch_id: str) -> EventSignalJournal:
@@ -269,11 +547,14 @@ def load_signal_journal(batch_id: str) -> EventSignalJournal:
     return journal
 
 
-def write_signal_journal(journal: EventSignalJournal) -> None:
-    _atomic_write_json(
-        pending_directory(journal.batch_id) / "signals.json",
-        journal.model_dump(mode="json"),
-    )
+def write_signal_journal(batch: EventExtractionBatch, journal: EventSignalJournal) -> None:
+    with _owned_batch_lock(batch):
+        if journal.batch_id != batch.batch_id:
+            raise ValueError("Event signal journal batch identity conflict")
+        _atomic_write_json(
+            pending_directory(journal.batch_id) / "signals.json",
+            journal.model_dump(mode="json"),
+        )
 
 
 def complete_batch(batch: EventExtractionBatch, result: EventExtractionResult) -> None:

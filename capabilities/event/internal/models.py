@@ -6,6 +6,14 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from capabilities.evidence import EvidenceSemantic
+from sematica.analysis.event.contracts import (
+    CandidateSet,
+    DirectSignalDraft,
+    EventAnalysisInput,
+    EventClassification,
+    SignalProposal,
+)
+from sematica.ingestion.episcode.event.contracts import HistoricalEvent
 
 EvidenceID = Annotated[
     str,
@@ -244,6 +252,118 @@ class EventExtractionDraft(BaseModel):
     no_event: list[EventDisposition]
 
 
+class EventIdentityRequest(BaseModel):
+    """One frozen Candidate and only the historical Events it may reference."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["event_identity_request.v1"] = "event_identity_request.v1"
+    candidate_key: str = Field(pattern=r"^[0-9a-f]{64}$")
+    candidate: EventCandidateSubmission
+    historical_candidates: list[HistoricalEvent] = Field(max_length=30)
+
+    @model_validator(mode="after")
+    def historical_ids_are_unique(self) -> "EventIdentityRequest":
+        ids = [item.id for item in self.historical_candidates]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Event identity history IDs must be unique")
+        return self
+
+
+class EventIdentityDecision(BaseModel):
+    """Strict Studio Agent judgment for atomicity and historical identity."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    decision: Literal["NEW_EVENT", "SAME_EVENT", "RELATED_BUT_DISTINCT", "IGNORED"]
+    atomic: bool
+    matched_event_ids: list[str] = Field(max_length=30)
+    reason_codes: list[str] = Field(min_length=1, max_length=24)
+    summary: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def decision_is_consistent(self) -> "EventIdentityDecision":
+        if not self.atomic and self.decision != "IGNORED":
+            raise ValueError("a non-atomic Candidate must be ignored")
+        if self.decision == "SAME_EVENT" and len(self.matched_event_ids) != 1:
+            raise ValueError("SAME_EVENT requires exactly one matched historical Event")
+        if self.decision == "NEW_EVENT" and self.matched_event_ids:
+            raise ValueError("NEW_EVENT cannot reference a historical Event")
+        if len(self.matched_event_ids) != len(set(self.matched_event_ids)):
+            raise ValueError("matched historical Event IDs must be unique")
+        return self
+
+
+class EventIdentityRequestJournal(BaseModel):
+    """Immutable prepared Agent inputs for one frozen batch."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["event_identity_request_journal.v1"] = "event_identity_request_journal.v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    requests: list[EventIdentityRequest]
+
+    @model_validator(mode="after")
+    def request_keys_are_unique(self) -> "EventIdentityRequestJournal":
+        keys = [item.candidate_key for item in self.requests]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Event identity request Candidate keys must be unique")
+        return self
+
+
+class EventResolutionRecord(BaseModel):
+    """Immutable validated identity disposition for one Candidate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    candidate_key: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision: Literal["NEW_EVENT", "SAME_EVENT", "RELATED_BUT_DISTINCT", "IGNORED"]
+    atomic: bool
+    matched_event_ids: list[str]
+    reason_codes: list[str] = Field(min_length=1)
+    summary: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def decision_is_consistent(self) -> "EventResolutionRecord":
+        if not self.atomic and self.decision != "IGNORED":
+            raise ValueError("a non-atomic frozen Event resolution must be ignored")
+        if self.decision == "SAME_EVENT" and len(self.matched_event_ids) != 1:
+            raise ValueError("a frozen SAME_EVENT resolution requires exactly one match")
+        if self.decision == "NEW_EVENT" and self.matched_event_ids:
+            raise ValueError("a frozen NEW_EVENT resolution cannot retain historical matches")
+        if len(self.matched_event_ids) != len(set(self.matched_event_ids)):
+            raise ValueError("frozen Event resolution matches must be unique")
+        return self
+
+
+class EventResolutionJournal(BaseModel):
+    """Immutable Event identity decisions for one frozen batch."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["event_resolution_journal.v1"] = "event_resolution_journal.v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    resolutions: list[EventResolutionRecord]
+
+    @model_validator(mode="after")
+    def resolution_keys_are_unique(self) -> "EventResolutionJournal":
+        keys = [item.candidate_key for item in self.resolutions]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Event resolution Candidate keys must be unique")
+        return self
+
+
+class EventWorkflowProgress(BaseModel):
+    """Rename-safe loop completion signal carried as direct predecessor content."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    phase: Literal["RESOLVE_EVENTS", "ANALYZE_SIGNALS"]
+    processed: int = Field(ge=0)
+    total: int = Field(ge=0)
+    done: bool
+
+
 class PublishedEvent(BaseModel):
     """Formal Data Event available to Graphiti and Signal construction."""
 
@@ -288,19 +408,181 @@ class EventPublicationJournal(BaseModel):
         return self
 
 
-class EventPublicationStageResult(BaseModel):
-    """Direct predecessor state passed from publication to Signal construction."""
+class EventSignalClassificationRequest(BaseModel):
+    """Frozen input for the Signal Analyst classification pass."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal["event_publication_stage_result.v1"] = "event_publication_stage_result.v1"
-    batch: EventExtractionBatch
-    journal: EventPublicationJournal
+    schema_version: Literal["event_signal_classification_request.v1"] = "event_signal_classification_request.v1"
+    task: Literal["CLASSIFY"] = "CLASSIFY"
+    analysis: EventAnalysisInput
+
+
+class EventSignalAnalysisRequest(BaseModel):
+    """Frozen classification and existing graph identities for Signal proposals."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["event_signal_analysis_request.v1"] = "event_signal_analysis_request.v1"
+    task: Literal["PROPOSE_SIGNALS"] = "PROPOSE_SIGNALS"
+    analysis: EventAnalysisInput
+    classification: EventClassification
+    candidates: CandidateSet
+
+
+class EventSignalAnalysisDraft(BaseModel):
+    """Strict output shared by both Signal Analyst passes."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    classification: EventClassification
+    proposals: list[DirectSignalDraft] = Field(max_length=12)
+    no_signal_reason: str | None = Field(default=None, max_length=1000)
+    reason_codes: list[str] = Field(default_factory=list, max_length=24)
+
+
+class EventSignalPreparationJournal(BaseModel):
+    """Immutable per-Event reference times prepared before any Signal judgment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["event_signal_preparation_journal.v1"] = "event_signal_preparation_journal.v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    analyses: list[EventAnalysisInput]
 
     @model_validator(mode="after")
-    def require_same_batch(self) -> "EventPublicationStageResult":
-        if self.batch.batch_id != self.journal.batch_id:
-            raise ValueError("Event publication stage batch identity conflict")
+    def event_ids_are_unique(self) -> "EventSignalPreparationJournal":
+        ids = [item.event.id for item in self.analyses]
+        if len(ids) != len(set(ids)):
+            raise ValueError("prepared Signal Event IDs must be unique")
+        return self
+
+
+class EventSignalClassificationRecord(BaseModel):
+    """Immutable valid Event classification retained before graph retrieval."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    event_id: str = Field(min_length=1)
+    classification: EventClassification
+
+
+class EventSignalClassificationJournal(BaseModel):
+    """Frozen valid classifications retained even when no Signal is supported."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["event_signal_classification_journal.v1"] = "event_signal_classification_journal.v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    classifications: list[EventSignalClassificationRecord]
+
+    @model_validator(mode="after")
+    def event_ids_are_unique(self) -> "EventSignalClassificationJournal":
+        ids = [item.event_id for item in self.classifications]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Signal classification Event IDs must be unique")
+        return self
+
+
+class EventSignalCandidateRecord(BaseModel):
+    """Immutable bounded existing graph identities prepared after classification."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    event_id: str = Field(min_length=1)
+    candidates: CandidateSet
+
+
+class EventSignalCandidateJournal(BaseModel):
+    """Frozen candidate sets so retrieval retries never rerun semantic classification."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["event_signal_candidate_journal.v1"] = "event_signal_candidate_journal.v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    candidates: list[EventSignalCandidateRecord]
+
+    @model_validator(mode="after")
+    def event_ids_are_unique(self) -> "EventSignalCandidateJournal":
+        ids = [item.event_id for item in self.candidates]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Signal candidate-set Event IDs must be unique")
+        return self
+
+
+class EventSignalAnalysisRecord(BaseModel):
+    """Immutable validated Signal Agent disposition for one projected Event."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    event_id: str = Field(min_length=1)
+    status: Literal["SUCCEEDED", "NO_SIGNAL", "NO_SUPPORTED_ANCHOR", "NONCOMPLIANT"]
+    classification: EventClassification | None
+    proposals: list[SignalProposal] = Field(max_length=12)
+    reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def classification_and_proposals_match_status(self) -> "EventSignalAnalysisRecord":
+        if self.status != "NONCOMPLIANT" and self.classification is None:
+            raise ValueError("a compliant Signal analysis must retain its Event classification")
+        if self.status == "SUCCEEDED" and not self.proposals:
+            raise ValueError("a successful Signal analysis requires at least one proposal")
+        if self.status != "SUCCEEDED" and self.proposals:
+            raise ValueError("a non-successful Signal analysis cannot retain proposals")
+        return self
+
+
+class EventSignalAnalysisJournal(BaseModel):
+    """Frozen terminal Signal analyses before any Graphiti Fact side effect."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["event_signal_analysis_journal.v1"] = "event_signal_analysis_journal.v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    analyses: list[EventSignalAnalysisRecord]
+
+    @model_validator(mode="after")
+    def event_ids_are_unique(self) -> "EventSignalAnalysisJournal":
+        ids = [item.event_id for item in self.analyses]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Signal analysis Event IDs must be unique")
+        return self
+
+
+class EventSignalProjectionRecord(BaseModel):
+    """One immutable terminal Graphiti Signal projection checkpoint."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    event_id: str = Field(min_length=1)
+    proposal_key: str = Field(pattern=r"^[0-9a-f]{64}$")
+    status: Literal["SUCCEEDED", "REJECTED"] = "SUCCEEDED"
+    fact_uuid: str | None = Field(default=None, min_length=1)
+    reason_code: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def outcome_is_consistent(self) -> "EventSignalProjectionRecord":
+        if self.status == "SUCCEEDED" and (self.fact_uuid is None or self.reason_code is not None):
+            raise ValueError("a successful Signal projection requires only its Fact UUID")
+        if self.status == "REJECTED" and (self.fact_uuid is not None or self.reason_code is None):
+            raise ValueError("a rejected Signal projection requires only its terminal reason")
+        return self
+
+
+class EventSignalProjectionJournal(BaseModel):
+    """Per-proposal Graphiti acknowledgements for crash-safe Signal retries."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["event_signal_projection_journal.v1"] = "event_signal_projection_journal.v1"
+    batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    projections: list[EventSignalProjectionRecord]
+
+    @model_validator(mode="after")
+    def proposal_keys_are_unique(self) -> "EventSignalProjectionJournal":
+        keys = [(item.event_id, item.proposal_key) for item in self.projections]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Signal projection proposal keys must be unique per Event")
         return self
 
 
@@ -371,7 +653,7 @@ class LegacyEventExtractionResultV2(BaseModel):
 
 
 class EventExtractionResult(BaseModel):
-    """Terminal local result for the complete three-stage Event Workflow."""
+    """Terminal local result for the complete five-phase Event Workflow."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 

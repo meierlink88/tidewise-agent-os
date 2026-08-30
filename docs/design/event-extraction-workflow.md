@@ -1,112 +1,110 @@
 # Event Extraction Workflow
 
-## Purpose
+## Purpose and ownership
 
-Event Extraction consumes complete Atomic Evidence and produces the temporal graph inputs required by investment
-reasoning. It has one authoritative execution path with three rename-safe business steps:
+Event Extraction consumes complete Atomic Evidence and produces formal Data Events, native Graphiti Event Episodes,
+and reviewed direct Signal Facts. It has one AgentOS execution path with five business phases:
 
-1. `extract-events`: claim eligible Evidence and freeze atomic Event Candidates;
-2. `publish-events`: resolve historical Event identity, publish new Events to Data Service, and project them with Graphiti
-   `add_episode`;
-3. `build-signals`: classify newly projected Events, match existing Variables and anchors, and create direct Signal
-   Facts.
+1. `Extract Events`;
+2. `Resolve Events`;
+3. `Publish Events`;
+4. `Analyze Signals`;
+5. `Publish Signals`.
 
-Each Function consumes Agno's direct predecessor content. Step names are display metadata and may be changed in
-Studio without breaking state propagation.
+Tidewise semantic judgments belong to three Studio-managed Agno Agents: Event Extractor, Event Identity and Event
+Signal Analyst. They receive bounded prepared context, have no Tools and perform no writes. Deterministic Functions in
+`capabilities/event` own queue state, leases, retrieval, validation, immutable journals, idempotency and side effects.
+`sematica` owns only Graphiti integration primitives and never starts another service.
 
-The Workflow runs inside AgentOS. `capabilities/event` owns Event business orchestration while `sematica` supplies
-only Graphiti integration primitives; neither starts a second HTTP service or owns a separate worker process.
+Every published Workflow version pins the exact published version of all three Agents in Agno component links. The
+same mapping is stored in Workflow metadata and therefore in its run records. Seed prompts initialize new Studio
+components; execution always uses the published PostgreSQL versions bound to that Workflow version.
 
-## Stage 1: extract Event Candidates
+## Extract Events
 
-AgentOS reads only `data/event/evidence-queue/pending/*.json`; it never scans all historical Evidence manifests.
-Each queue item points to one immutable published Evidence Artifact. A deterministic Function claims at most one
-batch of 20 Evidence by default, moves its queue items to `processing/<batch-id>/`, resolves their formal content,
-and freezes the exact input.
-The Event Extractor Agent groups Evidence that represents the same real-world action and returns one strict partition
-of:
+A deterministic Function reads only `data/event/evidence-queue/pending/*.json`, claims at most 20 Evidence by default
+and at most 50 when configured, then freezes the exact input under one exclusive lease. The Event Extractor directly
+receives that batch and partitions every Evidence ID into either an atomic Event Candidate or `NO_EVENT` disposition.
+Malformed Candidate semantics terminate as bounded noncompliant dispositions instead of weakening the formal
+contract. Once the draft exists, retries skip the Agent.
 
-- atomic Event Candidates;
-- `NO_EVENT` Evidence.
+## Resolve Events
 
-Two Events have the same identity only when their actor, real-world action, direct object, event stage, and occurrence
-time identify the same occurrence. Wording, reporting source, and supplementary detail do not create a new Event.
-Once the Agent result is frozen, retries do not invoke the Agent again.
+Candidates are processed one at a time in a bounded loop. Before each Event Identity call, a Function retrieves at
+most 30 authoritative historical Event candidates from Data Service and Graphiti native search, freezes that request,
+and passes only those identities to the Agent. The Agent judges atomicity and returns exactly one of `NEW_EVENT`,
+`SAME_EVENT`, `RELATED_BUT_DISTINCT` or `IGNORED`.
 
-## Stage 2: resolve, publish, and project
+Matched IDs must belong to the frozen history. Deterministic exact-occurrence matches override unsafe model output,
+and malformed or invented identity output becomes an `IGNORED` noncompliant disposition for that Candidate. Every
+validated decision is immutable before publication begins.
 
-For every frozen Candidate, deterministic code performs bounded historical recall from Data Service and Graphiti,
-applies the five-dimensional identity gate, and uses the configured semantic comparator only for plausible matches.
+## Publish Events
 
-- `SAME_EVENT` is terminal and performs no Data or graph write.
-- `IGNORED` is terminal when an atomic Candidate or historical identity cannot be established safely; it performs no
-  Data or graph write and completes the Candidate's Evidence as a semantic disposition.
-- `NEW_EVENT` and `RELATED_BUT_DISTINCT` publish to Data Service with a deterministic idempotency key.
-- A formal Data Event is projected through Graphiti's native `add_episode`, which extracts entities, `MENTIONS`, and
-  ordinary Facts.
+`SAME_EVENT` and `IGNORED` are terminal and perform no Data, Evidence-link, Episode or Signal write. Only
+`NEW_EVENT` and `RELATED_BUT_DISTINCT` use the existing Data Service Event contract and deterministic publication key.
+The publication journal independently records:
 
-The publication journal checkpoints intent before the external Data write, the formal Event after publication, and
-the Episode after graph projection. A crash therefore resumes the unfinished side effect instead of repeating Event
-resolution or creating a second Event.
+- Data publication intent;
+- the acknowledged formal Data Event and Evidence link;
+- successful native Event Episode projection.
 
-## Stage 3: construct direct Signal Facts
+Graphiti `add_episode` remains responsible for entity extraction, resolution, `MENTIONS`, ordinary Facts,
+deduplication and temporal behavior. Lost acknowledgements resume against deterministic identities without creating a
+second Event Episode.
 
-Only Events newly created and successfully projected by stage 2 enter Signal construction. The Event Analysis
-pipeline:
+## Analyze Signals
 
-1. classifies the Event domain;
-2. retrieves existing graph anchors and Variables without creating ontology entities, applying anchor limits per
-   entity type and retaining the complete eligible Variable set inside classification-selected groups;
-3. selects only Variable/anchor pairs directly supported by the Event;
-4. generates direction, magnitude, impact timing, mechanism, assumptions, invalidation conditions, and confidence;
-5. validates every proposal independently and writes accepted `SIGNAL_ON` Facts even when sibling proposals are
-   rejected.
+Only Events created and successfully projected by this batch are eligible. Each Event uses two bounded calls to the
+same Event Signal Analyst version:
 
-Duplicate or semantically ignored Events never run Signal construction. Signal outcomes are journaled per Event so
-a retry skips completed analysis.
+1. classify the Event and produce retrieval hints;
+2. preserve that frozen classification and propose direct Signals against supplied existing identities.
 
-## Model and Graphiti integration
+Classification is journaled before candidate retrieval, so a retrieval failure cannot cause reclassification. A
+Function then retrieves a complete bounded set of eligible Anchors and fundamental Variables and freezes it before the
+proposal call. No Agent may invent or alter a UUID. Deterministic validation enforces UUID membership, allowed Anchor
+types, Variable direction semantics, time bounds, duplicate pairs and direct Event support. Classification remains in
+the Artifact even when the terminal result is `NO_SIGNAL` or `NO_SUPPORTED_ANCHOR`.
 
-Graphiti is an in-process SDK. Its native LLM calls use an adapter around the exact model registered in the AgentOS
-Registry; no second model configuration or Reasoning Server HTTP call is used. The adapter validates Graphiti's
-Pydantic response contract and performs one corrective retry when the provider returns malformed structured output.
+## Publish Signals
 
-The configured embedding provider is also adapted transparently to its maximum batch size. These adapters preserve
-Graphiti's native `add_episode`, entity resolution, Fact extraction, deduplication, and temporal invalidation
-algorithms; they do not fork or modify Graphiti source code.
+Each validated proposal has a deterministic key and its own projection acknowledgement. Existing Variable, Anchor and
+formal Event Episode identities are revalidated before Graphiti `add_triplet`. Graphiti retains native Fact resolution,
+deduplication, temporal contradiction handling and invalidation. A lost acknowledgement may repeat the native call,
+but the deterministic Fact identity prevents a second Signal Fact.
 
-## Recovery and idempotency
+After all newly projected Events have terminal Signal outcomes, the Workflow writes the unchanged
+`event_extraction_result.v4` manifest and advances the existing pending/processing/completed/failed Evidence queue.
+Infrastructure and provider failures release the lease and remain retryable; invalid semantic records terminate safely
+per item.
 
-- Evidence publication creates one idempotent queue item before its own checkpoint advances.
-- One processing batch is resumed before new pending Evidence is selected.
-- Successful, `NO_EVENT`, duplicate, and semantically ignored Evidence move to `completed`. Infrastructure,
-  provider, Data Service, storage, or Graphiti failures release the batch lease for retry and fail the Workflow.
-- PostgreSQL stores Agno Workflow runs and schedules, but does not own this business queue state.
-- Batch input and Agent output are immutable after freezing.
-- A stable Candidate key is derived from the normalized Event and sorted Evidence IDs.
-- Data publication uses a stable submission identity.
-- Publication and Signal journals checkpoint each irreversible side effect.
-- A batch becomes terminal only after every Candidate reaches a safe disposition and every newly projected Event has
-  a terminal Signal result.
+## Model and Graphiti boundary
+
+The only Event paths allowed to use the Agno-to-Graphiti LLM/reranker adapter are Graphiti-native `add_episode`,
+`add_triplet`, search and their native resolution internals. Event atomicity, identity, classification and Signal
+proposal prompts have no custom `graphiti.clients.llm_client` adapter and live only in published Studio Agents.
+Graphiti uses the same AgentOS-registered model and provider; there is no second Event model configuration.
+
+Workflow Functions consume direct predecessor outputs and run-scoped journals. Editable Step display names are never
+used as state keys, so Studio renames do not change execution semantics.
 
 ## Acceptance checks
 
-A representative real-Evidence validation must demonstrate:
+A representative validation must prove:
 
-- an atomic Event is extracted and published once;
-- one Event Episode is created with `episode_kind=EVENT` and its Data Event identity;
-- Graphiti creates ordinary Facts and `MENTIONS` from the Event;
-- supported Variable/anchor pairs create validated Signal Facts;
-- replaying the exact same Event Candidate returns `SAME_EVENT` and leaves Episode, `MENTIONS`, ordinary Fact, and
-  Signal Fact counts unchanged;
-- changing any of the three Step display names leaves the complete Workflow result unchanged;
-- a crash after publication intent, Data publication, or an Episode write with a lost acknowledgement resumes the
-  remaining work without creating a second Event, `MENTIONS`, ordinary Fact, or Signal Fact;
-- failed publication and Signal stages expose a safe stage name and diagnostic ID while logs retain only exception
-  types and code-frame locations, never provider payloads or secrets.
+- one successful Workflow run claims Evidence, creates one Data Event, projects one native Event Episode and writes
+  only validated direct Signal Facts;
+- `SAME_EVENT` leaves Data Event, Evidence link, Episode, `MENTIONS`, ordinary Fact and Signal Fact counts unchanged;
+- an Event remains published and classified when no Signal is supported;
+- malformed output affects only its bounded Candidate or Event;
+- retries after Data, Episode or Signal Fact side effects do not duplicate them;
+- changing all Step display names leaves the public result unchanged;
+- serialization and strict rehydration retain the exact three Agent version pins;
+- run metadata identifies those exact versions.
 
 ## Scheduling
 
-The explicit new-environment seed includes `/workflows/event-extraction/runs` once per minute in `Asia/Shanghai`.
-Application startup only inspects Schedule state and never creates, renames, enables, or overwrites it. Existing
-environments add the endpoint once through Control Panel before deploying this Workflow.
+The existing new-environment seed keeps `/workflows/event-extraction/runs` once per minute in `Asia/Shanghai`.
+Application startup only inspects Schedule state and never creates, renames, enables or overwrites it. This refactor does
+not change the endpoint, payload or Data Service API.
