@@ -22,6 +22,8 @@ from agno.workflow import Loop, Step, StepInput, StepOutput, Workflow
 from pydantic import ValidationError
 
 from agents.evidence_extractor import (
+    EVIDENCE_EXTRACTOR_CONTRACT_VERSION,
+    EVIDENCE_EXTRACTOR_SEED_SHA256_KEY,
     build_evidence_extractor_agent,
     ensure_evidence_extractor_agent,
     load_evidence_extractor_agent,
@@ -1336,6 +1338,45 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("脱离上下文的泛词", current.instructions)
         self.assertIn("attribution.reported_by", current.instructions)
         self.assertNotIn("SINGLE/DOUBLE", current.instructions)
+
+    def test_agent_migrates_same_contract_when_published_seed_marker_is_missing(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 16}
+        current = MagicMock()
+        current.metadata = {
+            "evidence_extractor_contract_version": EVIDENCE_EXTRACTOR_CONTRACT_VERSION,
+        }
+        current.instructions = "你是观潮家的 Evidence Extractor Agent。"
+        current.save.return_value = 17
+
+        with (
+            patch("agents.evidence_extractor.get_postgres_db", return_value=db),
+            patch("agents.evidence_extractor.Agent.load", return_value=current),
+        ):
+            version = ensure_evidence_extractor_agent(MagicMock())
+
+        self.assertEqual(version, 17)
+        self.assertIn("你是观潮家的投研事实分析师", current.instructions)
+        self.assertIn(EVIDENCE_EXTRACTOR_SEED_SHA256_KEY, current.metadata)
+        current.save.assert_called_once()
+
+    def test_agent_preserves_studio_prompt_when_published_seed_marker_is_current(self) -> None:
+        seeded = build_evidence_extractor_agent()
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 17}
+        current = MagicMock()
+        current.metadata = dict(seeded.metadata or {})
+        current.instructions = "Studio 已发布的自定义提示词"
+
+        with (
+            patch("agents.evidence_extractor.get_postgres_db", return_value=db),
+            patch("agents.evidence_extractor.Agent.load", return_value=current),
+        ):
+            version = ensure_evidence_extractor_agent(MagicMock())
+
+        self.assertEqual(version, 17)
+        self.assertEqual(current.instructions, "Studio 已发布的自定义提示词")
+        current.save.assert_not_called()
 
 
 if __name__ == "__main__":

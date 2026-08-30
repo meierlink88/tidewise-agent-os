@@ -1,5 +1,6 @@
 """Lifecycle helpers for the Agno Studio-managed Evidence Extractor Agent."""
 
+import hashlib
 from pathlib import Path
 
 from agno.agent import Agent
@@ -11,12 +12,13 @@ from capabilities.evidence import EvidenceExtractionDraft
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTOR_AGENT_ID = "evidence-extractor"
-EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 6
+EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 7
+EVIDENCE_EXTRACTOR_SEED_SHA256_KEY = "evidence_extractor_seed_sha256"
 EVIDENCE_EXTRACTOR_DESCRIPTION = (
     "投研事实分析师：从一篇原始资讯中提炼可供事件识别和变量信号构建使用的最小完整业务命题。"
 )
 _SEED_PROMPT = Path(__file__).with_name("evidence_extractor.seed.md")
-_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 6:
+_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 7:
 - Read the supplied EvidenceAnalysisRequest exactly once.
 - It contains one document and the complete allowed Category vocabulary.
 - Choose exactly one category and return its code as raw_evidence.category_code.
@@ -40,8 +42,20 @@ def _seed_instructions() -> str:
     return instructions
 
 
+def _seed_sha256(instructions: str) -> str:
+    return hashlib.sha256(instructions.encode("utf-8")).hexdigest()
+
+
+def _seed_metadata(instructions: str) -> dict[str, int | str]:
+    return {
+        "evidence_extractor_contract_version": EVIDENCE_EXTRACTOR_CONTRACT_VERSION,
+        EVIDENCE_EXTRACTOR_SEED_SHA256_KEY: _seed_sha256(instructions),
+    }
+
+
 def build_evidence_extractor_agent() -> Agent:
     """Return the code-reviewed initial Agent saved to Studio once."""
+    instructions = _seed_instructions()
     return Agent(
         id=EVIDENCE_EXTRACTOR_AGENT_ID,
         name="Evidence Extractor",
@@ -49,12 +63,12 @@ def build_evidence_extractor_agent() -> Agent:
         model=default_model(),
         db=get_postgres_db(),
         tools=[],
-        instructions=_seed_instructions(),
+        instructions=instructions,
         additional_context=_RUNTIME_CONTRACT,
         output_schema=EvidenceExtractionDraft,
         parse_response=True,
         use_json_mode=True,
-        metadata={"evidence_extractor_contract_version": EVIDENCE_EXTRACTOR_CONTRACT_VERSION},
+        metadata=_seed_metadata(instructions),
         retries=0,
         add_datetime_to_context=False,
         add_history_to_context=False,
@@ -75,13 +89,18 @@ def ensure_evidence_extractor_agent(registry: Registry) -> int:
         if current is None:
             raise ValueError("Evidence Extractor published version could not be rehydrated")
         metadata = dict(current.metadata or {})
-        if metadata.get("evidence_extractor_contract_version") == EVIDENCE_EXTRACTOR_CONTRACT_VERSION:
+        instructions = _seed_instructions()
+        expected_seed_sha256 = _seed_sha256(instructions)
+        if (
+            metadata.get("evidence_extractor_contract_version") == EVIDENCE_EXTRACTOR_CONTRACT_VERSION
+            and metadata.get(EVIDENCE_EXTRACTOR_SEED_SHA256_KEY) == expected_seed_sha256
+        ):
             return version
         current.db = db
         current.description = EVIDENCE_EXTRACTOR_DESCRIPTION
         current.tools = []
         current.tool_call_limit = None
-        current.instructions = _seed_instructions()
+        current.instructions = instructions
         current.additional_context = _RUNTIME_CONTRACT
         current.output_schema = EvidenceExtractionDraft
         current.parse_response = True
@@ -93,7 +112,7 @@ def ensure_evidence_extractor_agent(registry: Registry) -> int:
         current.markdown = False
         current.metadata = {
             **metadata,
-            "evidence_extractor_contract_version": EVIDENCE_EXTRACTOR_CONTRACT_VERSION,
+            **_seed_metadata(instructions),
         }
         migrated = current.save(
             db=db,
