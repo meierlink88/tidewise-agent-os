@@ -83,20 +83,25 @@ async def get_text(
     timeout_seconds: int,
     max_bytes: int = 20_000_000,
 ) -> str:
+    request_headers = {
+        "Accept": "application/json,application/rss+xml,application/atom+xml,*/*",
+        "User-Agent": "Mozilla/5.0 AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
+        **(headers or {}),
+    }
+    request_options: dict[str, Any] = {"headers": request_headers}
+    if params:
+        request_options["params"] = params
+    chunks: list[bytes] = []
+    received = 0
     async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
-        response = await client.get(
-            endpoint,
-            params=params,
-            headers={
-                "Accept": "application/json,application/rss+xml,application/atom+xml,*/*",
-                "User-Agent": "Mozilla/5.0 AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
-                **(headers or {}),
-            },
-        )
-        response.raise_for_status()
-    if len(response.content) > max_bytes:
-        raise ValueError("provider response is too large")
-    return response.content.decode("utf-8", "replace")
+        async with client.stream("GET", endpoint, **request_options) as response:
+            response.raise_for_status()
+            async for chunk in response.aiter_bytes():
+                received += len(chunk)
+                if received > max_bytes:
+                    raise ValueError("provider response is too large")
+                chunks.append(chunk)
+    return b"".join(chunks).decode("utf-8", "replace")
 
 
 def decode_json_payload(payload: str) -> dict[str, Any]:
