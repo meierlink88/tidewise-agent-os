@@ -47,6 +47,7 @@ from capabilities.evidence.internal.storage import (
 )
 
 _CATEGORY_CATALOG_DEPENDENCY = "evidence_category_catalog"
+_PREPARED_RAW_DOCUMENT_DEPENDENCY = "prepared_raw_document"
 _EVIDENCE_RUN_STATE = "evidence_extraction"
 _BUSINESS_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
@@ -59,11 +60,14 @@ def _model_from_content(model: type[Any], content: Any) -> Any:
     return model.model_validate(content)
 
 
-def _step_content(step_input: StepInput, name: str) -> Any:
-    output = step_input.get_step_output(name)
-    if output is None or output.content is None:
-        raise ValueError(f"required Workflow step output is missing: {name}")
-    return output.content
+def _previous_content(step_input: StepInput) -> Any:
+    """Return the direct predecessor output without coupling to a Step display name."""
+    content = step_input.previous_step_content
+    if content is None:
+        content = step_input.get_last_step_content()
+    if content is None:
+        raise ValueError("required previous Workflow step output is missing")
+    return content
 
 
 def _evidence_run_state(run_context: RunContext) -> dict[str, Any]:
@@ -82,31 +86,12 @@ def _evidence_run_state(run_context: RunContext) -> dict[str, Any]:
     return state
 
 
-def prepare_raw_document(step_input: StepInput) -> StepOutput:
-    """Select and verify one unprocessed Raw document from the incremental index."""
+async def prepare_evidence(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Select one pending Raw document and build the identity-free Agent request."""
     del step_input
     prepared, checkpoint = read_next_raw_document(read_checkpoint())
     if prepared is None:
         return StepOutput(content=EvidenceExtractionIdle(checkpoint=checkpoint), stop=True)
-    return StepOutput(content=prepared)
-
-
-def evidence_extraction_complete(iteration_outputs: list[StepOutput]) -> bool:
-    """Stop the Agno Loop when the extraction stage reports that no pending document remains."""
-    for output in reversed(iteration_outputs):
-        if output.content is None:
-            continue
-        try:
-            _model_from_content(EvidenceExtractionIdle, output.content)
-        except (ValidationError, ValueError, TypeError):
-            continue
-        return True
-    return False
-
-
-async def prepare_evidence_analysis(step_input: StepInput, run_context: RunContext) -> StepOutput:
-    """Freeze one formal Category Catalog per run and expose identity-free semantics to the Agent."""
-    prepared = _model_from_content(PreparedRawDocument, _step_content(step_input, "prepare-raw-document"))
     run_state = _evidence_run_state(run_context)
     snapshot = run_state.get(_CATEGORY_CATALOG_DEPENDENCY)
     if snapshot is None:
@@ -121,6 +106,7 @@ async def prepare_evidence_analysis(step_input: StepInput, run_context: RunConte
             catalog = EvidenceCategoryCatalog.model_validate(snapshot)
         except ValidationError as exc:
             raise ValueError("run-scoped Evidence Category Catalog is invalid") from exc
+    run_state[_PREPARED_RAW_DOCUMENT_DEPENDENCY] = prepared.model_dump(mode="json")
     request = EvidenceAnalysisRequest(
         document=prepared,
         categories=[
@@ -128,6 +114,19 @@ async def prepare_evidence_analysis(step_input: StepInput, run_context: RunConte
         ],
     )
     return StepOutput(content=request)
+
+
+def evidence_extraction_complete(iteration_outputs: list[StepOutput]) -> bool:
+    """Stop the Agno Loop when the preparation step reports no pending document."""
+    for output in reversed(iteration_outputs):
+        if output.content is None:
+            continue
+        try:
+            _model_from_content(EvidenceExtractionIdle, output.content)
+        except (ValidationError, ValueError, TypeError):
+            continue
+        return True
+    return False
 
 
 def _source_reference_id(identity: str) -> str:
@@ -315,11 +314,17 @@ def _freeze_prepared_publication(
     return candidate
 
 
-def validate_evidence_analysis(step_input: StepInput, run_context: RunContext) -> StepOutput:
-    """Validate Agent semantics, resolve one formal Category ID and add publication metadata."""
-    prepared = _model_from_content(PreparedRawDocument, _step_content(step_input, "prepare-raw-document"))
-    draft = _model_from_content(EvidenceExtractionDraft, _step_content(step_input, "analyze-raw-evidence"))
+def curate_evidence(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Validate and canonicalize the direct Agent output before any publication side effect."""
+    draft = _model_from_content(EvidenceExtractionDraft, _previous_content(step_input))
     run_state = _evidence_run_state(run_context)
+    prepared_snapshot = run_state.get(_PREPARED_RAW_DOCUMENT_DEPENDENCY)
+    if prepared_snapshot is None:
+        raise ValueError("run-scoped prepared Raw document is missing")
+    try:
+        prepared = PreparedRawDocument.model_validate(prepared_snapshot)
+    except ValidationError as exc:
+        raise ValueError("run-scoped prepared Raw document is invalid") from exc
     snapshot = run_state.get(_CATEGORY_CATALOG_DEPENDENCY)
     if snapshot is None:
         raise ValueError("run-scoped Evidence Category Catalog is missing")
@@ -400,11 +405,11 @@ def _enqueue_for_event(manifest_path: Path, evidence_ids: list[str]) -> None:
     enqueue_evidence_artifact(str(manifest_path), evidence_ids)
 
 
-async def publish_evidences(step_input: StepInput) -> StepOutput:
+async def publish_evidence(step_input: StepInput) -> StepOutput:
     """Publish Raw Evidence then the complete Evidence set and advance the file checkpoint."""
     publication = _model_from_content(
         PreparedEvidencePublication,
-        _step_content(step_input, "validate-evidence-analysis"),
+        _previous_content(step_input),
     )
     publication_key = publication.raw_evidence.publication_key
     artifact_id = _publication_artifact_id(publication_key)

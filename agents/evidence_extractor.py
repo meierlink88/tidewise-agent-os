@@ -11,17 +11,21 @@ from capabilities.evidence import EvidenceExtractionDraft
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTOR_AGENT_ID = "evidence-extractor"
-EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 5
-EVIDENCE_EXTRACTOR_DESCRIPTION = "Classifies one Raw Evidence and extracts minimum complete business propositions."
+EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 6
+EVIDENCE_EXTRACTOR_DESCRIPTION = (
+    "投研事实分析师：从一篇原始资讯中提炼可供事件识别和变量信号构建使用的最小完整业务命题。"
+)
 _SEED_PROMPT = Path(__file__).with_name("evidence_extractor.seed.md")
-_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 5:
+_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 6:
 - Read the supplied EvidenceAnalysisRequest exactly once.
 - It contains one document and the complete allowed Category vocabulary.
 - Choose exactly one category and return its code as raw_evidence.category_code.
 - Category IDs are deliberately absent. Never invent an ID or return more than one category code.
 - In the same structured response, return Raw Evidence enrichment and all directly supported minimum complete
   business propositions. Group one disclosure's related metrics; do not split by sentence or individual metric.
-- Each Evidence contains summary, Evidence-owned keywords and the exact structured business semantic contract.
+- Each Evidence contains summary, investment-relevant Evidence-owned keywords and the exact structured business
+  semantic contract. Follow every field's business meaning in the published instructions; schema validity alone is
+  insufficient.
 - Treat reporting attribution separately from the business actors. Keep normalized time bounds null for the
   deterministic Workflow to derive from semantic.time.raw.
 - Do not call Tools or publish data.

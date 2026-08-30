@@ -10,7 +10,7 @@ import unittest
 from copy import copy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from agno.agent import Agent
@@ -18,7 +18,7 @@ from agno.registry import Registry
 from agno.run import RunContext
 from agno.run.agent import RunOutput
 from agno.run.base import RunStatus
-from agno.workflow import Loop, Step, StepInput, StepOutput, Steps, Workflow
+from agno.workflow import Loop, Step, StepInput, StepOutput, Workflow
 from pydantic import ValidationError
 
 from agents.evidence_extractor import (
@@ -38,11 +38,10 @@ from capabilities.collection.internal.models import (
 )
 from capabilities.evidence import read_resolved_evidences
 from capabilities.evidence.functions import (
+    curate_evidence,
     evidence_extraction_complete,
-    prepare_evidence_analysis,
-    prepare_raw_document,
-    publish_evidences,
-    validate_evidence_analysis,
+    prepare_evidence,
+    publish_evidence,
 )
 from capabilities.evidence.internal.models import (
     AtomicEvidenceDraft,
@@ -57,7 +56,12 @@ from capabilities.evidence.internal.models import (
     PreparedRawDocument,
     RawEvidenceEnrichment,
 )
-from capabilities.evidence.internal.storage import checkpoint_path, evidence_artifact_root, read_checkpoint
+from capabilities.evidence.internal.storage import (
+    checkpoint_path,
+    evidence_artifact_root,
+    read_checkpoint,
+    read_next_raw_document,
+)
 from workflows.evidence_extraction import (
     EVIDENCE_EXTRACTION_CONTRACT_VERSION,
     _seed_workflow,
@@ -118,11 +122,14 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         return hashlib.sha256(payload).hexdigest()
 
     @classmethod
-    def _run_context(cls, run_id: str) -> RunContext:
+    def _run_context(cls, run_id: str, prepared: PreparedRawDocument | None = None) -> RunContext:
+        dependencies: dict[str, Any] = {"evidence_category_catalog": cls._catalog()}
+        if prepared is not None:
+            dependencies["prepared_raw_document"] = prepared.model_dump(mode="json")
         return RunContext(
             run_id=run_id,
             session_id=f"session-{run_id}",
-            dependencies={"evidence_category_catalog": cls._catalog()},
+            dependencies=dependencies,
         )
 
     def _publish_raw_fixture(self) -> None:
@@ -200,9 +207,10 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         )
 
     def _prepared(self) -> PreparedRawDocument:
-        output = prepare_raw_document(StepInput(input="处理未提取文档"))
-        self.assertFalse(output.stop)
-        return PreparedRawDocument.model_validate(output.content)
+        prepared, _ = read_next_raw_document(read_checkpoint())
+        self.assertIsNotNone(prepared)
+        assert prepared is not None
+        return prepared
 
     def _validated(self, prepared: PreparedRawDocument) -> PreparedEvidencePublication:
         return self._validated_draft(prepared, self._draft())
@@ -213,53 +221,47 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         draft: EvidenceExtractionDraft,
     ) -> PreparedEvidencePublication:
         draft = EvidenceExtractionDraft.model_validate(draft.model_dump(mode="json"))
-        step_input = StepInput(
-            previous_step_outputs={
-                "prepare-raw-document": StepOutput(content=prepared),
-                "analyze-raw-evidence": StepOutput(content=draft),
-            }
-        )
-        output = validate_evidence_analysis(step_input, self._run_context("run-evidence"))
+        step_input = StepInput(previous_step_content=draft)
+        output = curate_evidence(step_input, self._run_context("run-evidence", prepared))
         return PreparedEvidencePublication.model_validate(output.content)
 
     async def test_analysis_fetches_catalog_once_per_run_and_hides_ids_from_agent(self) -> None:
         self._publish_raw_fixture()
-        prepared = self._prepared()
         context = RunContext(run_id="run-catalog", session_id="session-catalog", dependencies={})
-        step_input = StepInput(previous_step_outputs={"prepare-raw-document": StepOutput(content=prepared)})
 
         with patch(
             "capabilities.evidence.functions.extraction.get_evidence_categories",
             return_value=self._catalog_result(),
         ) as mocked:
-            first = await prepare_evidence_analysis(step_input, context)
-            second = await prepare_evidence_analysis(step_input, context)
+            first = await prepare_evidence(StepInput(), context)
+            second = await prepare_evidence(StepInput(), context)
 
         self.assertEqual(mocked.call_count, 1)
         request = EvidenceAnalysisRequest.model_validate(first.content)
         self.assertEqual(EvidenceAnalysisRequest.model_validate(second.content), request)
-        self.assertEqual(request.document, prepared)
         self.assertEqual(request.categories[0].code, "EVENT_BRIEF")
         self.assertNotIn("id", request.categories[0].model_dump())
         snapshot = context.dependencies["evidence_category_catalog"]  # type: ignore[index]
         self.assertEqual(EvidenceCategoryCatalog.model_validate(snapshot).categories[0].id, self.CATEGORY_ID)
+        self.assertEqual(
+            PreparedRawDocument.model_validate(context.dependencies["prepared_raw_document"]),  # type: ignore[index]
+            request.document,
+        )
 
     async def test_analysis_initializes_missing_run_dependencies(self) -> None:
         self._publish_raw_fixture()
-        prepared = self._prepared()
         context = RunContext(
             run_id="run-missing-dependencies",
             session_id="session-missing-dependencies",
             session_state={},
         )
-        step_input = StepInput(previous_step_outputs={"prepare-raw-document": StepOutput(content=prepared)})
 
         with patch(
             "capabilities.evidence.functions.extraction.get_evidence_categories",
             return_value=self._catalog_result(),
         ) as mocked:
-            first = await prepare_evidence_analysis(step_input, copy(context))
-            second = await prepare_evidence_analysis(step_input, copy(context))
+            first = await prepare_evidence(StepInput(), copy(context))
+            second = await prepare_evidence(StepInput(), copy(context))
 
         self.assertEqual(mocked.call_count, 1)
         self.assertEqual(
@@ -269,20 +271,13 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(context.session_state)
         assert context.session_state is not None
         self.assertIn("evidence_extraction", context.session_state)
-        validation_input = StepInput(
-            previous_step_outputs={
-                "prepare-raw-document": StepOutput(content=prepared),
-                "analyze-raw-evidence": StepOutput(content=self._draft()),
-            }
-        )
-        validated = validate_evidence_analysis(validation_input, copy(context))
+        validation_input = StepInput(previous_step_content=self._draft())
+        validated = curate_evidence(validation_input, copy(context))
         self.assertIsInstance(validated.content, PreparedEvidencePublication)
 
     async def test_invalid_catalog_fails_before_agent_analysis(self) -> None:
         self._publish_raw_fixture()
-        prepared = self._prepared()
         context = RunContext(run_id="run-invalid-catalog", session_id="session-invalid-catalog", dependencies={})
-        step_input = StepInput(previous_step_outputs={"prepare-raw-document": StepOutput(content=prepared)})
         duplicate_code = {
             "categories": [
                 self._category_item(),
@@ -302,7 +297,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             ),
             self.assertRaisesRegex(ValueError, "Category Catalog is invalid"),
         ):
-            await prepare_evidence_analysis(step_input, context)
+            await prepare_evidence(StepInput(), context)
 
         self.assertFalse(context.dependencies)
 
@@ -341,9 +336,10 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             with self.subTest(value=value), self.assertRaises(ValidationError):
                 EvidenceCategoryCatalog.model_validate(value)
 
-    def test_no_work_stops_before_category_catalog_is_needed(self) -> None:
+    async def test_no_work_stops_before_category_catalog_is_needed(self) -> None:
+        context = RunContext(run_id="run-no-work", session_id="session-no-work", dependencies={})
         with patch("capabilities.evidence.functions.extraction.get_evidence_categories") as mocked:
-            output = prepare_raw_document(StepInput(input="没有待处理文档"))
+            output = await prepare_evidence(StepInput(input="没有待处理文档"), context)
 
         self.assertTrue(output.stop)
         self.assertIsInstance(output.content, EvidenceExtractionIdle)
@@ -354,15 +350,10 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         prepared = self._prepared()
         draft = self._draft().model_copy(deep=True)
         draft.raw_evidence.category_code = "UNKNOWN_CATEGORY"
-        step_input = StepInput(
-            previous_step_outputs={
-                "prepare-raw-document": StepOutput(content=prepared),
-                "analyze-raw-evidence": StepOutput(content=draft),
-            }
-        )
+        step_input = StepInput(previous_step_content=draft)
 
         with self.assertRaisesRegex(ValueError, "unknown Evidence Category code"):
-            validate_evidence_analysis(step_input, self._run_context("run-unknown-category"))
+            curate_evidence(step_input, self._run_context("run-unknown-category", prepared))
 
     def test_prepare_reads_manifest_index_and_strips_artifact_wrapper(self) -> None:
         self._publish_raw_fixture()
@@ -590,7 +581,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "identity collision"):
             self._validated_draft(prepared, divergent)
 
-    def test_legacy_manifest_is_audited_and_skipped_without_body_publication(self) -> None:
+    async def test_legacy_manifest_is_audited_and_skipped_without_body_publication(self) -> None:
         self._publish_raw_fixture()
         collector_root = Path(os.environ["COLLECTOR_ARTIFACT_ROOT"])
         index_path = collector_root / "indexes/manifest-index.jsonl"
@@ -607,7 +598,10 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             encoding="utf-8",
         )
 
-        output = prepare_raw_document(StepInput(input="处理未提取文档"))
+        output = await prepare_evidence(
+            StepInput(input="处理未提取文档"),
+            RunContext(run_id="run-legacy", session_id="session-legacy", dependencies={}),
+        )
 
         self.assertTrue(output.stop)
         self.assertIsInstance(output.content, EvidenceExtractionIdle)
@@ -629,14 +623,9 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             "end_at": None,
             "precision": "RANGE",
         }
-        step_input = StepInput(
-            previous_step_outputs={
-                "prepare-raw-document": StepOutput(content=prepared),
-                "analyze-raw-evidence": StepOutput(content=json.dumps(draft, ensure_ascii=False)),
-            }
-        )
+        step_input = StepInput(previous_step_content=json.dumps(draft, ensure_ascii=False))
         publication = PreparedEvidencePublication.model_validate(
-            validate_evidence_analysis(step_input, self._run_context("run-fuzzy-time")).content
+            curate_evidence(step_input, self._run_context("run-fuzzy-time", prepared)).content
         )
 
         self.assertEqual(publication.evidences[0].semantic.time.raw, "十五五期间")
@@ -682,7 +671,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             "capabilities.evidence.functions.extraction.post_publication",
             side_effect=responses,
         ) as mocked:
-            output = await publish_evidences(step_input)
+            output = await publish_evidence(step_input)
         result = EvidencePublicationResult.model_validate(output.content)
         self.assertEqual(mocked.call_count, 2)
         raw_endpoint, raw_payload = mocked.call_args_list[0].args
@@ -724,12 +713,15 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(result.checkpoint.manifest_offset, 0)
         self.assertEqual(result.checkpoint, read_checkpoint())
 
-        idle = prepare_raw_document(StepInput(input="再运行"))
+        idle = await prepare_evidence(
+            StepInput(input="再运行"),
+            RunContext(run_id="run-idle", session_id="session-idle", dependencies={}),
+        )
         self.assertTrue(idle.stop)
         self.assertIsInstance(idle.content, EvidenceExtractionIdle)
 
         with patch("capabilities.evidence.functions.extraction.post_publication") as repeated:
-            repeated_output = await publish_evidences(step_input)
+            repeated_output = await publish_evidence(step_input)
         self.assertEqual(repeated.call_count, 0)
         self.assertEqual(
             EvidencePublicationResult.model_validate(repeated_output.content).checkpoint, read_checkpoint()
@@ -750,7 +742,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             ),
             self.assertRaisesRegex(ValueError, "evidence rejected"),
         ):
-            await publish_evidences(step_input)
+            await publish_evidence(step_input)
 
         self.assertEqual(read_checkpoint().manifest_offset, 0)
         self.assertEqual(
@@ -787,7 +779,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                 },
             ],
         ):
-            output = await publish_evidences(step_input)
+            output = await publish_evidence(step_input)
 
         result = EvidencePublicationResult.model_validate(output.content)
         manifest = json.loads(Path(result.artifact_manifest_path).read_text(encoding="utf-8"))
@@ -815,7 +807,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
 
         checkpoint_path().unlink()
         with patch("capabilities.evidence.functions.extraction.post_publication") as repeated:
-            recovered = await publish_evidences(step_input)
+            recovered = await publish_evidence(step_input)
 
         repeated.assert_not_called()
         self.assertEqual(
@@ -849,7 +841,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                 },
             ],
         ):
-            output = await publish_evidences(step_input)
+            output = await publish_evidence(step_input)
 
         resolved = read_resolved_evidences(
             EvidencePublicationResult.model_validate(output.content).artifact_manifest_path
@@ -881,7 +873,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             ),
             self.assertRaisesRegex(ValueError, "Evidence publication response is invalid"),
         ):
-            await publish_evidences(step_input)
+            await publish_evidence(step_input)
 
         self.assertEqual(read_checkpoint().manifest_offset, 0)
 
@@ -942,7 +934,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                     ),
                     self.assertRaises(ValueError),
                 ):
-                    await publish_evidences(step_input)
+                    await publish_evidence(step_input)
 
                 self.assertEqual(read_checkpoint().manifest_offset, 0)
                 self.assertEqual(list((evidence_artifact_root() / "documents").glob("*/manifest.json")), [])
@@ -974,7 +966,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                 },
             ],
         ):
-            output = await publish_evidences(step_input)
+            output = await publish_evidence(step_input)
 
         result = EvidencePublicationResult.model_validate(output.content)
         manifest_path = Path(result.artifact_manifest_path)
@@ -987,7 +979,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             patch("capabilities.evidence.functions.extraction.post_publication") as repeated,
             self.assertRaisesRegex(ValueError, "published Evidence Artifact"),
         ):
-            await publish_evidences(step_input)
+            await publish_evidence(step_input)
 
         repeated.assert_not_called()
         self.assertEqual(read_checkpoint().manifest_offset, 0)
@@ -1005,7 +997,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             ),
             self.assertRaisesRegex(ValueError, "evidence rejected"),
         ):
-            await publish_evidences(step_input)
+            await publish_evidence(step_input)
 
         changed = publication.model_copy(deep=True)
         changed.raw_evidence.category_ids = ["EVCec95a292-d513-5aa6-a54c-a9e3926add1a"]
@@ -1023,7 +1015,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                 },
             ],
         ) as retried:
-            output = await publish_evidences(retry_input)
+            output = await publish_evidence(retry_input)
 
         raw_payload = retried.call_args_list[0].args[1]["raw_evidence"]
         evidence_payload = retried.call_args_list[1].args[1]["evidences"][0]
@@ -1057,7 +1049,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             ),
             self.assertRaisesRegex(RuntimeError, "checkpoint interrupted"),
         ):
-            await publish_evidences(step_input)
+            await publish_evidence(step_input)
 
         queue_marker = Path(os.environ["EVENT_ARTIFACT_ROOT"]) / "evidence-queue" / "pending" / f"{evidence_id}.json"
         self.assertTrue(queue_marker.is_file())
@@ -1069,7 +1061,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         changed.evidences.append(second)
         retry_input = StepInput(previous_step_outputs={"validate-evidence-analysis": StepOutput(content=changed)})
         with patch("capabilities.evidence.functions.extraction.post_publication") as repeated:
-            output = await publish_evidences(retry_input)
+            output = await publish_evidence(retry_input)
 
         result = EvidencePublicationResult.model_validate(output.content)
         self.assertEqual(repeated.call_count, 0)
@@ -1124,7 +1116,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                     ),
                     self.assertRaisesRegex(ValueError, expected_error),
                 ):
-                    await publish_evidences(step_input)
+                    await publish_evidence(step_input)
                 self.assertEqual(read_checkpoint().manifest_offset, 0)
 
     async def test_complete_workflow_classifies_extracts_publishes_and_checkpoints(self) -> None:
@@ -1133,6 +1125,9 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         agent.db = None
         workflow = _seed_workflow(agent)
         workflow.db = None
+        loop = cast(Loop, cast(list[object], workflow.steps)[0])
+        for index, step in enumerate(cast(list[Step], loop.steps), start=1):
+            step.name = f"studio-renamed-step-{index}"
         raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
         evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
         controlled_agent = AsyncMock(
@@ -1201,10 +1196,9 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             agents=[agent],
             functions=[
                 evidence_extraction_complete,
-                prepare_raw_document,
-                prepare_evidence_analysis,
-                validate_evidence_analysis,
-                publish_evidences,
+                prepare_evidence,
+                curate_evidence,
+                publish_evidence,
             ],
         )
         workflow = _seed_workflow(agent)
@@ -1218,35 +1212,24 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(restored_steps, list)
         loop = cast(Loop, cast(list[object], restored_steps)[0])
         self.assertIsInstance(loop, Loop)
-        stages = cast(list[Steps], loop.steps)
+        steps = cast(list[Step], loop.steps)
         self.assertEqual(
-            [stage.name for stage in stages],
-            ["extract-evidences", "publish-evidences"],
+            [step.name for step in steps],
+            ["prepare-evidence", "extract-evidence", "curate-evidence", "publish-evidence"],
         )
-        extract_steps = cast(list[Step], stages[0].steps)
-        publish_steps = cast(list[Step], stages[1].steps)
-        self.assertEqual(
-            [step.name for step in extract_steps],
-            ["prepare-raw-document", "prepare-evidence-analysis", "analyze-raw-evidence", "validate-evidence-analysis"],
-        )
-        self.assertEqual([step.name for step in publish_steps], ["publish-evidence-set"])
-        self.assertEqual(extract_steps[2].agent.id, "evidence-extractor")  # type: ignore[union-attr]
+        self.assertEqual(steps[1].agent.id, "evidence-extractor")  # type: ignore[union-attr]
         self.assertEqual(agent.tools, [])
         self.assertIn("exactly one category", str(agent.additional_context))
         self.assertEqual(
+            [getattr(step.executor, "__name__", None) for step in (steps[0], steps[2], steps[3])],
             [
-                getattr(step.executor, "__name__", None)
-                for step in (extract_steps[0], extract_steps[1], extract_steps[3], publish_steps[0])
-            ],
-            [
-                "prepare_raw_document",
-                "prepare_evidence_analysis",
-                "validate_evidence_analysis",
-                "publish_evidences",
+                "prepare_evidence",
+                "curate_evidence",
+                "publish_evidence",
             ],
         )
-        self.assertTrue(inspect.iscoroutinefunction(extract_steps[1].executor))
-        self.assertTrue(inspect.iscoroutinefunction(publish_steps[0].executor))
+        self.assertTrue(inspect.iscoroutinefunction(steps[0].executor))
+        self.assertTrue(inspect.iscoroutinefunction(steps[3].executor))
 
     def test_workflow_agent_loads_component_without_runtime_session_db(self) -> None:
         db = MagicMock()
@@ -1276,10 +1259,9 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         registry = TidewiseRegistry(
             functions=[
                 evidence_extraction_complete,
-                prepare_raw_document,
-                prepare_evidence_analysis,
-                validate_evidence_analysis,
-                publish_evidences,
+                prepare_evidence,
+                curate_evidence,
+                publish_evidence,
             ]
         )
 
@@ -1288,8 +1270,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
 
         runtime_load.assert_called_once_with(registry)
         loop = cast(Loop, cast(list[object], restored.steps)[0])
-        extract_stage = cast(list[Steps], loop.steps)[0]
-        analyze = cast(list[Step], extract_stage.steps)[2]
+        analyze = cast(list[Step], loop.steps)[1]
         self.assertIsNotNone(restored.db)
         self.assertIsNotNone(analyze.agent)
         assert analyze.agent is not None
@@ -1319,8 +1300,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         migrated = cast(Workflow, workflow_save.call_args.args[0])
         self.assertIs(migrated.db, db)
         loop = cast(Loop, cast(list[object], migrated.steps)[0])
-        extract_stage = cast(list[Steps], loop.steps)[0]
-        analyze = cast(list[Step], extract_stage.steps)[2]
+        analyze = cast(list[Step], loop.steps)[1]
         self.assertIsNotNone(analyze.agent)
         assert analyze.agent is not None
         self.assertIsNone(analyze.agent.db)
@@ -1348,6 +1328,13 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(version, 8)
         self.assertIn("`summary`", current.instructions)
         self.assertIn("`semantic`", current.instructions)
+        self.assertIn("投研事实分析师", current.instructions)
+        self.assertIn("最小完整业务命题", current.instructions)
+        self.assertIn("变量信号构建", current.instructions)
+        self.assertIn("实际业务主体", current.instructions)
+        self.assertIn("后续投研检索", current.instructions)
+        self.assertIn("脱离上下文的泛词", current.instructions)
+        self.assertIn("attribution.reported_by", current.instructions)
         self.assertNotIn("SINGLE/DOUBLE", current.instructions)
 
 
