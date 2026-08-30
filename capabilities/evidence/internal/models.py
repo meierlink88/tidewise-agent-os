@@ -173,8 +173,8 @@ def _validated_keywords(values: list[str]) -> list[str]:
     return normalized
 
 
-class EvidenceMetric(BaseModel):
-    """One quantitative observation retained inside a complete business proposition."""
+class EvidenceMetricDraft(BaseModel):
+    """Tolerant LLM candidate for one quantitative observation."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -193,6 +193,10 @@ class EvidenceMetric(BaseModel):
     @classmethod
     def strip_optional_metric_text(cls, value: str | None) -> str | None:
         return _strip_optional(value)
+
+
+class EvidenceMetric(EvidenceMetricDraft):
+    """Canonical quantitative observation retained in a business proposition."""
 
     @model_validator(mode="after")
     def require_value_or_change(self) -> "EvidenceMetric":
@@ -268,16 +272,19 @@ class EvidenceSemanticDraft(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    actors: list[str] = Field(min_length=1, max_length=20)
+    # Draft collections are intentionally tolerant at the LLM boundary. The
+    # deterministic curation layer rejects incomplete propositions while still
+    # preserving valid siblings from the same document.
+    actors: list[str] = Field(max_length=20)
     action: str = Field(min_length=1, max_length=200)
-    objects: list[str] = Field(min_length=1, max_length=20)
+    objects: list[str] = Field(max_length=20)
     stage: EvidenceStage
     modality: EvidenceModality
     time: EvidenceTimeDraft
     jurisdictions: list[str] = Field(max_length=20)
     reason: str | None = Field(max_length=500)
     method: str | None = Field(max_length=500)
-    metrics: list[EvidenceMetric]
+    metrics: list[EvidenceMetricDraft]
     attribution: EvidenceAttribution
 
     @field_validator("action")

@@ -568,7 +568,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(publication.evidences[0].semantic.metrics), 3)
         self.assertEqual({item.semantic.stage for item in publication.evidences}, {"OCCURRED", "EXPECTED"})
 
-    def test_exact_repetition_collapses_but_divergent_same_identity_fails_closed(self) -> None:
+    def test_business_identity_repetition_collapses_despite_surface_wording_difference(self) -> None:
         self._publish_raw_fixture()
         prepared = self._prepared()
         draft = self._draft().model_copy(deep=True)
@@ -581,8 +581,57 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         duplicate_identity = divergent.evidences[0].model_copy(deep=True)
         duplicate_identity.summary = "相同动作但出现不一致的补充摘要"
         divergent.evidences.append(duplicate_identity)
-        with self.assertRaisesRegex(ValueError, "identity collision"):
-            self._validated_draft(prepared, divergent)
+        publication = self._validated_draft(prepared, divergent)
+        self.assertEqual(len(publication.evidences), 1)
+        self.assertEqual(publication.evidences[0].summary, divergent.evidences[0].summary)
+
+    def test_incomplete_sibling_does_not_discard_valid_business_proposition(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        payload = self._draft().model_dump(mode="json")
+        incomplete = payload["evidences"][0].copy()
+        incomplete["summary"] = "子公司存在亏损面，但原文没有说明作用对象"
+        incomplete["semantic"] = {
+            **incomplete["semantic"],
+            "actors": ["示例公司子公司"],
+            "action": "存在亏损面",
+            "objects": [],
+            "metrics": [],
+        }
+        payload["evidences"].append(incomplete)
+        draft = EvidenceExtractionDraft.model_validate(payload)
+
+        publication = self._validated_draft(prepared, draft)
+
+        self.assertEqual(len(publication.evidences), 1)
+        self.assertEqual(publication.evidences[0].summary, payload["evidences"][0]["summary"])
+
+    def test_metric_without_value_or_change_is_removed_during_curation(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        payload = self._draft().model_dump(mode="json")
+        payload["evidences"][0]["semantic"]["metrics"] = [
+            {
+                "name": "TCO",
+                "value": None,
+                "unit": None,
+                "change": None,
+                "period": None,
+            },
+            {
+                "name": "订单金额",
+                "value": "10",
+                "unit": "亿元",
+                "change": None,
+                "period": None,
+            },
+        ]
+        draft = EvidenceExtractionDraft.model_validate(payload)
+
+        publication = self._validated_draft(prepared, draft)
+
+        self.assertEqual(len(publication.evidences[0].semantic.metrics), 1)
+        self.assertEqual(publication.evidences[0].semantic.metrics[0].name, "订单金额")
 
     async def test_legacy_manifest_is_audited_and_skipped_without_body_publication(self) -> None:
         self._publish_raw_fixture()

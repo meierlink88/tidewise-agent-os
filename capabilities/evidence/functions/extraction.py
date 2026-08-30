@@ -28,6 +28,7 @@ from capabilities.evidence.internal.models import (
     EvidenceExtractionIdle,
     EvidenceIdentityBindings,
     EvidenceMetric,
+    EvidenceMetricDraft,
     EvidencePublicationItem,
     EvidencePublicationResult,
     EvidenceSemantic,
@@ -274,10 +275,12 @@ def _normalize_evidence_time(raw: str | None, fallback_precision: str) -> Eviden
     return EvidenceTime(raw=value, start_at=None, end_at=None, precision=precision)
 
 
-def _canonical_metrics(metrics: list[EvidenceMetric]) -> list[EvidenceMetric]:
+def _canonical_metrics(metrics: list[EvidenceMetricDraft]) -> list[EvidenceMetric]:
     normalized: list[EvidenceMetric] = []
     identities: set[tuple[str, str]] = set()
     for metric in metrics:
+        if metric.value is None and metric.change is None:
+            continue
         item = EvidenceMetric.model_validate(metric.model_dump())
         identity = (item.name.casefold(), (item.period or "").casefold())
         if identity in identities:
@@ -304,9 +307,12 @@ def _canonical_keywords(values: list[str]) -> list[str]:
 
 def _canonicalize_evidence_drafts(draft: EvidenceExtractionDraft) -> list[EvidencePublicationItem]:
     items: list[EvidencePublicationItem] = []
-    exact_payloads: set[str] = set()
-    business_identities: dict[str, str] = {}
+    business_identities: set[str] = set()
     for source in draft.evidences:
+        if not source.semantic.actors or not source.semantic.objects:
+            # An incomplete LLM sibling is not a business proposition and must
+            # not discard complete propositions extracted from the document.
+            continue
         semantic = EvidenceSemantic(
             actors=_canonical_strings(source.semantic.actors, required=True),
             action=_collapse_space(source.semantic.action),
@@ -325,9 +331,6 @@ def _canonicalize_evidence_drafts(draft: EvidenceExtractionDraft) -> list[Eviden
             keywords=_canonical_keywords(source.keywords),
             semantic=semantic,
         )
-        payload = json.dumps(item.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        if payload in exact_payloads:
-            continue
         identity = json.dumps(
             {
                 "actors": semantic.actors,
@@ -341,11 +344,9 @@ def _canonicalize_evidence_drafts(draft: EvidenceExtractionDraft) -> list[Eviden
             sort_keys=True,
             separators=(",", ":"),
         )
-        previous = business_identities.get(identity)
-        if previous is not None and previous != payload:
-            raise ValueError("Evidence business identity collision contains divergent content")
-        business_identities[identity] = payload
-        exact_payloads.add(payload)
+        if identity in business_identities:
+            continue
+        business_identities.add(identity)
         items.append(item)
     if not items:
         raise ValueError("Evidence extraction produced no canonical business proposition")
