@@ -183,7 +183,7 @@ jobs:
       DB_PASS: ${{ secrets.AGENTOS_DB_PASSWORD }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       DATA_SERVICE_TOKEN: ${{ secrets.DATA_SERVICE_TOKEN }}
-      EVENT_EXTRACTION_BATCH_SIZE: ${{ vars.EVENT_EXTRACTION_BATCH_SIZE || '50' }}
+      EVENT_EXTRACTION_BATCH_SIZE: ${{ vars.EVENT_EXTRACTION_BATCH_SIZE || '20' }}
       NEO4J_URI: ${{ vars.NEO4J_URI }}
       NEO4J_USER: ${{ vars.NEO4J_USER || 'neo4j' }}
       NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}

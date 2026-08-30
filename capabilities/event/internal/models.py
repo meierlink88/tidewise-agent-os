@@ -259,7 +259,7 @@ class EventPublicationRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     candidate_key: str = Field(pattern=r"^[0-9a-f]{64}$")
-    decision: Literal["SAME_EVENT", "NEW_EVENT", "RELATED_BUT_DISTINCT", "FAILED"]
+    decision: Literal["SAME_EVENT", "NEW_EVENT", "RELATED_BUT_DISTINCT", "IGNORED", "FAILED"]
     publication_started: bool = False
     event_id: str | None
     event_created: bool
@@ -285,6 +285,22 @@ class EventPublicationJournal(BaseModel):
         keys = [item.candidate_key for item in self.publications]
         if len(keys) != len(set(keys)):
             raise ValueError("Event publication journal Candidate keys must be unique")
+        return self
+
+
+class EventPublicationStageResult(BaseModel):
+    """Direct predecessor state passed from publication to Signal construction."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["event_publication_stage_result.v1"] = "event_publication_stage_result.v1"
+    batch: EventExtractionBatch
+    journal: EventPublicationJournal
+
+    @model_validator(mode="after")
+    def require_same_batch(self) -> "EventPublicationStageResult":
+        if self.batch.batch_id != self.journal.batch_id:
+            raise ValueError("Event publication stage batch identity conflict")
         return self
 
 
@@ -359,13 +375,15 @@ class EventExtractionResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal["event_extraction_result.v3"] = "event_extraction_result.v3"
+    schema_version: Literal["event_extraction_result.v4"] = "event_extraction_result.v4"
     batch_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence_ids: list[EvidenceID] = Field(min_length=1, max_length=50)
     candidate_count: int = Field(ge=0)
     no_event_count: int = Field(ge=0)
     published_event_ids: list[str]
     duplicate_event_count: int = Field(ge=0)
+    ignored_candidate_count: int = Field(ge=0)
+    ignored_evidence_ids: list[EvidenceID]
     failed_candidate_count: int = Field(ge=0)
     failed_evidence_ids: list[EvidenceID]
     signal_fact_uuids: list[str]
@@ -377,17 +395,21 @@ class EventExtractionResult(BaseModel):
             raise ValueError("completed Event Evidence IDs must be unique")
         return values
 
-    @field_validator("failed_evidence_ids")
+    @field_validator("ignored_evidence_ids", "failed_evidence_ids")
     @classmethod
-    def require_unique_failed_evidence_ids(cls, values: list[str]) -> list[str]:
+    def require_unique_disposition_evidence_ids(cls, values: list[str]) -> list[str]:
         if len(values) != len(set(values)):
-            raise ValueError("failed Event Evidence IDs must be unique")
+            raise ValueError("Event disposition Evidence IDs must be unique")
         return values
 
     @model_validator(mode="after")
     def failed_evidences_belong_to_batch(self) -> "EventExtractionResult":
+        if not set(self.ignored_evidence_ids) <= set(self.evidence_ids):
+            raise ValueError("ignored Event Evidence IDs must belong to the completed batch")
         if not set(self.failed_evidence_ids) <= set(self.evidence_ids):
             raise ValueError("failed Event Evidence IDs must belong to the completed batch")
+        if set(self.ignored_evidence_ids) & set(self.failed_evidence_ids):
+            raise ValueError("ignored and failed Event Evidence IDs must be disjoint")
         return self
 
 

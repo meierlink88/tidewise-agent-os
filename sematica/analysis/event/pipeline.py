@@ -147,12 +147,12 @@ class EventAnalysisPipeline:
                 continue
             validated.append((proposal, variable, anchor))
 
-        if errors:
+        if not validated:
             return EventAnalysisOutcome(
                 status="NO_SIGNAL",
                 classification=classification,
                 signal_fact_uuids=[],
-                reason_codes=sorted(set(errors)),
+                reason_codes=sorted(set(errors)) or ["NO_VALID_SIGNAL_PROPOSAL"],
             )
 
         await self._stage(on_stage, "PROJECTING")
@@ -164,7 +164,7 @@ class EventAnalysisPipeline:
             status="SUCCEEDED",
             classification=classification,
             signal_fact_uuids=fact_uuids,
-            reason_codes=["DIRECT_SIGNAL_FACTS_PROJECTED"],
+            reason_codes=["DIRECT_SIGNAL_FACTS_PROJECTED", *sorted(set(errors))],
         )
 
     @staticmethod

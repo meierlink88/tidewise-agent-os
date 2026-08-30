@@ -24,13 +24,16 @@ from capabilities.collection.functions import (
     raw_evidence_filter_complete,
     save_raw_evidence_filter_batch,
 )
-from capabilities.event import EventExtractionBatch, EventExtractionDraft, EventExtractionResult
+from capabilities.event import (
+    EventExtractionBatch,
+    EventExtractionDraft,
+    EventExtractionResult,
+    EventPublicationStageResult,
+)
 from capabilities.event.functions import (
-    construct_event_signals,
-    event_batch_requires_analysis,
-    freeze_event_analysis,
-    prepare_event_batch,
-    publish_event_candidates,
+    build_signals,
+    extract_events,
+    publish_events,
 )
 from capabilities.evidence import (
     EvidenceAnalysisRequest,
@@ -115,6 +118,7 @@ registry = TidewiseRegistry(
         EventExtractionBatch,
         EventExtractionDraft,
         EventExtractionResult,
+        EventPublicationStageResult,
         InvestmentReasoningInput,
         InvestmentAnalysisContext,
         PreparedInvestmentContext,
@@ -142,11 +146,9 @@ registry = TidewiseRegistry(
         evidence_extraction_complete,
         curate_evidence,
         publish_evidence,
-        prepare_event_batch,
-        event_batch_requires_analysis,
-        freeze_event_analysis,
-        publish_event_candidates,
-        construct_event_signals,
+        extract_events,
+        publish_events,
+        build_signals,
         prepare_investment_context,
         analyze_geopolitical_impact,
         analyze_macro_impact,

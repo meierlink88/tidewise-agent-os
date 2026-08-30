@@ -22,6 +22,7 @@ Decision = Literal[
     "SAME_EVENT",
     "NEW_EVENT",
     "RELATED_BUT_DISTINCT",
+    "IGNORED",
     "FAILED",
     "SAME_EVENT_REVISION",
 ]

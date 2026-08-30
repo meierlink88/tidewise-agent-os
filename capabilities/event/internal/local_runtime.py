@@ -7,8 +7,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
+from agno.agent import Agent
+from agno.run.agent import RunOutput
+
 from capabilities.event.internal.models import (
     EventCandidateSubmission,
+    EventExtractionBatch,
     EventPublicationRecord,
     EventSignalRecord,
     PublishedEvent,
@@ -61,9 +65,10 @@ def _published(event: HistoricalEvent) -> PublishedEvent:
 class LocalEventWorkflowRuntime:
     """Run resolution, publication, Graphiti and Signal stages in the Agno run."""
 
-    def __init__(self, graphiti, data: DataEventClient) -> None:
+    def __init__(self, graphiti, data: DataEventClient, extractor: Agent) -> None:
         self._graphiti = graphiti
         self._data = data
+        self._extractor = extractor
         self._resolver = EventResolver(
             CompositeEventHistory(graphiti, data),
             GraphitiLLMComparator(graphiti),
@@ -78,6 +83,14 @@ class LocalEventWorkflowRuntime:
             ControlledSignalReviewer(),
             GraphitiSignalFactProjector(graphiti),
         )
+
+    async def extract(self, batch: EventExtractionBatch) -> Any:
+        """Run the registered Agno semantic Agent behind the extraction module."""
+
+        result = await self._extractor.arun(batch, stream=False)
+        if not isinstance(result, RunOutput):
+            raise RuntimeError("Event Extractor returned a streaming response")
+        return result.content
 
     async def publish(
         self,
@@ -190,7 +203,7 @@ class LocalEventWorkflowRuntime:
         await self._graphiti.close()
 
 
-def create_local_event_workflow_runtime(model: Any) -> LocalEventWorkflowRuntime:
+def create_local_event_workflow_runtime(model: Any, extractor: Agent) -> LocalEventWorkflowRuntime:
     """Compose the app-owned runtime from environment and the registered Agno model."""
 
     base_url = os.getenv("DATA_SERVICE_BASE_URL", "http://data:9011")
@@ -199,4 +212,4 @@ def create_local_event_workflow_runtime(model: Any) -> LocalEventWorkflowRuntime
         raise ValueError("DATA_SERVICE_TOKEN must be configured")
     graphiti = create_agentos_graphiti(model)
     data = DataEventClient(base_url, service_token)
-    return LocalEventWorkflowRuntime(graphiti, data)
+    return LocalEventWorkflowRuntime(graphiti, data, extractor)

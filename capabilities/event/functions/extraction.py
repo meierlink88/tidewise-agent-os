@@ -21,6 +21,7 @@ from capabilities.event.internal.models import (
     EventExtractionResult,
     EventPublicationJournal,
     EventPublicationRecord,
+    EventPublicationStageResult,
     EventSignalJournal,
 )
 from capabilities.event.internal.runtime import event_workflow_runtime
@@ -73,25 +74,15 @@ def _model_from_content(model: type[Any], content: Any) -> Any:
     return model.model_validate(content)
 
 
-def _step_content(step_input: StepInput, name: str) -> Any:
-    output = step_input.get_step_output(name)
-    if output is None or output.content is None:
-        raise ValueError(f"required Workflow step output is missing: {name}")
-    return output.content
+def _previous_content(step_input: StepInput) -> Any:
+    """Return the direct predecessor output without coupling to a display name."""
 
-
-def _event_batch_from_input(step_input: StepInput) -> EventExtractionBatch:
-    """Read the batch from a direct child call or the completed extraction stage."""
-
-    for name in ("prepare-event-batch", "extract-event-candidates"):
-        output = step_input.get_step_output(name)
-        if output is None or output.content is None:
-            continue
-        try:
-            return _model_from_content(EventExtractionBatch, output.content)
-        except (ValidationError, ValueError, TypeError):
-            continue
-    raise ValueError("required Workflow Event extraction batch output is missing")
+    content = step_input.previous_step_content
+    if content is None:
+        content = step_input.get_last_step_content()
+    if content is None:
+        raise ValueError("required previous Workflow step output is missing")
+    return content
 
 
 def _event_draft_from_content(content: Any) -> EventExtractionDraft:
@@ -141,43 +132,63 @@ def _event_draft_from_content(content: Any) -> EventExtractionDraft:
     return EventExtractionDraft(candidates=candidates, no_event=dispositions)
 
 
-def prepare_event_batch(step_input: StepInput) -> StepOutput:
-    """Resume the pending batch or claim mapped local Evidence exactly once."""
+async def extract_events(step_input: StepInput) -> StepOutput:
+    """Claim Evidence, run semantic extraction when needed, and freeze one draft."""
+
     del step_input
     batch = claim_event_batch()
     if batch is None:
         return StepOutput(content=EventExtractionIdle(), stop=True)
     if isinstance(batch, EventExtractionBusy):
         return StepOutput(content=batch, stop=True)
-    return StepOutput(content=batch)
-
-
-def event_batch_requires_analysis(step_input: StepInput) -> bool:
-    """Return whether the pending batch still needs the semantic Agent step."""
-    batch = _event_batch_from_input(step_input)
-    return bool(batch.needs_analysis)
+    try:
+        renew_event_batch_lease(batch)
+        if batch.needs_analysis:
+            content = await event_workflow_runtime().extract(batch)
+            try:
+                draft = _event_draft_from_content(content)
+            except (ValidationError, ValueError, TypeError, json.JSONDecodeError):
+                draft = EventExtractionDraft(
+                    candidates=[],
+                    no_event=[
+                        EventDisposition(
+                            evidence_id=evidence.id,
+                            reason="noncompliant_event_extraction",
+                        )
+                        for evidence in batch.evidences
+                    ],
+                )
+            freeze_draft(batch, _validate_partition(batch, draft))
+        renew_event_batch_lease(batch)
+        return StepOutput(content=batch)
+    except Exception as exc:
+        release_event_batch_lease(batch)
+        _raise_stage_failure("EVENT_EXTRACTION", batch.batch_id, exc)
 
 
 def _validate_partition(batch: EventExtractionBatch, draft: EventExtractionDraft) -> EventExtractionDraft:
     expected = {item.id for item in batch.evidences}
-    supplied = [evidence_id for candidate in draft.candidates for evidence_id in candidate.evidence_ids]
-    supplied.extend(item.evidence_id for item in draft.no_event)
-    unknown = set(supplied) - expected
-    if unknown:
-        raise ValueError("Event extraction draft contains Evidence outside the frozen batch")
-
-    candidate_counts = Counter(evidence_id for candidate in draft.candidates for evidence_id in candidate.evidence_ids)
+    candidate_counts = Counter(
+        evidence_id
+        for candidate in draft.candidates
+        for evidence_id in candidate.evidence_ids
+        if evidence_id in expected
+    )
     ambiguous = {evidence_id for evidence_id, count in candidate_counts.items() if count > 1}
     normalized_candidates: list[EventCandidateSubmission] = []
     for candidate in draft.candidates:
-        retained = sorted(evidence_id for evidence_id in candidate.evidence_ids if evidence_id not in ambiguous)
+        retained = sorted(
+            evidence_id
+            for evidence_id in candidate.evidence_ids
+            if evidence_id in expected and evidence_id not in ambiguous
+        )
         if retained:
             normalized_candidates.append(candidate.model_copy(update={"evidence_ids": retained}))
 
     candidate_ids = {evidence_id for candidate in normalized_candidates for evidence_id in candidate.evidence_ids}
     dispositions_by_id: dict[str, EventDisposition] = {}
     for disposition in draft.no_event:
-        if disposition.evidence_id not in candidate_ids:
+        if disposition.evidence_id in expected and disposition.evidence_id not in candidate_ids:
             dispositions_by_id.setdefault(disposition.evidence_id, disposition)
     for evidence_id in ambiguous:
         dispositions_by_id[evidence_id] = EventDisposition(
@@ -195,20 +206,6 @@ def _validate_partition(batch: EventExtractionBatch, draft: EventExtractionDraft
     )
 
 
-def freeze_event_analysis(step_input: StepInput) -> StepOutput:
-    """Validate the Agent result against the frozen batch and persist it immutably."""
-    batch = _event_batch_from_input(step_input)
-    try:
-        renew_event_batch_lease(batch)
-        draft = _event_draft_from_content(_step_content(step_input, "analyze-event-batch"))
-        freeze_draft(batch, _validate_partition(batch, draft))
-        renew_event_batch_lease(batch)
-        return StepOutput(content=batch)
-    except Exception:
-        release_event_batch_lease(batch)
-        raise
-
-
 def _candidate_key(candidate: EventCandidateSubmission) -> str:
     encoded = json.dumps(
         candidate.model_dump(mode="json"),
@@ -219,9 +216,9 @@ def _candidate_key(candidate: EventCandidateSubmission) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-async def publish_event_candidates(step_input: StepInput) -> StepOutput:
+async def publish_events(step_input: StepInput) -> StepOutput:
     """Resolve, publish and project frozen Candidates through the local runtime."""
-    batch = _event_batch_from_input(step_input)
+    batch = _model_from_content(EventExtractionBatch, _previous_content(step_input))
     try:
         renew_event_batch_lease(batch)
         draft = load_draft(batch.batch_id)
@@ -244,7 +241,7 @@ async def publish_event_candidates(step_input: StepInput) -> StepOutput:
 
         for candidate, key in zip(draft.candidates, ordered_keys, strict=True):
             existing = completed.get(key)
-            if existing is not None and existing.decision in {"SAME_EVENT", "FAILED"}:
+            if existing is not None and existing.decision in {"SAME_EVENT", "IGNORED", "FAILED"}:
                 continue
             if existing is not None and existing.graph_projection_status == "SUCCEEDED":
                 continue
@@ -258,15 +255,16 @@ async def publish_event_candidates(step_input: StepInput) -> StepOutput:
             checkpoint(record)
             renew_event_batch_lease(batch)
             completed[key] = record
-        return StepOutput(content=journal)
+        return StepOutput(content=EventPublicationStageResult(batch=batch, journal=journal))
     except Exception as exc:
         release_event_batch_lease(batch)
         _raise_stage_failure("EVENT_PUBLICATION", batch.batch_id, exc)
 
 
-async def construct_event_signals(step_input: StepInput) -> StepOutput:
+async def build_signals(step_input: StepInput) -> StepOutput:
     """Build Signal Facts for newly projected Events and complete the frozen batch."""
-    batch = _event_batch_from_input(step_input)
+    stage = _model_from_content(EventPublicationStageResult, _previous_content(step_input))
+    batch = stage.batch
     try:
         renew_event_batch_lease(batch)
         draft = load_draft(batch.batch_id)
@@ -299,6 +297,12 @@ async def construct_event_signals(step_input: StepInput) -> StepOutput:
             if publications_by_key[_candidate_key(candidate)].decision == "FAILED"
             for evidence_id in candidate.evidence_ids
         )
+        ignored_evidence_ids = sorted(
+            evidence_id
+            for candidate in draft.candidates
+            if publications_by_key[_candidate_key(candidate)].decision == "IGNORED"
+            for evidence_id in candidate.evidence_ids
+        )
         result = EventExtractionResult(
             batch_id=batch.batch_id,
             evidence_ids=sorted(item.id for item in batch.evidences),
@@ -308,6 +312,8 @@ async def construct_event_signals(step_input: StepInput) -> StepOutput:
                 item.event_id for item in publications.publications if item.event_created and item.event_id is not None
             ),
             duplicate_event_count=sum(item.decision == "SAME_EVENT" for item in publications.publications),
+            ignored_candidate_count=sum(item.decision == "IGNORED" for item in publications.publications),
+            ignored_evidence_ids=ignored_evidence_ids,
             failed_candidate_count=sum(item.decision == "FAILED" for item in publications.publications),
             failed_evidence_ids=failed_evidence_ids,
             signal_fact_uuids=sorted(fact_uuid for signal in signals.signals for fact_uuid in signal.signal_fact_uuids),

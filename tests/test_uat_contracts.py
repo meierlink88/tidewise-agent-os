@@ -91,7 +91,7 @@ class UatIngressContractTest(TestCase):
         self.assertIn("NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}", workflow)
         self.assertIn("NEO4J_URI: ${{ vars.NEO4J_URI }}", workflow)
         self.assertIn("GRAPHITI_EMBEDDING_API_KEY: ${{ secrets.GRAPHITI_EMBEDDING_API_KEY }}", workflow)
-        self.assertIn("EVENT_EXTRACTION_BATCH_SIZE: ${{ vars.EVENT_EXTRACTION_BATCH_SIZE || '50' }}", workflow)
+        self.assertIn("EVENT_EXTRACTION_BATCH_SIZE: ${{ vars.EVENT_EXTRACTION_BATCH_SIZE || '20' }}", workflow)
         self.assertIn('"EVENT_EXTRACTION_BATCH_SIZE",', workflow)
         self.assertIn("driver.verify_connectivity()", preflight)
         self.assertIn("-m sematica.graphiti.readiness", preflight)

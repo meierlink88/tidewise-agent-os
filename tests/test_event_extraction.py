@@ -7,11 +7,12 @@ import unittest
 from pathlib import Path
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import NAMESPACE_URL, uuid5
 
 from agno.registry import Registry
 from agno.run.agent import RunOutput
 from agno.run.base import RunStatus
-from agno.workflow import Condition, Step, StepInput, StepOutput, Workflow
+from agno.workflow import Step, StepInput, Workflow
 
 from agents.event_extractor import (
     EVENT_EXTRACTOR_CONTRACT_VERSION,
@@ -28,14 +29,13 @@ from capabilities.event import (
     configure_event_workflow_runtime,
 )
 from capabilities.event.functions import (
-    construct_event_signals,
-    event_batch_requires_analysis,
-    freeze_event_analysis,
-    prepare_event_batch,
-    publish_event_candidates,
+    build_signals,
+    extract_events,
+    publish_events,
 )
 from capabilities.event.internal.local_runtime import LocalEventWorkflowRuntime
 from capabilities.event.internal.queue import enqueue_evidence_artifact, queue_counts
+from capabilities.event.internal.storage import claim_event_batch, freeze_draft
 from capabilities.evidence import ResolvedEvidence
 from sematica.ingestion.episcode.event.contracts import AtomicityAssessment, HistoricalEvent
 from sematica.ingestion.episcode.event.resolver import EventResolver
@@ -90,7 +90,6 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             {
                 "EVIDENCE_ARTIFACT_ROOT": str(self.evidence_root),
                 "EVENT_ARTIFACT_ROOT": str(self.event_root),
-                "EVENT_EXTRACTION_BATCH_SIZE": "50",
             },
         )
         self.environment.start()
@@ -188,44 +187,42 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
                 str(self.evidence_manifest),
                 [item.id for item in self._evidences()],
             )
-            output = prepare_event_batch(StepInput(input="处理未提炼 Evidence"))
-        self.assertFalse(output.stop)
-        return EventExtractionBatch.model_validate(output.content)
+            batch = claim_event_batch()
+        self.assertIsInstance(batch, EventExtractionBatch)
+        return cast(EventExtractionBatch, batch)
 
     def _freeze(self, batch: EventExtractionBatch, draft: EventExtractionDraft) -> EventExtractionDraft:
-        output = freeze_event_analysis(
-            StepInput(
-                previous_step_outputs={
-                    "prepare-event-batch": StepOutput(content=batch),
-                    "analyze-event-batch": StepOutput(content=draft),
-                }
-            )
-        )
-        self.assertEqual(EventExtractionBatch.model_validate(output.content), batch)
+        freeze_draft(batch, draft)
         frozen = json.loads((self.event_root / ".pending" / batch.batch_id / "draft.json").read_text())
         return EventExtractionDraft.model_validate(frozen)
 
-    def test_freezes_one_grouped_candidate_and_partitions_every_evidence(self) -> None:
-        batch = self._prepare()
-        self.assertTrue(batch.needs_analysis)
-        self.assertTrue(
-            event_batch_requires_analysis(
-                StepInput(previous_step_outputs={"prepare-event-batch": StepOutput(content=batch)})
+    async def _extract(self, content) -> EventExtractionBatch:
+        self.runtime.extract.return_value = content
+        with patch(
+            "capabilities.event.internal.queue.read_resolved_evidences",
+            return_value=self._evidences(),
+        ):
+            enqueue_evidence_artifact(
+                str(self.evidence_manifest),
+                [item.id for item in self._evidences()],
             )
-        )
+            output = await extract_events(StepInput(input="处理未提炼 Evidence"))
+        self.assertFalse(output.stop)
+        return EventExtractionBatch.model_validate(output.content)
 
+    async def test_freezes_one_grouped_candidate_and_partitions_every_evidence(self) -> None:
         draft = self._draft()
-        self._freeze(batch, draft)
+        batch = await self._extract(draft)
+        self.assertTrue(batch.needs_analysis)
 
         frozen = json.loads((self.event_root / ".pending" / batch.batch_id / "draft.json").read_text())
         self.assertEqual(frozen, draft.model_dump(mode="json"))
 
-    def test_missing_agent_assignment_becomes_no_event(self) -> None:
-        batch = self._prepare()
+    async def test_missing_agent_assignment_becomes_no_event(self) -> None:
         draft = self._draft().model_copy(deep=True)
         draft.candidates[0].evidence_ids = [self.FIRST_ID]
 
-        self._freeze(batch, draft)
+        batch = await self._extract(draft)
         frozen = EventExtractionDraft.model_validate_json(
             (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
         )
@@ -235,35 +232,35 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             [(self.SECOND_ID, "unassigned_by_model")],
         )
 
-    def test_candidate_wins_over_duplicate_no_event_assignment(self) -> None:
-        batch = self._prepare()
-        payload = self._draft().model_dump(mode="json")
-        payload["no_event"] = [
-            {"evidence_id": self.FIRST_ID, "reason": "duplicate_of_other_candidate"},
-            {"evidence_id": self.SECOND_ID, "reason": "duplicate_of_other_candidate"},
-        ]
+    async def test_batch_external_evidence_assignment_is_ignored_without_failing(self) -> None:
+        draft = self._draft().model_copy(deep=True)
+        draft.candidates[0].evidence_ids.append("EVDa4eb9cc8-3d8a-5b16-972e-f88c797fa009")
 
-        self._freeze(batch, EventExtractionDraft.model_validate(payload))
+        batch = await self._extract(draft)
         frozen = EventExtractionDraft.model_validate_json(
             (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
         )
         self.assertEqual(frozen.candidates[0].evidence_ids, [self.FIRST_ID, self.SECOND_ID])
         self.assertEqual(frozen.no_event, [])
 
-    def test_timeless_agent_candidate_becomes_no_event_without_failing_batch(self) -> None:
-        batch = self._prepare()
+    async def test_candidate_wins_over_duplicate_no_event_assignment(self) -> None:
+        payload = self._draft().model_dump(mode="json")
+        payload["no_event"] = [
+            {"evidence_id": self.FIRST_ID, "reason": "duplicate_of_other_candidate"},
+            {"evidence_id": self.SECOND_ID, "reason": "duplicate_of_other_candidate"},
+        ]
+
+        batch = await self._extract(EventExtractionDraft.model_validate(payload))
+        frozen = EventExtractionDraft.model_validate_json(
+            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
+        )
+        self.assertEqual(frozen.candidates[0].evidence_ids, [self.FIRST_ID, self.SECOND_ID])
+        self.assertEqual(frozen.no_event, [])
+
+    async def test_timeless_agent_candidate_becomes_no_event_without_failing_batch(self) -> None:
         payload = self._draft().model_dump(mode="json")
         payload["candidates"][0]["event"]["announced_at"] = None
-        output = freeze_event_analysis(
-            StepInput(
-                previous_step_outputs={
-                    "prepare-event-batch": StepOutput(content=batch),
-                    "analyze-event-batch": StepOutput(content=payload),
-                }
-            )
-        )
-
-        self.assertEqual(EventExtractionBatch.model_validate(output.content), batch)
+        batch = await self._extract(payload)
         frozen = EventExtractionDraft.model_validate_json(
             (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
         )
@@ -273,20 +270,10 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             [(self.FIRST_ID, "missing_reliable_time"), (self.SECOND_ID, "missing_reliable_time")],
         )
 
-    def test_incomplete_candidate_semantics_becomes_no_event_without_failing_batch(self) -> None:
-        batch = self._prepare()
+    async def test_incomplete_candidate_semantics_becomes_no_event_without_failing_batch(self) -> None:
         payload = self._draft().model_dump(mode="json")
         payload["candidates"][0]["event"]["semantic"]["actors"] = []
-        output = freeze_event_analysis(
-            StepInput(
-                previous_step_outputs={
-                    "prepare-event-batch": StepOutput(content=batch),
-                    "analyze-event-batch": StepOutput(content=payload),
-                }
-            )
-        )
-
-        self.assertEqual(EventExtractionBatch.model_validate(output.content), batch)
+        batch = await self._extract(payload)
         frozen = EventExtractionDraft.model_validate_json(
             (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
         )
@@ -296,19 +283,11 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             [(self.FIRST_ID, "invalid_event_semantics"), (self.SECOND_ID, "invalid_event_semantics")],
         )
 
-    def test_missing_nullable_semantic_fields_are_defaulted_without_losing_candidate(self) -> None:
-        batch = self._prepare()
+    async def test_missing_nullable_semantic_fields_are_defaulted_without_losing_candidate(self) -> None:
         payload = self._draft().model_dump(mode="json")
         del payload["candidates"][0]["event"]["semantic"]["effective_at"]
         del payload["candidates"][0]["event"]["semantic"]["time_precision"]
-        freeze_event_analysis(
-            StepInput(
-                previous_step_outputs={
-                    "prepare-event-batch": StepOutput(content=batch),
-                    "analyze-event-batch": StepOutput(content=payload),
-                }
-            )
-        )
+        batch = await self._extract(payload)
 
         frozen = EventExtractionDraft.model_validate_json(
             (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
@@ -317,18 +296,9 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(frozen.candidates[0].event.semantic.effective_at)
         self.assertEqual(frozen.candidates[0].event.semantic.time_precision, "UNKNOWN")
 
-    def test_stage_output_can_carry_batch_to_downstream_steps(self) -> None:
+    async def test_concurrent_schedule_callback_stops_without_reprocessing_pending_batch(self) -> None:
         batch = self._prepare()
-
-        self.assertTrue(
-            event_batch_requires_analysis(
-                StepInput(previous_step_outputs={"extract-event-candidates": StepOutput(content=batch)})
-            )
-        )
-
-    def test_concurrent_schedule_callback_stops_without_reprocessing_pending_batch(self) -> None:
-        batch = self._prepare()
-        concurrent = prepare_event_batch(StepInput(input="concurrent"))
+        concurrent = await extract_events(StepInput(input="concurrent"))
 
         self.assertTrue(concurrent.stop)
         self.assertEqual(concurrent.content.status, "busy")
@@ -352,13 +322,48 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(queue_counts(), {"pending": 0, "processing": 2, "completed": 0, "failed": 0})
         self.assertTrue((self.event_root / "evidence-queue" / "processing" / batch.batch_id).is_dir())
 
-    def test_malformed_pending_queue_item_fails_closed(self) -> None:
+    def test_default_batch_claim_is_bounded_to_twenty_evidences(self) -> None:
+        template = self._evidences()[0]
+        evidences = [
+            template.model_copy(update={"id": f"EVD{uuid5(NAMESPACE_URL, f'event-batch-{index}')}"})
+            for index in range(21)
+        ]
+        with patch(
+            "capabilities.event.internal.queue.read_resolved_evidences",
+            return_value=evidences,
+        ):
+            enqueue_evidence_artifact(
+                str(self.evidence_manifest),
+                [item.id for item in evidences],
+            )
+            batch = claim_event_batch()
+
+        self.assertIsInstance(batch, EventExtractionBatch)
+        self.assertEqual(len(cast(EventExtractionBatch, batch).evidences), 20)
+        self.assertEqual(queue_counts(), {"pending": 1, "processing": 20, "completed": 0, "failed": 0})
+
+    async def test_noncompliant_agent_payload_is_terminal_no_event_not_workflow_failure(self) -> None:
+        batch = await self._extract({"unexpected": "shape"})
+
+        frozen = EventExtractionDraft.model_validate_json(
+            (self.event_root / ".pending" / batch.batch_id / "draft.json").read_text()
+        )
+        self.assertEqual(frozen.candidates, [])
+        self.assertEqual(
+            [(item.evidence_id, item.reason) for item in frozen.no_event],
+            [
+                (self.FIRST_ID, "noncompliant_event_extraction"),
+                (self.SECOND_ID, "noncompliant_event_extraction"),
+            ],
+        )
+
+    async def test_malformed_pending_queue_item_fails_closed(self) -> None:
         pending = self.event_root / "evidence-queue" / "pending" / f"{self.FIRST_ID}.json"
         pending.parent.mkdir(parents=True)
         pending.write_text("{}\n", encoding="utf-8")
 
         with self.assertRaisesRegex(ValueError, "queue item is invalid"):
-            prepare_event_batch(StepInput(input="again"))
+            await extract_events(StepInput(input="again"))
 
     async def test_publishes_and_analyzes_each_candidate_then_does_not_select_evidence_again(self) -> None:
         batch = self._prepare()
@@ -393,17 +398,8 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             EventSignalRecord(event_id=item.event_id, status="SUCCEEDED", signal_fact_uuids=[f"signal-{index}"])
             for index, item in enumerate(publications, 1)
         ]
-        published = await publish_event_candidates(
-            StepInput(previous_step_outputs={"prepare-event-batch": StepOutput(content=batch)})
-        )
-        output = await construct_event_signals(
-            StepInput(
-                previous_step_outputs={
-                    "prepare-event-batch": StepOutput(content=batch),
-                    "publish-event-candidates": published,
-                }
-            )
-        )
+        published = await publish_events(StepInput(previous_step_content=batch))
+        output = await build_signals(StepInput(previous_step_content=published.content))
 
         result = EventExtractionResult.model_validate(output.content)
         self.assertEqual(result.published_event_ids, [item.event_id for item in publications])
@@ -411,7 +407,7 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.runtime.publish.await_count, 2)
         self.assertEqual(self.runtime.construct_signals.await_count, 2)
 
-        idle = prepare_event_batch(StepInput(input="again"))
+        idle = await extract_events(StepInput(input="again"))
         self.assertTrue(idle.stop)
         self.assertEqual(queue_counts(), {"pending": 0, "processing": 0, "completed": 2, "failed": 0})
 
@@ -437,17 +433,8 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         runtime._episode_stage = tracer
         graph_counts_before = tracer.counts.copy()
         configure_event_workflow_runtime(runtime)
-        published = await publish_event_candidates(
-            StepInput(previous_step_outputs={"prepare-event-batch": StepOutput(content=batch)})
-        )
-        output = await construct_event_signals(
-            StepInput(
-                previous_step_outputs={
-                    "prepare-event-batch": StepOutput(content=batch),
-                    "publish-event-candidates": published,
-                }
-            )
-        )
+        published = await publish_events(StepInput(previous_step_content=batch))
+        output = await build_signals(StepInput(previous_step_content=published.content))
         result = EventExtractionResult.model_validate(output.content)
         self.assertEqual(result.duplicate_event_count, 1)
         self.assertEqual(result.published_event_ids, [])
@@ -457,15 +444,15 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         publisher.publish.assert_not_awaited()
         configure_event_workflow_runtime(self.runtime)
 
-    async def test_unresolved_candidate_moves_its_evidence_to_failed(self) -> None:
+    async def test_uncertain_candidate_is_ignored_and_completes_its_evidence(self) -> None:
         batch = self._prepare()
         self._freeze(batch, self._draft())
 
-        async def fail_resolution(candidate, candidate_key, *, existing, checkpoint):
+        async def ignore_resolution(candidate, candidate_key, *, existing, checkpoint):
             del candidate, existing, checkpoint
             return EventPublicationRecord(
                 candidate_key=candidate_key,
-                decision="FAILED",
+                decision="IGNORED",
                 event_id=None,
                 event_created=False,
                 evidence_link_result="NOT_ATTEMPTED",
@@ -474,23 +461,16 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
                 matched_event_ids=[],
             )
 
-        self.runtime.publish.side_effect = fail_resolution
-        published = await publish_event_candidates(
-            StepInput(previous_step_outputs={"prepare-event-batch": StepOutput(content=batch)})
-        )
-        output = await construct_event_signals(
-            StepInput(
-                previous_step_outputs={
-                    "prepare-event-batch": StepOutput(content=batch),
-                    "publish-event-candidates": published,
-                }
-            )
-        )
+        self.runtime.publish.side_effect = ignore_resolution
+        published = await publish_events(StepInput(previous_step_content=batch))
+        output = await build_signals(StepInput(previous_step_content=published.content))
 
         result = EventExtractionResult.model_validate(output.content)
-        self.assertEqual(result.failed_candidate_count, 1)
-        self.assertEqual(result.failed_evidence_ids, [self.FIRST_ID, self.SECOND_ID])
-        self.assertEqual(queue_counts(), {"pending": 0, "processing": 0, "completed": 0, "failed": 2})
+        self.assertEqual(result.ignored_candidate_count, 1)
+        self.assertEqual(result.ignored_evidence_ids, [self.FIRST_ID, self.SECOND_ID])
+        self.assertEqual(result.failed_candidate_count, 0)
+        self.assertEqual(result.failed_evidence_ids, [])
+        self.assertEqual(queue_counts(), {"pending": 0, "processing": 0, "completed": 2, "failed": 0})
 
     async def test_publication_intent_is_checkpointed_before_the_data_write(self) -> None:
         runtime = object.__new__(LocalEventWorkflowRuntime)
@@ -518,6 +498,22 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(checkpoints[0].decision, "NEW_EVENT")
         self.assertIsNone(checkpoints[0].event_id)
         self.assertEqual(checkpoints[0].reason_codes, ["PUBLICATION_STARTED"])
+
+    async def test_local_runtime_uses_registered_agno_agent_for_semantic_extraction(self) -> None:
+        batch = self._prepare()
+        extractor = AsyncMock()
+        extractor.arun.return_value = RunOutput(
+            agent_id="event-extractor",
+            content=self._draft(),
+            content_type="EventExtractionDraft",
+        )
+        runtime = object.__new__(LocalEventWorkflowRuntime)
+        runtime._extractor = extractor
+
+        content = await runtime.extract(batch)
+
+        self.assertEqual(EventExtractionDraft.model_validate(content), self._draft())
+        extractor.arun.assert_awaited_once_with(batch, stream=False)
 
     async def test_resume_after_data_publication_skips_data_write_and_projects_episode(self) -> None:
         runtime = object.__new__(LocalEventWorkflowRuntime)
@@ -613,9 +609,7 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertLogs("capabilities.event.functions.extraction", level="ERROR") as logs:
             with self.assertRaisesRegex(RuntimeError, r"EVENT_PUBLICATION failed; diagnostic_id=") as raised:
-                await publish_event_candidates(
-                    StepInput(previous_step_outputs={"prepare-event-batch": StepOutput(content=batch)})
-                )
+                await publish_events(StepInput(previous_step_content=batch))
 
         self.assertNotIn("secret provider payload", str(raised.exception))
         self.assertIsNone(raised.exception.__cause__)
@@ -647,20 +641,11 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
 
         self.runtime.publish.side_effect = publish
         self.runtime.construct_signals.side_effect = ConnectionError("secret signal payload")
-        published = await publish_event_candidates(
-            StepInput(previous_step_outputs={"prepare-event-batch": StepOutput(content=batch)})
-        )
+        published = await publish_events(StepInput(previous_step_content=batch))
 
         with self.assertLogs("capabilities.event.functions.extraction", level="ERROR") as logs:
             with self.assertRaisesRegex(RuntimeError, r"SIGNAL_CONSTRUCTION failed; diagnostic_id=") as raised:
-                await construct_event_signals(
-                    StepInput(
-                        previous_step_outputs={
-                            "prepare-event-batch": StepOutput(content=batch),
-                            "publish-event-candidates": published,
-                        }
-                    )
-                )
+                await build_signals(StepInput(previous_step_content=published.content))
 
         self.assertNotIn("secret signal payload", str(raised.exception))
         self.assertIsNone(raised.exception.__cause__)
@@ -678,17 +663,8 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         )
         self._freeze(batch, draft)
 
-        published = await publish_event_candidates(
-            StepInput(previous_step_outputs={"prepare-event-batch": StepOutput(content=batch)})
-        )
-        output = await construct_event_signals(
-            StepInput(
-                previous_step_outputs={
-                    "prepare-event-batch": StepOutput(content=batch),
-                    "publish-event-candidates": published,
-                }
-            )
-        )
+        published = await publish_events(StepInput(previous_step_content=batch))
+        output = await build_signals(StepInput(previous_step_content=published.content))
 
         self.runtime.publish.assert_not_awaited()
         result = EventExtractionResult.model_validate(output.content)
@@ -696,7 +672,7 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.no_event_count, 2)
         self.assertEqual(result.failed_candidate_count, 0)
 
-    def test_agent_and_workflow_round_trip_with_conditional_analysis(self) -> None:
+    def test_agent_and_workflow_round_trip_has_three_rename_safe_business_steps(self) -> None:
         agent = build_event_extractor_agent()
         agent.db = None
         self.assertEqual(agent.id, "event-extractor")
@@ -708,14 +684,12 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             agents=[agent],
             schemas=[EventExtractionBatch, EventExtractionDraft, EventExtractionResult],
             functions=[
-                prepare_event_batch,
-                event_batch_requires_analysis,
-                freeze_event_analysis,
-                publish_event_candidates,
-                construct_event_signals,
+                extract_events,
+                publish_events,
+                build_signals,
             ],
         )
-        workflow = _seed_workflow(agent)
+        workflow = _seed_workflow()
         workflow.db = None
         self.assertEqual(
             workflow.metadata,
@@ -726,32 +700,19 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(steps, list)
         assert isinstance(steps, list)
         self.assertEqual(len(steps), 3)
-        from agno.workflow import Steps
-
-        self.assertIsInstance(steps[0], Steps)
-        extraction = steps[0]
-        assert isinstance(extraction, Steps)
-        self.assertEqual(extraction.name, "extract-event-candidates")
-        self.assertIsInstance(extraction.steps[0], Step)
-        self.assertIsInstance(extraction.steps[1], Condition)
-        condition = extraction.steps[1]
-        assert isinstance(condition, Condition)
-        self.assertEqual([step.name for step in condition.steps], ["analyze-event-batch", "freeze-event-analysis"])
-        self.assertEqual(cast(Step, steps[1]).name, "publish-event-candidates")
-        self.assertEqual(cast(Step, steps[2]).name, "construct-event-signals")
+        self.assertTrue(all(isinstance(step, Step) for step in steps))
+        self.assertEqual(
+            [cast(Step, step).name for step in steps],
+            ["extract-events", "publish-events", "build-signals"],
+        )
+        self.assertTrue(all(cast(Step, step).agent is None for step in steps))
 
     async def test_complete_workflow_analyzes_publishes_projects_and_builds_signals(self) -> None:
-        agent = build_event_extractor_agent()
-        agent.db = None
-        workflow = _seed_workflow(agent)
+        workflow = _seed_workflow()
         workflow.db = None
-        controlled_agent = AsyncMock(
-            return_value=RunOutput(
-                agent_id="event-extractor",
-                content=self._draft(),
-                content_type="EventExtractionDraft",
-            )
-        )
+        assert isinstance(workflow.steps, list)
+        for step, renamed in zip(workflow.steps, ["任意提炼名", "任意发布名", "任意信号名"], strict=True):
+            cast(Step, step).name = renamed
         publication = EventPublicationRecord(
             candidate_key="1" * 64,
             decision="NEW_EVENT",
@@ -773,17 +734,15 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             return publication.model_copy(update={"candidate_key": candidate_key})
 
         self.runtime.publish.side_effect = publish
+        self.runtime.extract.return_value = self._draft()
         self.runtime.construct_signals.return_value = EventSignalRecord(
             event_id=publication.event_id,
             status="SUCCEEDED",
             signal_fact_uuids=["signal-complete"],
         )
-        with (
-            patch.object(agent, "arun", new=controlled_agent),
-            patch(
-                "capabilities.event.internal.queue.read_resolved_evidences",
-                return_value=self._evidences(),
-            ),
+        with patch(
+            "capabilities.event.internal.queue.read_resolved_evidences",
+            return_value=self._evidences(),
         ):
             enqueue_evidence_artifact(
                 str(self.evidence_manifest),
@@ -796,8 +755,8 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(response.status, RunStatus.completed)
-        self.assertEqual(controlled_agent.call_count, 1)
-        analyzed = EventExtractionBatch.model_validate(controlled_agent.call_args.kwargs["input"])
+        self.runtime.extract.assert_awaited_once()
+        analyzed = EventExtractionBatch.model_validate(self.runtime.extract.call_args.args[0])
         self.assertEqual([item.id for item in analyzed.evidences], [self.FIRST_ID, self.SECOND_ID])
         self.runtime.publish.assert_awaited_once()
         self.runtime.construct_signals.assert_awaited_once()
@@ -827,7 +786,7 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             notes=f"Event Extractor runtime contract migration {EVENT_EXTRACTOR_CONTRACT_VERSION}",
         )
 
-    def test_workflow_contract_migration_uses_sessionless_published_agent(self) -> None:
+    def test_workflow_contract_migration_publishes_three_business_steps(self) -> None:
         db = MagicMock()
         db.get_component.return_value = {"current_version": 7}
         db.get_config.return_value = {
@@ -837,11 +796,8 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
                 "metadata": {"event_extraction_contract_version": 0},
             }
         }
-        runtime_agent = build_event_extractor_agent()
-        runtime_agent.db = None
         with (
             patch("workflows.event_extraction.get_postgres_db", return_value=db),
-            patch("workflows.event_extraction.load_event_extractor_agent", return_value=runtime_agent),
             patch.object(Workflow, "save", autospec=True, return_value=8) as saved,
         ):
             version = ensure_event_extraction_workflow(MagicMock())
@@ -852,14 +808,11 @@ class EventExtractionTest(unittest.IsolatedAsyncioTestCase):
             migrated.metadata,
             {"event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION},
         )
-        from agno.workflow import Steps
-
-        extraction = cast(Steps, cast(list[object], migrated.steps)[0])
-        condition = cast(Condition, extraction.steps[1])
-        analyze = cast(Step, condition.steps[0])
-        self.assertIsNotNone(analyze.agent)
-        assert analyze.agent is not None
-        self.assertIsNone(analyze.agent.db)
+        migrated_steps = cast(list[object], migrated.steps)
+        self.assertEqual(
+            [cast(Step, step).name for step in migrated_steps],
+            ["extract-events", "publish-events", "build-signals"],
+        )
 
     def test_tidewise_registry_resolves_published_event_extractor(self) -> None:
         runtime_agent = build_event_extractor_agent()

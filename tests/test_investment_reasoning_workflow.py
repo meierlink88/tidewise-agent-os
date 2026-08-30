@@ -1738,6 +1738,7 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             for name in ensure_names:
                 stack.enter_context(patch.object(main, name))
             stack.enter_context(patch.object(main.registry, "get_model", return_value=object()))
+            stack.enter_context(patch.object(main, "load_event_extractor_agent", return_value=Agent(id="event")))
             stack.enter_context(patch.object(main, "create_local_event_workflow_runtime", return_value=event_runtime))
             stack.enter_context(patch.object(main, "load_investment_reasoner_agent", return_value=Agent(id="reasoner")))
             stack.enter_context(patch.object(main, "load_investment_reviewer_agent", return_value=Agent(id="reviewer")))
@@ -1776,6 +1777,7 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             for name in ensure_names:
                 stack.enter_context(patch.object(main, name))
             stack.enter_context(patch.object(main.registry, "get_model", return_value=object()))
+            stack.enter_context(patch.object(main, "load_event_extractor_agent", return_value=Agent(id="event")))
             stack.enter_context(patch.object(main, "create_local_event_workflow_runtime", return_value=event_runtime))
             stack.enter_context(patch.object(main, "load_investment_reasoner_agent", return_value=Agent(id="reasoner")))
             stack.enter_context(patch.object(main, "load_investment_reviewer_agent", return_value=Agent(id="reviewer")))
