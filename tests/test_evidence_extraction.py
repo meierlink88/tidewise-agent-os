@@ -52,6 +52,7 @@ from capabilities.evidence.internal.models import (
     EvidenceExtractionDraft,
     EvidenceExtractionIdle,
     EvidenceMetric,
+    EvidencePublicationItem,
     EvidencePublicationResult,
     EvidenceSetPublicationResponse,
     PreparedEvidencePublication,
@@ -367,7 +368,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
 
     def test_semantic_contract_rejects_invalid_keywords_blanks_and_legacy_fields(self) -> None:
         with self.assertRaises(ValidationError):
-            AtomicEvidenceDraft(
+            EvidencePublicationItem(
                 summary="示例事实",
                 keywords=["超过六个字符标签"],
                 semantic=self._draft().evidences[0].semantic,
@@ -635,24 +636,50 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(publication.evidences[0].semantic.time.start_at)
         self.assertIsNone(publication.evidences[0].semantic.time.end_at)
 
-    def test_evidence_keywords_preserve_order_while_deduplicating_and_reject_oversized_values(self) -> None:
-        draft = AtomicEvidenceDraft(
+    def test_publication_keywords_preserve_order_while_deduplicating_and_reject_oversized_values(self) -> None:
+        item = EvidencePublicationItem(
             summary="伊朗天然气产量发生变化",
-            keywords=["伊朗", "天然气", "伊朗", "伊朗", "伊朗", "伊朗"],
-            semantic=self._draft().evidences[0].semantic,
+            keywords=["伊朗", "天然气", "伊朗"],
+            semantic=self._draft().evidences[0].semantic.model_dump(mode="json"),
         )
-        self.assertEqual(draft.keywords, ["伊朗", "天然气"])
+        self.assertEqual(item.keywords, ["伊朗", "天然气"])
         with self.assertRaises(ValidationError):
-            AtomicEvidenceDraft(
+            EvidencePublicationItem(
                 summary="伊朗天然气产量发生变化",
                 keywords=["伊朗", "天然气", "产量", "供给", "能源", "价格"],
-                semantic=self._draft().evidences[0].semantic,
+                semantic=self._draft().evidences[0].semantic.model_dump(mode="json"),
             )
         with self.assertRaises(ValidationError):
-            AtomicEvidenceDraft(
+            EvidencePublicationItem(
                 summary="伊朗天然气产量发生变化",
                 keywords=["9500万立方米"],
-                semantic=self._draft().evidences[0].semantic,
+                semantic=self._draft().evidences[0].semantic.model_dump(mode="json"),
+            )
+
+    def test_curation_drops_one_invalid_llm_keyword_without_losing_the_evidence(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        draft = self._draft().model_dump(mode="json")
+        draft["evidences"][0]["keywords"] = ["Freelander 8", "捷豹路虎", "奇瑞", "预售价格", "上市日期"]
+
+        output = curate_evidence(
+            StepInput(previous_step_content=json.dumps(draft, ensure_ascii=False)),
+            self._run_context("run-invalid-keyword", prepared),
+        )
+        publication = PreparedEvidencePublication.model_validate(output.content)
+
+        self.assertEqual(publication.evidences[0].keywords, ["捷豹路虎", "奇瑞", "预售价格", "上市日期"])
+
+    def test_curation_rejects_evidence_when_no_valid_keyword_remains(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        draft = self._draft().model_dump(mode="json")
+        draft["evidences"][0]["keywords"] = ["Freelander 8", "9500万立方米", "   "]
+
+        with self.assertRaisesRegex(ValueError, "at least one valid keyword"):
+            curate_evidence(
+                StepInput(previous_step_content=json.dumps(draft, ensure_ascii=False)),
+                self._run_context("run-no-valid-keyword", prepared),
             )
 
     async def test_publication_writes_manifest_last_and_advances_checkpoint(self) -> None:
@@ -1336,6 +1363,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("实际业务主体", current.instructions)
         self.assertIn("后续投研检索", current.instructions)
         self.assertIn("脱离上下文的泛词", current.instructions)
+        self.assertIn("通用中文简称", current.instructions)
         self.assertIn("attribution.reported_by", current.instructions)
         self.assertNotIn("SINGLE/DOUBLE", current.instructions)
 

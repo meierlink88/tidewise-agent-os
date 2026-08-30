@@ -327,7 +327,7 @@ class EvidenceSemantic(BaseModel):
 
 
 class AtomicEvidenceDraft(BaseModel):
-    """LLM-owned minimum complete business proposition."""
+    """LLM-owned minimum complete business proposition before deterministic curation."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -339,11 +339,6 @@ class AtomicEvidenceDraft(BaseModel):
     @classmethod
     def strip_summary(cls, value: str) -> str:
         return _strip_required(value)
-
-    @field_validator("keywords")
-    @classmethod
-    def validate_keywords(cls, values: list[str]) -> list[str]:
-        return _validated_keywords(values)
 
 
 class EvidenceExtractionDraft(BaseModel):
