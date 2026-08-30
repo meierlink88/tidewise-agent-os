@@ -225,12 +225,17 @@ class EvidenceTimeDraft(BaseModel):
     raw: str | None = Field(max_length=200)
     start_at: None
     end_at: None
-    precision: EvidenceTimePrecision
+    precision: str = Field(min_length=1, max_length=32)
 
     @field_validator("raw")
     @classmethod
     def strip_raw_time(cls, value: str | None) -> str | None:
         return _strip_optional(value)
+
+    @field_validator("precision")
+    @classmethod
+    def normalize_precision_candidate(cls, value: str) -> str:
+        return _strip_required(value).upper()
 
 
 class EvidenceTime(BaseModel):
@@ -327,7 +332,7 @@ class EvidenceSemantic(BaseModel):
 
 
 class AtomicEvidenceDraft(BaseModel):
-    """LLM-owned minimum complete business proposition."""
+    """LLM-owned minimum complete business proposition before deterministic curation."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -339,11 +344,6 @@ class AtomicEvidenceDraft(BaseModel):
     @classmethod
     def strip_summary(cls, value: str) -> str:
         return _strip_required(value)
-
-    @field_validator("keywords")
-    @classmethod
-    def validate_keywords(cls, values: list[str]) -> list[str]:
-        return _validated_keywords(values)
 
 
 class EvidenceExtractionDraft(BaseModel):

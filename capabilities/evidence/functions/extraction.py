@@ -244,6 +244,21 @@ def _canonical_metrics(metrics: list[EvidenceMetric]) -> list[EvidenceMetric]:
     return sorted(normalized, key=lambda item: (item.name.casefold(), (item.period or "").casefold()))
 
 
+def _canonical_keywords(values: list[str]) -> list[str]:
+    """Keep the first five valid publication keywords from one tolerant LLM draft."""
+    normalized: list[str] = []
+    for value in values:
+        item = _collapse_space(value.strip())
+        if not item or len(item) > 6 or item in normalized:
+            continue
+        normalized.append(item)
+        if len(normalized) == 5:
+            break
+    if not normalized:
+        raise ValueError("Evidence requires at least one valid keyword after curation")
+    return normalized
+
+
 def _canonicalize_evidence_drafts(draft: EvidenceExtractionDraft) -> list[EvidencePublicationItem]:
     items: list[EvidencePublicationItem] = []
     exact_payloads: set[str] = set()
@@ -264,7 +279,7 @@ def _canonicalize_evidence_drafts(draft: EvidenceExtractionDraft) -> list[Eviden
         )
         item = EvidencePublicationItem(
             summary=_collapse_space(source.summary),
-            keywords=source.keywords,
+            keywords=_canonical_keywords(source.keywords),
             semantic=semantic,
         )
         payload = json.dumps(item.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
