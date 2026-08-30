@@ -15,6 +15,7 @@
 - Workflow：`evidence-extraction`，增量提取并发布 Atomic Evidence，回写正式 Evidence ID。
 - Workflow：`event-extraction`，冻结本地 Evidence，发布去重后 Event，投影 Graphiti 并构建 Signal Fact。
 - Workflow：`investment-reasoning`，由 Schedule 命题直接触发，按地缘政治→宏观经济→产业链及节点逐层推导，仅从有效 Signal 根形成方向结论。
+- Projection CLI：`sematica.projection.company_cli`，从 Data API 投影 canonical Company，并只对图中已有 Industry/ChainNode 做可恢复的受限模型映射；写入禁止使用 Graphiti Episode。
 - API/MCP：`http://localhost:8000`、`http://localhost:8000/mcp`。
 
 ## 本地拓扑
@@ -75,7 +76,9 @@ Workflow 仅包含 `collect-raw-evidence`、`filter-raw-evidence` 和 `publish-r
 `raw-collection` 首次启动时也会创建一个 Studio 发布版本。Workflow 编排可在 Studio
 中创建新版本并发布；步骤使用的 Agent 和自定义 Function 实现在 Git 中维护。采集
 实现集中在 `capabilities/collection/`，Evidence 实现集中在 `capabilities/evidence/`，Event Candidate
-提炼与交接集中在 `capabilities/event/`，投研推理规则集中在 `capabilities/investment/`；每个领域只以 `tools/`、`functions/`、`internal/` 组织，不属于某个 Agent 或 Workflow 私有。Graphiti 的时间检索与图驱动适配仍保留在 `sematica/graphiti/`。
+提炼与交接集中在 `capabilities/event/`，Company 受限推断与冻结决策集中在 `capabilities/company/`，
+投研推理规则集中在 `capabilities/investment/`；每个领域只以 `tools/`、`functions/`、`internal/` 组织，
+不属于某个 Agent 或 Workflow 私有。Graphiti 的时间检索与图驱动适配仍保留在 `sematica/graphiti/`。
 采集 Workflow Executor 使用 Agno 异步运行接口，所有外部通道使用异步 HTTP；Tool Batch、
 Artifact 构建和发布的文件操作会卸载到工作线程，因此单 Worker 运行采集时不会阻塞其他业务
 Agent 或 Workflow。
@@ -143,6 +146,8 @@ docker compose up -d agentos neo4j
 - 先验证 `local-ping`，再验证模型 Agent，最后验证 MCP。
 
 详细初始化决策见 [docs/design/tidewise-agentos-initialization.md](docs/design/tidewise-agentos-initialization.md)。
+Company 投影的关系门禁、无 Episode 写入边界和可恢复操作见
+[docs/design/company-graph-projection.md](docs/design/company-graph-projection.md)。
 
 ## UAT
 

@@ -7,6 +7,12 @@ from sematica.ontology.entities.chain_node import (
     ChainNodeInputTo,
     ChainNodeIsComponentOf,
 )
+from sematica.ontology.entities.company import (
+    Company,
+    CompanyBelongsToIndustry,
+    CompanyOperatesInIndustry,
+    CompanyParticipatesInChainNode,
+)
 from sematica.ontology.entities.concept import Concept
 from sematica.ontology.entities.country import (
     Country,
@@ -32,6 +38,10 @@ __all__ = [
     "ChainNodeDependsOn",
     "ChainNodeInputTo",
     "ChainNodeIsComponentOf",
+    "Company",
+    "CompanyBelongsToIndustry",
+    "CompanyOperatesInIndustry",
+    "CompanyParticipatesInChainNode",
     "Concept",
     "Country",
     "CountryInRegion",

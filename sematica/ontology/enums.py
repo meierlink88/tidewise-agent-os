@@ -13,6 +13,21 @@ class RecordStatus(StrEnum):
     INACTIVE = "inactive"
 
 
+class CompanyStatus(StrEnum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    MERGED = "merged"
+
+
+class CompanyOwnershipType(StrEnum):
+    STATE_CONTROLLED = "STATE_CONTROLLED"
+    FAMILY_CONTROLLED = "FAMILY_CONTROLLED"
+    FOUNDER_CONTROLLED = "FOUNDER_CONTROLLED"
+    INSTITUTION_CONTROLLED = "INSTITUTION_CONTROLLED"
+    DISPERSED = "DISPERSED"
+    OTHER = "OTHER"
+
+
 class RegionType(StrEnum):
     CONTINENT = "CONTINENT"
     GEOGRAPHIC = "GEOGRAPHIC"

@@ -1,0 +1,73 @@
+"""Stable contracts for the Company graph projection capability."""
+
+from capabilities.company.internal.engine import (
+    build_chain_node_candidates,
+    finalize_company_decision,
+    industry_candidates,
+    industry_candidates_for_roots,
+    industry_root_candidates,
+    no_candidate_decision,
+    validate_decision_candidate_scope,
+    validate_model_response,
+)
+from capabilities.company.internal.inference import (
+    CompanyTargetSelector,
+    company_snapshot_fingerprint,
+    infer_companies,
+    partition_candidate_subjects,
+)
+from capabilities.company.internal.models import (
+    CandidateChoice,
+    CandidateSetAudit,
+    CanonicalChainNode,
+    CanonicalIndustry,
+    CanonicalIndustryChain,
+    ChainMembership,
+    CompanyInferenceDecision,
+    CompanySubject,
+    Confidence,
+    DecisionStatus,
+    IndustryChainMapping,
+    ModelSelectionItem,
+    ModelSelectionResponse,
+    ProjectionRunManifest,
+    ResolvedTarget,
+    StageDecision,
+    TargetCatalog,
+)
+from capabilities.company.internal.selector import GraphitiCompanyTargetSelector
+from capabilities.company.internal.storage import DecisionJournal
+
+__all__ = [
+    "CandidateChoice",
+    "CandidateSetAudit",
+    "CanonicalChainNode",
+    "CanonicalIndustry",
+    "CanonicalIndustryChain",
+    "ChainMembership",
+    "CompanyInferenceDecision",
+    "CompanySubject",
+    "CompanyTargetSelector",
+    "Confidence",
+    "DecisionJournal",
+    "DecisionStatus",
+    "GraphitiCompanyTargetSelector",
+    "IndustryChainMapping",
+    "ModelSelectionItem",
+    "ModelSelectionResponse",
+    "ProjectionRunManifest",
+    "ResolvedTarget",
+    "StageDecision",
+    "TargetCatalog",
+    "build_chain_node_candidates",
+    "company_snapshot_fingerprint",
+    "finalize_company_decision",
+    "industry_candidates",
+    "industry_candidates_for_roots",
+    "industry_root_candidates",
+    "infer_companies",
+    "partition_candidate_subjects",
+    "no_candidate_decision",
+    "validate_model_response",
+    "validate_decision_candidate_scope",
+]
