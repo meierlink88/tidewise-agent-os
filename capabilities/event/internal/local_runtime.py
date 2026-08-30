@@ -94,7 +94,6 @@ class LocalEventWorkflowRuntime:
             stream=False,
             session_id=f"{run_context.session_id}:{agent_id}",
             user_id=run_context.user_id,
-            run_context=run_context,
             metadata={"event_agent_id": agent_id, "event_agent_version": version},
         )
         if not isinstance(response, RunOutput):
