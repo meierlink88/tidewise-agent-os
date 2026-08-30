@@ -17,7 +17,7 @@ from agno.run import RunContext
 from agno.workflow import StepInput
 
 from capabilities.collection.functions import collect_raw_evidence
-from capabilities.collection.internal.models import TitleCurationRequest
+from capabilities.collection.internal.models import RawEvidenceFilterProgress
 from capabilities.collection.internal.source_snapshot import DataServiceSourceSnapshotProvider
 
 _PROVIDER_FIXTURE = Path(__file__).parent / "fixtures" / "source-snapshot.v1.json"
@@ -396,6 +396,6 @@ class SourceSnapshotWorkflowTest(unittest.IsolatedAsyncioTestCase):
         assert dependencies is not None
         self.assertEqual(dependencies["kept"], "value")
         self.assertNotIn("collection_channel_snapshot", dependencies)
-        execution_content = TitleCurationRequest.model_validate(execution.content)
-        self.assertEqual(execution_content.candidates, [])
+        execution_content = RawEvidenceFilterProgress.model_validate(execution.content)
+        self.assertEqual(execution_content.total_candidates, 0)
         self.assertEqual(len(_SnapshotHandler.requests), 1)

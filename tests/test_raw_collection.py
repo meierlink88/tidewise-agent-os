@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 from agno.agent import Agent
 from agno.run import RunContext
-from agno.workflow import Step, StepInput, StepOutput
+from agno.workflow import Loop, Step, StepInput, StepOutput
 from pydantic import ValidationError
 
 from agents.title_curator import (
@@ -26,7 +26,10 @@ from agents.title_curator import (
 from app.registry import registry
 from capabilities.collection.functions import (
     collect_raw_evidence,
+    prepare_raw_evidence_filter_batch,
     publish_raw_evidence,
+    raw_evidence_filter_complete,
+    save_raw_evidence_filter_batch,
 )
 from capabilities.collection.functions.collection import request_from_input
 from capabilities.collection.internal.artifacts import build_artifact_set, publish_artifact_set
@@ -40,10 +43,10 @@ from capabilities.collection.internal.channels.models import ChannelType, Collec
 from capabilities.collection.internal.models import (
     Candidate,
     CollectionRequest,
+    RawEvidenceFilterProgress,
     SourceLevel,
     TitleCurationDecision,
     TitleCurationDraft,
-    TitleCurationItem,
     TitleCurationRequest,
 )
 from workflows.raw_collection import (
@@ -184,9 +187,9 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         ):
             output = await collect_raw_evidence(step_input, context)
 
-        content = TitleCurationRequest.model_validate(output.content)
-        self.assertCountEqual([item.title for item in content.candidates], ["博查", "财联社"])
-        self.assertTrue(all(item.content_excerpt.endswith("正文") for item in content.candidates))
+        progress = RawEvidenceFilterProgress.model_validate(output.content)
+        self.assertEqual(progress.total_candidates, 2)
+        self.assertEqual(progress.remaining_candidates, 2)
         batches = read_tool_batches(context.run_id)
         self.assertCountEqual([item.connector for item in batches], ["bocha", "cls_telegraph"])
         self.assertEqual({item.query for item in batches}, {"宏观政策"})
@@ -526,32 +529,45 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(legacy.read_text(encoding="utf-8"), legacy_payload)
         self.assertTrue((artifact_root() / "indexes/title-dedup-index.tsv").is_file())
 
-    async def test_filter_input_contains_bounded_context_and_requires_exact_id_coverage(self) -> None:
+    async def test_filter_batches_keep_full_content_and_require_exact_id_coverage(self) -> None:
         now = datetime(2026, 8, 13, 3, tzinfo=UTC)
-        prepared = StepOutput(
-            content=TitleCurationRequest(
-                candidates=[
-                    TitleCurationItem(
-                        candidate_id="candidate-a",
-                        title="政策A",
-                        source_name="媒体",
-                        published_at=now,
-                        content_excerpt="SECRET_BODY_A",
-                    ),
-                    TitleCurationItem(
-                        candidate_id="candidate-b",
-                        title="政策B",
-                        source_name="媒体",
-                        published_at=now,
-                        content_excerpt="SECRET_BODY_B",
-                    ),
-                ]
-            )
+        long_body = "长" * 50_001
+        candidates = [
+            Candidate(
+                candidate_id="candidate-a",
+                connector="bocha",
+                query="政策",
+                title="政策A",
+                url="https://example.com/a",
+                content=long_body,
+                source_name="媒体",
+                published_at=now,
+                collected_at=now,
+            ),
+            Candidate(
+                candidate_id="candidate-b",
+                connector="bocha",
+                query="政策",
+                title="政策B",
+                url="https://example.com/b",
+                content="SECRET_BODY_B",
+                source_name="媒体",
+                published_at=now,
+                collected_at=now,
+            ),
+        ]
+        write_tool_batch(
+            collection_id="run-curation-validation",
+            connector="bocha",
+            query="政策",
+            candidates=candidates,
         )
         context = RunContext(run_id="run-curation-validation", session_id="session")
-        encoded = cast(TitleCurationRequest, prepared.content).model_dump_json()
-        self.assertIn("SECRET_BODY", encoded)
-        self.assertIn("content_excerpt", encoded)
+        prepared = await prepare_raw_evidence_filter_batch(StepInput(input="采集政策"), context)
+        request = TitleCurationRequest.model_validate(prepared.content)
+        self.assertEqual([item.candidate_id for item in request.candidates], ["candidate-a"])
+        self.assertEqual(request.candidates[0].content, long_body)
+        self.assertNotIn("content_excerpt", request.model_dump_json())
 
         malformed = TitleCurationDraft(
             decisions=[
@@ -569,12 +585,11 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             input="采集政策",
             previous_step_content=malformed,
             previous_step_outputs={
-                "collect-raw-evidence": prepared,
-                "FILTER-RAW-EVIDENCE": StepOutput(content=malformed),
+                "prepare-raw-evidence-filter-batch": prepared,
             },
         )
         with self.assertRaisesRegex(ValueError, "coverage mismatch"):
-            await publish_raw_evidence(validation_input, context)
+            await save_raw_evidence_filter_batch(validation_input, context)
 
         duplicate = TitleCurationDraft(
             decisions=[
@@ -592,12 +607,60 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             input="采集政策",
             previous_step_content=duplicate,
             previous_step_outputs={
-                "collect-raw-evidence": prepared,
-                "RENAMED-FILTER-STEP": StepOutput(content=duplicate),
+                "prepare-raw-evidence-filter-batch": prepared,
             },
         )
         with self.assertRaisesRegex(ValueError, "duplicate Candidate IDs"):
-            await publish_raw_evidence(duplicate_input, context)
+            await save_raw_evidence_filter_batch(duplicate_input, context)
+
+    async def test_filter_batches_limit_candidate_count_without_truncating_documents(self) -> None:
+        now = datetime(2026, 8, 13, 3, tzinfo=UTC)
+        candidates = [
+            Candidate(
+                candidate_id=f"candidate-{index:02d}",
+                connector="rss",
+                query="政策",
+                title=f"政策{index}",
+                url=f"https://example.com/{index}",
+                content=f"完整正文-{index}-" + ("x" * 100),
+                source_name="媒体",
+                published_at=now,
+                collected_at=now,
+            )
+            for index in range(30)
+        ]
+        write_tool_batch(
+            collection_id="run-batch-size",
+            connector="rss",
+            query="政策",
+            candidates=candidates,
+        )
+        context = RunContext(run_id="run-batch-size", session_id="session")
+
+        first = await prepare_raw_evidence_filter_batch(StepInput(input="采集政策"), context)
+        request = TitleCurationRequest.model_validate(first.content)
+
+        self.assertEqual(len(request.candidates), 25)
+        self.assertEqual(request.candidates[-1].content, candidates[24].content)
+
+    def test_filter_loop_end_condition_requires_zero_remaining_candidates(self) -> None:
+        incomplete = StepOutput(
+            content=RawEvidenceFilterProgress(
+                total_candidates=10,
+                decided_candidates=5,
+                remaining_candidates=5,
+            )
+        )
+        complete = StepOutput(
+            content=RawEvidenceFilterProgress(
+                total_candidates=10,
+                decided_candidates=10,
+                remaining_candidates=0,
+            )
+        )
+
+        self.assertFalse(raw_evidence_filter_complete([incomplete]))
+        self.assertTrue(raw_evidence_filter_complete([complete]))
 
     def test_title_curator_contract_migration_publishes_reviewed_binary_prompt(self) -> None:
         db = MagicMock()
@@ -615,6 +678,8 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(version, 9)
         self.assertIn("is_relevant", current.instructions)
+        self.assertIn("完整 content", current.instructions)
+        self.assertIn("全球风险偏好", current.instructions)
         self.assertNotIn("reason_code", current.instructions)
         self.assertNotIn("uncertain", current.instructions)
         self.assertIs(current.output_schema, TitleCurationDraft)
@@ -624,30 +689,39 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         curator = Agent(id="title-curator", name="Raw Evidence Filter")
         seeded = _seed_workflow(curator)
         serialized_steps = cast(list[dict[str, object]], seeded.to_dict()["steps"])
+        serialized_loop_steps = cast(list[dict[str, object]], serialized_steps[1]["steps"])
         self.assertEqual(
-            [item.get("agent_id") for item in serialized_steps if item.get("agent_id") is not None],
+            [item.get("agent_id") for item in serialized_loop_steps if item.get("agent_id") is not None],
             ["title-curator"],
         )
-        self.assertEqual(
-            [step.agent.name for step in cast(list[Step], seeded.steps) if step.agent is not None],
-            ["Raw Evidence Filter"],
-        )
         self.assertIsInstance(seeded.steps, list)
-        steps = cast(list[Step], seeded.steps)
-        self.assertTrue(all(isinstance(step, Step) for step in steps))
-        self.assertEqual(
-            [step.agent.id if step.agent is not None else getattr(step.executor, "__name__", None) for step in steps],
-            [
-                "collect_raw_evidence",
-                "title-curator",
-                "publish_raw_evidence",
-            ],
-        )
+        steps = cast(list[Step | Loop], seeded.steps)
+        self.assertIsInstance(steps[0], Step)
+        self.assertIsInstance(steps[1], Loop)
+        self.assertIsInstance(steps[2], Step)
         self.assertEqual(
             [step.name for step in steps], ["collect-raw-evidence", "filter-raw-evidence", "publish-raw-evidence"]
         )
-        self.assertTrue(all(step.max_retries == 0 for step in steps))
-        self.assertTrue(all(str(step.human_review.on_error) == "OnError.fail" for step in steps))
+        loop = cast(Loop, steps[1])
+        inner_steps = cast(list[Step], loop.steps)
+        self.assertEqual(
+            [step.agent.name for step in inner_steps if step.agent is not None],
+            ["Raw Evidence Filter"],
+        )
+        self.assertEqual(
+            [
+                step.agent.id if step.agent is not None else getattr(step.executor, "__name__", None)
+                for step in inner_steps
+            ],
+            [
+                "prepare_raw_evidence_filter_batch",
+                "title-curator",
+                "save_raw_evidence_filter_batch",
+            ],
+        )
+        self.assertIs(loop.end_condition, raw_evidence_filter_complete)
+        self.assertFalse(loop.forward_iteration_output)
+        self.assertTrue(all(step.max_retries == 0 for step in inner_steps))
 
     def test_workflow_agents_load_components_without_runtime_session_db(self) -> None:
         db = MagicMock()
@@ -690,8 +764,9 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(version, 16)
         migrated = workflow_save.call_args.args[0]
         self.assertIs(migrated.db, db)
-        steps = cast(list[Step], migrated.steps)
-        agent_steps = [step.agent for step in steps if step.agent is not None]
+        steps = cast(list[Step | Loop], migrated.steps)
+        loop = cast(Loop, steps[1])
+        agent_steps = [step.agent for step in cast(list[Step], loop.steps) if step.agent is not None]
         self.assertEqual([agent.id for agent in agent_steps], ["title-curator"])
         self.assertTrue(all(agent.db is None for agent in agent_steps))
         self.assertEqual(migrated.metadata["raw_collection_contract_version"], RAW_COLLECTION_CONTRACT_VERSION)
@@ -753,7 +828,8 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["content"]["candidate_counts"]["results_pending"], 0)
         steps = {item["step_name"]: item for item in result["step_results"]}
         self.assertEqual(steps["collect-raw-evidence"]["executor_type"], "function")
-        self.assertEqual(steps["filter-raw-evidence"]["executor_type"], "agent")
+        self.assertEqual(steps["filter-raw-evidence"]["step_type"], "Loop")
+        self.assertIsNone(steps["filter-raw-evidence"]["executor_type"])
         self.assertEqual(steps["publish-raw-evidence"]["executor_type"], "function")
 
 

@@ -3,18 +3,21 @@
 from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
-from agno.workflow import Step, Workflow
+from agno.workflow import Loop, Step, Workflow
 from agno.workflow.types import HumanReview, OnError
 
 from agents.title_curator import LoadedTitleCuratorAgent, load_title_curator_agent
 from capabilities.collection.functions import (
     collect_raw_evidence,
+    prepare_raw_evidence_filter_batch,
     publish_raw_evidence,
+    raw_evidence_filter_complete,
+    save_raw_evidence_filter_batch,
 )
 from db import get_postgres_db
 
 RAW_COLLECTION_WORKFLOW_ID = "raw-collection"
-RAW_COLLECTION_CONTRACT_VERSION = 15
+RAW_COLLECTION_CONTRACT_VERSION = 17
 RETIRED_COLLECTION_QUERY_PLANNER_AGENT_ID = "raw-collector"
 
 
@@ -50,12 +53,37 @@ def _seed_workflow(curator: Agent, *, dependencies: dict[str, object] | None = N
                 max_retries=0,
                 human_review=_fail_fast_review(),
             ),
-            Step(
+            Loop(
                 name="filter-raw-evidence",
-                agent=curator,
-                max_retries=0,
+                description="Filter complete documents in bounded batches until every Candidate is decided.",
+                max_iterations=1_000,
+                end_condition=raw_evidence_filter_complete,
+                # Each iteration reloads the next batch from the run-scoped file buffer.
+                # Forwarding the prior progress object would replace the Agent's batch input.
+                forward_iteration_output=False,
                 human_review=_fail_fast_review(),
-                strict_input_validation=True,
+                steps=[
+                    Step(
+                        name="prepare-raw-evidence-filter-batch",
+                        executor=prepare_raw_evidence_filter_batch,  # type: ignore[arg-type]  # Agno injects RunContext.
+                        max_retries=0,
+                        human_review=_fail_fast_review(),
+                    ),
+                    Step(
+                        name="filter-raw-evidence-batch",
+                        agent=curator,
+                        max_retries=0,
+                        human_review=_fail_fast_review(),
+                        strict_input_validation=True,
+                    ),
+                    Step(
+                        name="save-raw-evidence-filter-batch",
+                        executor=save_raw_evidence_filter_batch,  # type: ignore[arg-type]  # Agno injects RunContext.
+                        max_retries=0,
+                        human_review=_fail_fast_review(),
+                        strict_input_validation=True,
+                    ),
+                ],
             ),
             Step(
                 name="publish-raw-evidence",

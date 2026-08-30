@@ -6,6 +6,7 @@ from capabilities.collection.internal.models import (
     CollectionRequest,
     CollectionResult,
     PreparedArtifactSet,
+    RawEvidenceFilterProgress,
     TitleCurationDraft,
     TitleCurationRequest,
 )
@@ -15,6 +16,7 @@ __all__ = [
     "CollectionRequest",
     "CollectionResult",
     "PreparedArtifactSet",
+    "RawEvidenceFilterProgress",
     "TitleCurationDraft",
     "TitleCurationRequest",
     "artifact_root",
