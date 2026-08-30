@@ -18,7 +18,7 @@ from agno.registry import Registry
 from agno.run import RunContext
 from agno.run.agent import RunOutput
 from agno.run.base import RunStatus
-from agno.workflow import Loop, Step, StepInput, StepOutput, Workflow
+from agno.workflow import Loop, Step, StepInput, StepOutput, Steps, Workflow
 from pydantic import ValidationError
 
 from agents.evidence_extractor import (
@@ -36,8 +36,9 @@ from capabilities.collection.internal.models import (
     TitleCurationDecision,
     TitleCurationDraft,
 )
-from capabilities.evidence import read_resolved_evidences, reconcile_evidence_bindings
+from capabilities.evidence import read_resolved_evidences
 from capabilities.evidence.functions import (
+    evidence_extraction_complete,
     prepare_evidence_analysis,
     prepare_raw_document,
     publish_evidences,
@@ -49,6 +50,7 @@ from capabilities.evidence.internal.models import (
     EvidenceCategoryCatalog,
     EvidenceExtractionDraft,
     EvidenceExtractionIdle,
+    EvidenceMetric,
     EvidencePublicationResult,
     EvidenceSetPublicationResponse,
     PreparedEvidencePublication,
@@ -166,20 +168,32 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         return EvidenceExtractionDraft(
             raw_evidence=RawEvidenceEnrichment(
                 category_code="EVENT_BRIEF",
-                keywords=["服务器", "订单"],
                 is_original=False,
                 quoted_source_name="示例公司公告",
             ),
             evidences=[
                 AtomicEvidenceDraft(
                     summary="示例公司签署10亿元三年期服务器订单",
+                    keywords=["服务器", "订单"],
                     semantic={
-                        "who": "示例公司",
-                        "what": "签署10亿元服务器订单",
-                        "when": None,
-                        "where": None,
-                        "why": None,
-                        "how": "合同期限为三年",
+                        "actors": ["示例公司"],
+                        "action": "签署",
+                        "objects": ["服务器订单"],
+                        "stage": "ANNOUNCED",
+                        "modality": "FACT",
+                        "time": {
+                            "raw": "2026-08-11",
+                            "start_at": None,
+                            "end_at": None,
+                            "precision": "DAY",
+                        },
+                        "jurisdictions": ["中国"],
+                        "reason": None,
+                        "method": "合同金额10亿元，期限三年",
+                        "metrics": [
+                            {"name": "合同金额", "value": "10", "unit": "亿元", "change": None, "period": "三年"}
+                        ],
+                        "attribution": {"reported_by": "财联社", "claimed_by": "示例公司公告"},
                     },
                 )
             ],
@@ -191,10 +205,18 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         return PreparedRawDocument.model_validate(output.content)
 
     def _validated(self, prepared: PreparedRawDocument) -> PreparedEvidencePublication:
+        return self._validated_draft(prepared, self._draft())
+
+    def _validated_draft(
+        self,
+        prepared: PreparedRawDocument,
+        draft: EvidenceExtractionDraft,
+    ) -> PreparedEvidencePublication:
+        draft = EvidenceExtractionDraft.model_validate(draft.model_dump(mode="json"))
         step_input = StepInput(
             previous_step_outputs={
                 "prepare-raw-document": StepOutput(content=prepared),
-                "analyze-raw-evidence": StepOutput(content=self._draft()),
+                "analyze-raw-evidence": StepOutput(content=draft),
             }
         )
         output = validate_evidence_analysis(step_input, self._run_context("run-evidence"))
@@ -352,35 +374,26 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
 
     def test_semantic_contract_rejects_invalid_keywords_blanks_and_legacy_fields(self) -> None:
         with self.assertRaises(ValidationError):
-            RawEvidenceEnrichment(
-                category_code="EVENT_BRIEF",
-                keywords=["超过五个字符"],
-                is_original=True,
+            AtomicEvidenceDraft(
+                summary="示例事实",
+                keywords=["超过六个字符标签"],
+                semantic=self._draft().evidences[0].semantic,
             )
         with self.assertRaises(ValidationError):
             AtomicEvidenceDraft(
                 summary="示例事实",
+                keywords=["示例"],
                 semantic={
-                    "who": None,
-                    "what": " ",
-                    "when": None,
-                    "where": None,
-                    "why": None,
-                    "how": None,
+                    **self._draft().evidences[0].semantic.model_dump(mode="json"),
+                    "action": " ",
                 },
             )
         with self.assertRaises(ValidationError):
             AtomicEvidenceDraft.model_validate(
                 {
                     "summary": "示例事实",
-                    "semantic": {
-                        "who": None,
-                        "what": "示例事实",
-                        "when": None,
-                        "where": None,
-                        "why": None,
-                        "how": None,
-                    },
+                    "keywords": ["示例"],
+                    "semantic": self._draft().evidences[0].semantic.model_dump(mode="json"),
                     "expression_fingerprint": "旧字段不允许",
                 }
             )
@@ -391,24 +404,36 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             "evidences": [
                 {
                     "summary": "Example Corp expands production",
+                    "keywords": ["扩产", "产能"],
                     "semantic": {
-                        "who": "Example Corp",
-                        "what": "expanded production",
-                        "when": "August 10, 2026",
-                        "where": None,
-                        "why": None,
-                        "how": "by adding a new production line",
+                        "actors": ["Example Corp"],
+                        "action": "expanded production",
+                        "objects": ["production capacity"],
+                        "stage": "OCCURRED",
+                        "modality": "FACT",
+                        "time": {"raw": "August 10, 2026", "start_at": None, "end_at": None, "precision": "DAY"},
+                        "jurisdictions": [],
+                        "reason": None,
+                        "method": "by adding a new production line",
+                        "metrics": [],
+                        "attribution": {"reported_by": None, "claimed_by": "Example Corp"},
                     },
                 },
                 {
                     "summary": "Example Corp secures additional capacity",
+                    "keywords": ["产能"],
                     "semantic": {
-                        "who": "Example Corp",
-                        "what": "secured additional capacity",
-                        "when": "August 10, 2026",
-                        "where": None,
-                        "why": "to meet rising demand",
-                        "how": None,
+                        "actors": ["Example Corp"],
+                        "action": "secured",
+                        "objects": ["additional capacity"],
+                        "stage": "OCCURRED",
+                        "modality": "FACT",
+                        "time": {"raw": "August 10, 2026", "start_at": None, "end_at": None, "precision": "DAY"},
+                        "jurisdictions": [],
+                        "reason": "to meet rising demand",
+                        "method": None,
+                        "metrics": [],
+                        "attribution": {"reported_by": None, "claimed_by": "Example Corp"},
                     },
                 },
             ],
@@ -434,19 +459,16 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.id for item in response.items], [response.ids[1], response.ids[0]])
 
     def test_atomic_evidence_rejects_summary_overflow_and_invalid_semantic_shape(self) -> None:
-        semantic = {
-            "who": None,
-            "what": "expanded production",
-            "when": None,
-            "where": None,
-            "why": None,
-            "how": None,
-        }
+        semantic = self._draft().evidences[0].semantic.model_dump(mode="json")
         invalid = [
-            {"summary": "x" * 201, "semantic": semantic},
-            {"summary": "summary", "semantic": {key: value for key, value in semantic.items() if key != "why"}},
-            {"summary": "summary", "semantic": {**semantic, "confidence": "high"}},
-            {"summary": "summary", "semantic": {**semantic, "who": " "}},
+            {"summary": "x" * 201, "keywords": ["示例"], "semantic": semantic},
+            {
+                "summary": "summary",
+                "keywords": ["示例"],
+                "semantic": {key: value for key, value in semantic.items() if key != "reason"},
+            },
+            {"summary": "summary", "keywords": ["示例"], "semantic": {**semantic, "confidence": "high"}},
+            {"summary": "summary", "keywords": ["示例"], "semantic": {**semantic, "actors": [" "]}},
         ]
 
         for payload in invalid:
@@ -470,13 +492,103 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("evidence_id", publication.evidences[0].model_dump(mode="json"))
         self.assertEqual(
             set(publication.evidences[0].model_dump(mode="json")),
-            {"summary", "semantic"},
+            {"summary", "keywords", "semantic"},
         )
         self.assertEqual(
             set(publication.evidences[0].semantic.model_dump()),
-            {"who", "what", "when", "where", "why", "how"},
+            {
+                "actors",
+                "action",
+                "objects",
+                "stage",
+                "modality",
+                "time",
+                "jurisdictions",
+                "reason",
+                "method",
+                "metrics",
+                "attribution",
+            },
         )
-        self.assertEqual(publication.schema_version, "prepared_evidence_publication.v4")
+        self.assertEqual(publication.schema_version, "prepared_evidence_publication.v5")
+
+    def test_reuters_attribution_does_not_replace_business_actor_and_relative_time_is_not_guessed(self) -> None:
+        self._publish_raw_fixture()
+        draft = self._draft().model_copy(deep=True)
+        evidence = draft.evidences[0]
+        evidence.summary = "路透社称美国计划周末攻击伊朗"
+        evidence.keywords = ["美伊冲突", "军事行动"]
+        evidence.semantic.actors = ["美国"]
+        evidence.semantic.action = "计划攻击"
+        evidence.semantic.objects = ["伊朗"]
+        evidence.semantic.stage = "EXPECTED"
+        evidence.semantic.modality = "PLAN"
+        evidence.semantic.time.raw = "周末"
+        evidence.semantic.time.precision = "UNKNOWN"
+        evidence.semantic.jurisdictions = ["伊朗"]
+        evidence.semantic.method = None
+        evidence.semantic.metrics = []
+        evidence.semantic.attribution.reported_by = "路透社"
+        evidence.semantic.attribution.claimed_by = None
+
+        publication = self._validated_draft(self._prepared(), draft)
+        semantic = publication.evidences[0].semantic
+
+        self.assertEqual(semantic.actors, ["美国"])
+        self.assertNotIn("路透社", semantic.actors)
+        self.assertEqual(semantic.attribution.reported_by, "路透社")
+        self.assertEqual(semantic.time.raw, "周末")
+        self.assertIsNone(semantic.time.start_at)
+        self.assertIsNone(semantic.time.end_at)
+
+    def test_company_metrics_stay_in_one_business_proposition_and_guidance_can_split(self) -> None:
+        self._publish_raw_fixture()
+        draft = self._draft().model_copy(deep=True)
+        actual = draft.evidences[0]
+        actual.summary = "英伟达披露季度收入、毛利率和数据中心收入"
+        actual.keywords = ["英伟达", "财报", "数据中心"]
+        actual.semantic.actors = ["英伟达"]
+        actual.semantic.action = "披露季度业绩"
+        actual.semantic.objects = ["季度经营结果"]
+        actual.semantic.stage = "OCCURRED"
+        actual.semantic.metrics = [
+            EvidenceMetric(name="收入", value="30", unit="亿美元", change="+20%", period="2026Q2"),
+            EvidenceMetric(name="毛利率", value="75", unit="%", change=None, period="2026Q2"),
+            EvidenceMetric(name="数据中心收入", value="26", unit="亿美元", change="+25%", period="2026Q2"),
+        ]
+        guidance = actual.model_copy(deep=True)
+        guidance.summary = "英伟达预计下一季度收入继续增长"
+        guidance.keywords = ["英伟达", "业绩指引"]
+        guidance.semantic.action = "发布收入指引"
+        guidance.semantic.objects = ["下一季度收入"]
+        guidance.semantic.stage = "EXPECTED"
+        guidance.semantic.modality = "PLAN"
+        guidance.semantic.metrics = [
+            EvidenceMetric(name="收入指引", value="32", unit="亿美元", change=None, period="2026Q3")
+        ]
+        draft.evidences = [actual, guidance]
+
+        publication = self._validated_draft(self._prepared(), draft)
+
+        self.assertEqual(len(publication.evidences), 2)
+        self.assertEqual(len(publication.evidences[0].semantic.metrics), 3)
+        self.assertEqual({item.semantic.stage for item in publication.evidences}, {"OCCURRED", "EXPECTED"})
+
+    def test_exact_repetition_collapses_but_divergent_same_identity_fails_closed(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        draft = self._draft().model_copy(deep=True)
+        draft.evidences.append(draft.evidences[0].model_copy(deep=True))
+
+        publication = self._validated_draft(prepared, draft)
+        self.assertEqual(len(publication.evidences), 1)
+
+        divergent = self._draft().model_copy(deep=True)
+        duplicate_identity = divergent.evidences[0].model_copy(deep=True)
+        duplicate_identity.summary = "相同动作但出现不一致的补充摘要"
+        divergent.evidences.append(duplicate_identity)
+        with self.assertRaisesRegex(ValueError, "identity collision"):
+            self._validated_draft(prepared, divergent)
 
     def test_legacy_manifest_is_audited_and_skipped_without_body_publication(self) -> None:
         self._publish_raw_fixture()
@@ -511,7 +623,12 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self._publish_raw_fixture()
         prepared = self._prepared()
         draft = self._draft().model_dump(mode="json")
-        draft["evidences"][0]["semantic"]["when"] = "十五五期间"
+        draft["evidences"][0]["semantic"]["time"] = {
+            "raw": "十五五期间",
+            "start_at": None,
+            "end_at": None,
+            "precision": "RANGE",
+        }
         step_input = StepInput(
             previous_step_outputs={
                 "prepare-raw-document": StepOutput(content=prepared),
@@ -522,19 +639,30 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             validate_evidence_analysis(step_input, self._run_context("run-fuzzy-time")).content
         )
 
-        self.assertEqual(publication.evidences[0].semantic.when, "十五五期间")
+        self.assertEqual(publication.evidences[0].semantic.time.raw, "十五五期间")
+        self.assertEqual(publication.evidences[0].semantic.time.precision, "RANGE")
+        self.assertIsNone(publication.evidences[0].semantic.time.start_at)
+        self.assertIsNone(publication.evidences[0].semantic.time.end_at)
 
-    def test_validation_discards_invalid_keywords_when_valid_ones_remain(self) -> None:
-        enrichment = RawEvidenceEnrichment.model_validate(
-            {
-                "category_code": "EVENT_BRIEF",
-                "keywords": ["伊朗", "天然气", "9500万立方米", "伊朗"],
-                "is_original": True,
-                "quoted_source_name": None,
-            }
+    def test_evidence_keywords_preserve_order_while_deduplicating_and_reject_oversized_values(self) -> None:
+        draft = AtomicEvidenceDraft(
+            summary="伊朗天然气产量发生变化",
+            keywords=["伊朗", "天然气", "伊朗", "伊朗", "伊朗", "伊朗"],
+            semantic=self._draft().evidences[0].semantic,
         )
-
-        self.assertEqual(enrichment.keywords, ["伊朗", "天然气"])
+        self.assertEqual(draft.keywords, ["伊朗", "天然气"])
+        with self.assertRaises(ValidationError):
+            AtomicEvidenceDraft(
+                summary="伊朗天然气产量发生变化",
+                keywords=["伊朗", "天然气", "产量", "供给", "能源", "价格"],
+                semantic=self._draft().evidences[0].semantic,
+            )
+        with self.assertRaises(ValidationError):
+            AtomicEvidenceDraft(
+                summary="伊朗天然气产量发生变化",
+                keywords=["9500万立方米"],
+                semantic=self._draft().evidences[0].semantic,
+            )
 
     async def test_publication_writes_manifest_last_and_advances_checkpoint(self) -> None:
         self._publish_raw_fixture()
@@ -544,7 +672,11 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
         responses = [
             {"id": raw_evidence_id},
-            {"raw_evidence_id": raw_evidence_id, "ids": [evidence_id]},
+            {
+                "raw_evidence_id": raw_evidence_id,
+                "ids": [evidence_id],
+                "items": [{"input_index": 0, "id": evidence_id}],
+            },
         ]
         with patch(
             "capabilities.evidence.functions.extraction.post_publication",
@@ -567,17 +699,17 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(evidence_endpoint, "evidence-publications")
         self.assertEqual(evidence_payload["raw_evidence_id"], raw_evidence_id)
         self.assertNotIn("evidence_id", evidence_payload["evidences"][0])
-        self.assertEqual(set(evidence_payload["evidences"][0]), {"summary", "semantic"})
+        self.assertEqual(set(evidence_payload["evidences"][0]), {"summary", "keywords", "semantic"})
         self.assertTrue(Path(result.artifact_manifest_path).is_file())
         manifest = json.loads(Path(result.artifact_manifest_path).read_text(encoding="utf-8"))
-        self.assertEqual(manifest["schema"], "evidence_extraction_manifest.v4")
+        self.assertEqual(manifest["schema"], "evidence_extraction_manifest.v5")
         self.assertEqual(manifest["publication_key"], publication.raw_evidence.publication_key)
         self.assertEqual(manifest["raw_evidence_id"], raw_evidence_id)
         self.assertEqual(manifest["evidence_ids"], [evidence_id])
-        self.assertEqual(manifest["artifacts"], {"prepared": "prepared.json"})
+        self.assertEqual(manifest["artifacts"], {"prepared": "prepared.json", "bindings": "bindings.json"})
         self.assertEqual(
             {path.name for path in Path(result.artifact_manifest_path).parent.iterdir()},
-            {"manifest.json", "prepared.json"},
+            {"manifest.json", "prepared.json", "bindings.json"},
         )
         frozen = json.loads((Path(result.artifact_manifest_path).parent / "prepared.json").read_text(encoding="utf-8"))
         self.assertNotIn("category_catalog", frozen)
@@ -632,7 +764,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         publication = self._validated(self._prepared())
         second = publication.evidences[0].model_copy(deep=True)
         second.summary = "示例公司公告合同期限为三年"
-        second.semantic.what = "公告服务器订单合同期限为三年"
+        second.semantic.action = "公告服务器订单合同期限为三年"
         publication.evidences.append(second)
         raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
         evidence_ids = [
@@ -697,7 +829,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         publication = self._validated(self._prepared())
         second = publication.evidences[0].model_copy(deep=True)
         second.summary = "示例公司公告合同期限为三年"
-        second.semantic.what = "公告服务器订单合同期限为三年"
+        second.semantic.action = "公告服务器订单合同期限为三年"
         publication.evidences.append(second)
         raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
         first_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
@@ -727,121 +859,9 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.raw_evidence_id for item in resolved], [raw_evidence_id, raw_evidence_id])
         self.assertEqual([item.summary for item in resolved], [item.summary for item in publication.evidences])
         self.assertEqual(
-            [item.semantic.what for item in resolved],
-            [item.semantic.what for item in publication.evidences],
+            [item.semantic.action for item in resolved],
+            [item.semantic.action for item in publication.evidences],
         )
-
-    async def test_reconciliation_replays_frozen_multi_evidence_and_preserves_legacy_manifest(self) -> None:
-        self._publish_raw_fixture()
-        publication = self._validated(self._prepared())
-        second = publication.evidences[0].model_copy(deep=True)
-        second.summary = "示例公司公告合同期限为三年"
-        second.semantic.what = "公告服务器订单合同期限为三年"
-        publication.evidences.append(second)
-        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
-        first_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
-        second_id = "EVD15bec7e3-998c-5434-aa5d-29712c4c67cf"
-        sorted_ids = sorted([first_id, second_id])
-        step_input = StepInput(previous_step_outputs={"validate-evidence-analysis": StepOutput(content=publication)})
-        with patch(
-            "capabilities.evidence.functions.extraction.post_publication",
-            side_effect=[
-                {"id": raw_evidence_id},
-                {
-                    "raw_evidence_id": raw_evidence_id,
-                    "ids": sorted_ids,
-                    "items": [
-                        {"input_index": 0, "id": first_id},
-                        {"input_index": 1, "id": second_id},
-                    ],
-                },
-            ],
-        ):
-            output = await publish_evidences(step_input)
-
-        manifest_path = Path(EvidencePublicationResult.model_validate(output.content).artifact_manifest_path)
-        (manifest_path.parent / "bindings.json").unlink()
-        legacy_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        legacy_manifest["schema"] = "evidence_extraction_manifest.v4"
-        legacy_manifest["artifacts"] = {"prepared": "prepared.json"}
-        manifest_path.write_text(json.dumps(legacy_manifest), encoding="utf-8")
-        original_manifest = manifest_path.read_bytes()
-        with patch(
-            "capabilities.evidence.functions.reconciliation.post_publication",
-            return_value={
-                "raw_evidence_id": raw_evidence_id,
-                "ids": sorted_ids,
-                "items": [
-                    {"input_index": 0, "id": first_id},
-                    {"input_index": 1, "id": second_id},
-                ],
-            },
-        ) as replayed:
-            result = reconcile_evidence_bindings()
-
-        self.assertEqual(result.remotely_bound, 1)
-        self.assertEqual(result.locally_bound, 0)
-        self.assertEqual(result.already_bound, 0)
-        self.assertEqual(result.ineligible, [])
-        replayed.assert_called_once_with(
-            "evidence-publications",
-            {
-                "raw_evidence_id": raw_evidence_id,
-                "evidences": [item.model_dump(mode="json") for item in publication.evidences],
-            },
-        )
-        self.assertEqual(manifest_path.read_bytes(), original_manifest)
-        self.assertEqual([item.id for item in read_resolved_evidences(manifest_path)], [first_id, second_id])
-
-        with patch("capabilities.evidence.functions.reconciliation.post_publication") as repeated:
-            repeated_result = reconcile_evidence_bindings()
-        repeated.assert_not_called()
-        self.assertEqual(repeated_result.already_bound, 1)
-        self.assertEqual(repeated_result.remotely_bound, 0)
-
-    async def test_reconciliation_maps_single_evidence_locally_without_remote_call(self) -> None:
-        self._publish_raw_fixture()
-        publication = self._validated(self._prepared())
-        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
-        evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
-        step_input = StepInput(previous_step_outputs={"validate-evidence-analysis": StepOutput(content=publication)})
-        with patch(
-            "capabilities.evidence.functions.extraction.post_publication",
-            side_effect=[
-                {"id": raw_evidence_id},
-                {"raw_evidence_id": raw_evidence_id, "ids": [evidence_id]},
-            ],
-        ):
-            output = await publish_evidences(step_input)
-
-        manifest_path = Path(EvidencePublicationResult.model_validate(output.content).artifact_manifest_path)
-        with patch("capabilities.evidence.functions.reconciliation.post_publication") as remote:
-            result = reconcile_evidence_bindings()
-
-        remote.assert_not_called()
-        self.assertEqual(result.locally_bound, 1)
-        self.assertEqual(result.remotely_bound, 0)
-        self.assertEqual(result.ineligible, [])
-        resolved = read_resolved_evidences(manifest_path)
-        self.assertEqual(len(resolved), 1)
-        self.assertEqual(resolved[0].id, evidence_id)
-        self.assertEqual(resolved[0].semantic, publication.evidences[0].semantic)
-
-    def test_reconciliation_reports_malformed_history_without_aborting_the_pass(self) -> None:
-        manifest_path = evidence_artifact_root() / "documents" / "malformed" / "manifest.json"
-        manifest_path.parent.mkdir(parents=True)
-        manifest_path.write_text("[]\n", encoding="utf-8")
-
-        with patch("capabilities.evidence.functions.reconciliation.post_publication") as remote:
-            result = reconcile_evidence_bindings()
-
-        remote.assert_not_called()
-        self.assertEqual(result.already_bound, 0)
-        self.assertEqual(result.locally_bound, 0)
-        self.assertEqual(result.remotely_bound, 0)
-        self.assertEqual(len(result.ineligible), 1)
-        self.assertEqual(result.ineligible[0].artifact_manifest_path, str(manifest_path))
-        self.assertEqual(result.ineligible[0].reason, "historical Evidence Artifact is invalid")
 
     async def test_duplicate_response_ids_fail_with_matching_evidence_count(self) -> None:
         self._publish_raw_fixture()
@@ -910,7 +930,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                 publication = self._validated(self._prepared())
                 second = publication.evidences[0].model_copy(deep=True)
                 second.summary = "示例公司公告合同期限为三年"
-                second.semantic.what = "公告服务器订单合同期限为三年"
+                second.semantic.action = "公告服务器订单合同期限为三年"
                 publication.evidences.append(second)
                 step_input = StepInput(
                     previous_step_outputs={"validate-evidence-analysis": StepOutput(content=publication)}
@@ -932,7 +952,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         publication = self._validated(self._prepared())
         second = publication.evidences[0].model_copy(deep=True)
         second.summary = "示例公司公告合同期限为三年"
-        second.semantic.what = "公告服务器订单合同期限为三年"
+        second.semantic.action = "公告服务器订单合同期限为三年"
         publication.evidences.append(second)
         raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
         evidence_ids = [
@@ -988,24 +1008,29 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             await publish_evidences(step_input)
 
         changed = publication.model_copy(deep=True)
-        changed.raw_evidence.keywords = ["变更"]
         changed.raw_evidence.category_ids = ["EVCec95a292-d513-5aa6-a54c-a9e3926add1a"]
-        changed.evidences[0].semantic.what = "不应在重试中发布的变更事实"
+        changed.evidences[0].keywords = ["变更"]
+        changed.evidences[0].semantic.action = "不应在重试中发布的变更事实"
         retry_input = StepInput(previous_step_outputs={"validate-evidence-analysis": StepOutput(content=changed)})
         with patch(
             "capabilities.evidence.functions.extraction.post_publication",
             side_effect=[
                 {"id": raw_evidence_id},
-                {"raw_evidence_id": raw_evidence_id, "ids": [evidence_id]},
+                {
+                    "raw_evidence_id": raw_evidence_id,
+                    "ids": [evidence_id],
+                    "items": [{"input_index": 0, "id": evidence_id}],
+                },
             ],
         ) as retried:
             output = await publish_evidences(retry_input)
 
         raw_payload = retried.call_args_list[0].args[1]["raw_evidence"]
         evidence_payload = retried.call_args_list[1].args[1]["evidences"][0]
-        self.assertEqual(raw_payload["keywords"], publication.raw_evidence.keywords)
+        self.assertNotIn("keywords", raw_payload)
         self.assertEqual(raw_payload["category_ids"], [self.CATEGORY_ID])
-        self.assertEqual(evidence_payload["semantic"]["what"], publication.evidences[0].semantic.what)
+        self.assertEqual(evidence_payload["semantic"]["action"], publication.evidences[0].semantic.action)
+        self.assertEqual(evidence_payload["keywords"], publication.evidences[0].keywords)
         self.assertEqual(EvidencePublicationResult.model_validate(output.content).evidence_ids, [evidence_id])
 
     async def test_final_manifest_recovers_checkpoint_despite_new_agent_draft(self) -> None:
@@ -1019,7 +1044,11 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                 "capabilities.evidence.functions.extraction.post_publication",
                 side_effect=[
                     {"id": raw_evidence_id},
-                    {"raw_evidence_id": raw_evidence_id, "ids": [evidence_id]},
+                    {
+                        "raw_evidence_id": raw_evidence_id,
+                        "ids": [evidence_id],
+                        "items": [{"input_index": 0, "id": evidence_id}],
+                    },
                 ],
             ),
             patch(
@@ -1036,7 +1065,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         changed = publication.model_copy(deep=True)
         second = changed.evidences[0].model_copy(deep=True)
         second.summary = "后续 Agent 输出的额外事实"
-        second.semantic.what = "后续 Agent 输出的额外事实"
+        second.semantic.action = "后续 Agent 输出的额外事实"
         changed.evidences.append(second)
         retry_input = StepInput(previous_step_outputs={"validate-evidence-analysis": StepOutput(content=changed)})
         with patch("capabilities.evidence.functions.extraction.post_publication") as repeated:
@@ -1059,6 +1088,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                     {
                         "raw_evidence_id": "RAWec95a292-d513-5aa6-a54c-a9e3926add1a",
                         "ids": [evidence_id],
+                        "items": [{"input_index": 0, "id": evidence_id}],
                     },
                 ],
                 "Raw Evidence identity mismatch",
@@ -1069,6 +1099,10 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                     {
                         "raw_evidence_id": raw_evidence_id,
                         "ids": [evidence_id, "EVD15bec7e3-998c-5434-aa5d-29712c4c67cf"],
+                        "items": [
+                            {"input_index": 0, "id": evidence_id},
+                            {"input_index": 1, "id": "EVD15bec7e3-998c-5434-aa5d-29712c4c67cf"},
+                        ],
                     },
                 ],
                 "Evidence identity count mismatch",
@@ -1118,7 +1152,11 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                 "capabilities.evidence.functions.extraction.post_publication",
                 side_effect=[
                     {"id": raw_evidence_id},
-                    {"raw_evidence_id": raw_evidence_id, "ids": [evidence_id]},
+                    {
+                        "raw_evidence_id": raw_evidence_id,
+                        "ids": [evidence_id],
+                        "items": [{"input_index": 0, "id": evidence_id}],
+                    },
                 ],
             ) as publication_call,
         ):
@@ -1136,29 +1174,20 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("id", analysis.categories[0].model_dump())
         self.assertEqual(publication_call.call_count, 2)
         self.assertEqual(publication_call.call_args_list[0].args[1]["raw_evidence"]["category_ids"], [self.CATEGORY_ID])
-        self.assertEqual(
-            publication_call.call_args_list[1].args[1]["evidences"],
-            [
-                {
-                    "summary": "示例公司签署10亿元三年期服务器订单",
-                    "semantic": {
-                        "who": "示例公司",
-                        "what": "签署10亿元服务器订单",
-                        "when": None,
-                        "where": None,
-                        "why": None,
-                        "how": "合同期限为三年",
-                    },
-                }
-            ],
-        )
+        evidence_payload = publication_call.call_args_list[1].args[1]["evidences"][0]
+        self.assertEqual(evidence_payload["summary"], "示例公司签署10亿元三年期服务器订单")
+        self.assertEqual(evidence_payload["keywords"], ["服务器", "订单"])
+        self.assertEqual(evidence_payload["semantic"]["actors"], ["示例公司"])
+        self.assertEqual(evidence_payload["semantic"]["action"], "签署")
+        self.assertEqual(evidence_payload["semantic"]["time"]["precision"], "DAY")
+        self.assertIsNotNone(evidence_payload["semantic"]["time"]["start_at"])
         self.assertGreater(read_checkpoint().manifest_offset, 0)
         manifests = list((evidence_artifact_root() / "documents").glob("*/manifest.json"))
         self.assertEqual(len(manifests), 1)
         frozen = json.loads((manifests[0].parent / "prepared.json").read_text(encoding="utf-8"))
         manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
-        self.assertEqual(frozen["schema_version"], "prepared_evidence_publication.v4")
-        self.assertEqual(manifest["schema"], "evidence_extraction_manifest.v4")
+        self.assertEqual(frozen["schema_version"], "prepared_evidence_publication.v5")
+        self.assertEqual(manifest["schema"], "evidence_extraction_manifest.v5")
         self.assertEqual(manifest["evidence_ids"], [evidence_id])
         self.assertNotIn("evidences", manifest)
         self.assertNotIn("category_catalog", frozen)
@@ -1171,6 +1200,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             name="Evidence Test Registry",
             agents=[agent],
             functions=[
+                evidence_extraction_complete,
                 prepare_raw_document,
                 prepare_evidence_analysis,
                 validate_evidence_analysis,
@@ -1188,22 +1218,26 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(restored_steps, list)
         loop = cast(Loop, cast(list[object], restored_steps)[0])
         self.assertIsInstance(loop, Loop)
-        steps = cast(list[Step], loop.steps)
+        stages = cast(list[Steps], loop.steps)
         self.assertEqual(
-            [step.name for step in steps],
-            [
-                "prepare-raw-document",
-                "prepare-evidence-analysis",
-                "analyze-raw-evidence",
-                "validate-evidence-analysis",
-                "publish-evidences",
-            ],
+            [stage.name for stage in stages],
+            ["extract-evidences", "publish-evidences"],
         )
-        self.assertEqual(steps[2].agent.id, "evidence-extractor")  # type: ignore[union-attr]
+        extract_steps = cast(list[Step], stages[0].steps)
+        publish_steps = cast(list[Step], stages[1].steps)
+        self.assertEqual(
+            [step.name for step in extract_steps],
+            ["prepare-raw-document", "prepare-evidence-analysis", "analyze-raw-evidence", "validate-evidence-analysis"],
+        )
+        self.assertEqual([step.name for step in publish_steps], ["publish-evidence-set"])
+        self.assertEqual(extract_steps[2].agent.id, "evidence-extractor")  # type: ignore[union-attr]
         self.assertEqual(agent.tools, [])
         self.assertIn("exactly one category", str(agent.additional_context))
         self.assertEqual(
-            [getattr(step.executor, "__name__", None) for step in (steps[0], steps[1], steps[3], steps[4])],
+            [
+                getattr(step.executor, "__name__", None)
+                for step in (extract_steps[0], extract_steps[1], extract_steps[3], publish_steps[0])
+            ],
             [
                 "prepare_raw_document",
                 "prepare_evidence_analysis",
@@ -1211,8 +1245,8 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                 "publish_evidences",
             ],
         )
-        self.assertTrue(inspect.iscoroutinefunction(steps[1].executor))
-        self.assertTrue(inspect.iscoroutinefunction(steps[4].executor))
+        self.assertTrue(inspect.iscoroutinefunction(extract_steps[1].executor))
+        self.assertTrue(inspect.iscoroutinefunction(publish_steps[0].executor))
 
     def test_workflow_agent_loads_component_without_runtime_session_db(self) -> None:
         db = MagicMock()
@@ -1241,6 +1275,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         runtime = Agent(id="evidence-extractor", instructions="published instructions", db=None)
         registry = TidewiseRegistry(
             functions=[
+                evidence_extraction_complete,
                 prepare_raw_document,
                 prepare_evidence_analysis,
                 validate_evidence_analysis,
@@ -1253,7 +1288,8 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
 
         runtime_load.assert_called_once_with(registry)
         loop = cast(Loop, cast(list[object], restored.steps)[0])
-        analyze = cast(list[Step], loop.steps)[2]
+        extract_stage = cast(list[Steps], loop.steps)[0]
+        analyze = cast(list[Step], extract_stage.steps)[2]
         self.assertIsNotNone(restored.db)
         self.assertIsNotNone(analyze.agent)
         assert analyze.agent is not None
@@ -1283,7 +1319,8 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         migrated = cast(Workflow, workflow_save.call_args.args[0])
         self.assertIs(migrated.db, db)
         loop = cast(Loop, cast(list[object], migrated.steps)[0])
-        analyze = cast(list[Step], loop.steps)[2]
+        extract_stage = cast(list[Steps], loop.steps)[0]
+        analyze = cast(list[Step], extract_stage.steps)[2]
         self.assertIsNotNone(analyze.agent)
         assert analyze.agent is not None
         self.assertIsNone(analyze.agent.db)

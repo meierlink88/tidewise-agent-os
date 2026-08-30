@@ -1,9 +1,9 @@
 """Typed contracts for Evidence extraction and Data Service publication."""
 
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 _RAW_EVIDENCE_ID_PATTERN = r"^RAW[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 _EVIDENCE_ID_PATTERN = r"^EVD[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
@@ -108,30 +108,8 @@ class RawEvidenceEnrichment(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     category_code: str = Field(max_length=50, pattern=r"^[A-Z][A-Z0-9_]*$")
-    keywords: list[str] = Field(min_length=1, max_length=5)
     is_original: bool
     quoted_source_name: str | None = Field(default=None, max_length=100)
-
-    @field_validator("keywords", mode="before")
-    @classmethod
-    def validate_keywords(cls, values: Any) -> Any:
-        if not isinstance(values, list):
-            return values
-        normalized: list[str] = []
-        for value in values:
-            if not isinstance(value, str):
-                raise ValueError("each keyword must be a string")
-            item = value.strip()
-            if not item or len(item) > 5:
-                continue
-            if item in normalized:
-                continue
-            normalized.append(item)
-            if len(normalized) == 5:
-                break
-        if not normalized:
-            raise ValueError("at least one keyword must contain 1 to 5 characters")
-        return normalized
 
     @model_validator(mode="after")
     def validate_quotation(self) -> "RawEvidenceEnrichment":
@@ -144,52 +122,228 @@ class RawEvidenceEnrichment(BaseModel):
         return self
 
 
-class EvidenceSemantic(BaseModel):
-    """Strict 5W1H meaning of one atomic Evidence statement."""
+EvidenceStage = Literal[
+    "OCCURRED",
+    "ANNOUNCED",
+    "EFFECTIVE",
+    "IMPLEMENTED",
+    "UPDATED",
+    "SUSPENDED",
+    "TERMINATED",
+    "EXPECTED",
+]
+EvidenceModality = Literal["FACT", "PLAN", "SPEC"]
+EvidenceTimePrecision = Literal["INSTANT", "DAY", "RANGE", "MONTH", "QUARTER", "YEAR", "UNKNOWN"]
+
+
+def _strip_required(value: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("value must not be blank")
+    return stripped
+
+
+def _strip_optional(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("optional text must be non-blank; use null when unsupported")
+    return stripped
+
+
+def _validated_string_collection(values: list[str], *, field_name: str) -> list[str]:
+    normalized: list[str] = []
+    for value in values:
+        item = _strip_required(value)
+        if item in normalized:
+            raise ValueError(f"{field_name} values must be unique")
+        normalized.append(item)
+    return normalized
+
+
+def _validated_keywords(values: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for value in values:
+        item = _strip_required(value)
+        if item not in normalized:
+            normalized.append(item)
+    if any(len(item) > 6 for item in normalized):
+        raise ValueError("each Evidence keyword must contain at most 6 characters")
+    if not 1 <= len(normalized) <= 5:
+        raise ValueError("Evidence keywords must contain between 1 and 5 unique values")
+    return normalized
+
+
+class EvidenceMetric(BaseModel):
+    """One quantitative observation retained inside a complete business proposition."""
 
     model_config = ConfigDict(extra="forbid")
 
-    who: str | None
-    what: str = Field(min_length=1)
-    when: str | None
-    where: str | None
-    why: str | None
-    how: str | None
+    name: str = Field(min_length=1, max_length=100)
+    value: str | None = Field(max_length=100)
+    unit: str | None = Field(max_length=50)
+    change: str | None = Field(max_length=100)
+    period: str | None = Field(max_length=100)
 
-    @field_validator("what")
+    @field_validator("name")
     @classmethod
-    def strip_required_text(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("Evidence semantic.what must not be blank")
-        return stripped
+    def strip_name(cls, value: str) -> str:
+        return _strip_required(value)
 
-    @field_validator("who", "when", "where", "why", "how")
+    @field_validator("value", "unit", "change", "period")
     @classmethod
-    def strip_optional_text(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("Evidence semantic strings must not be blank; use null when unsupported")
-        return stripped
+    def strip_optional_metric_text(cls, value: str | None) -> str | None:
+        return _strip_optional(value)
+
+    @model_validator(mode="after")
+    def require_value_or_change(self) -> "EvidenceMetric":
+        if self.value is None and self.change is None:
+            raise ValueError("Evidence metric requires value or change")
+        return self
+
+
+class EvidenceAttribution(BaseModel):
+    """Source attribution that must not replace the business actor."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reported_by: str | None = Field(max_length=100)
+    claimed_by: str | None = Field(max_length=100)
+
+    @field_validator("reported_by", "claimed_by")
+    @classmethod
+    def strip_attribution(cls, value: str | None) -> str | None:
+        return _strip_optional(value)
+
+
+class EvidenceTimeDraft(BaseModel):
+    """Agent-owned source time; normalized UTC bounds are deliberately unavailable to the model."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    raw: str | None = Field(max_length=200)
+    start_at: None
+    end_at: None
+    precision: EvidenceTimePrecision
+
+    @field_validator("raw")
+    @classmethod
+    def strip_raw_time(cls, value: str | None) -> str | None:
+        return _strip_optional(value)
+
+
+class EvidenceTime(BaseModel):
+    """Deterministically normalized source time used by Data Service and downstream workflows."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    raw: str | None = Field(max_length=200)
+    start_at: datetime | None
+    end_at: datetime | None
+    precision: EvidenceTimePrecision
+
+    @field_validator("raw")
+    @classmethod
+    def strip_raw_time(cls, value: str | None) -> str | None:
+        return _strip_optional(value)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "EvidenceTime":
+        if (self.start_at is None) != (self.end_at is None):
+            raise ValueError("Evidence time bounds must both be present or both be null")
+        if self.start_at is not None and self.end_at is not None:
+            if self.start_at.utcoffset() is None or self.end_at.utcoffset() is None:
+                raise ValueError("Evidence time bounds must be timezone-aware")
+            if self.start_at > self.end_at:
+                raise ValueError("Evidence time bounds must be ordered")
+        return self
+
+
+class EvidenceSemanticDraft(BaseModel):
+    """Agent-owned semantic structure for one minimum complete business proposition."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    actors: list[str] = Field(min_length=1, max_length=20)
+    action: str = Field(min_length=1, max_length=200)
+    objects: list[str] = Field(min_length=1, max_length=20)
+    stage: EvidenceStage
+    modality: EvidenceModality
+    time: EvidenceTimeDraft
+    jurisdictions: list[str] = Field(max_length=20)
+    reason: str | None = Field(max_length=500)
+    method: str | None = Field(max_length=500)
+    metrics: list[EvidenceMetric]
+    attribution: EvidenceAttribution
+
+    @field_validator("action")
+    @classmethod
+    def strip_action(cls, value: str) -> str:
+        return _strip_required(value)
+
+    @field_validator("actors", "objects", "jurisdictions")
+    @classmethod
+    def validate_semantic_collections(cls, values: list[str], info: ValidationInfo) -> list[str]:
+        return _validated_string_collection(values, field_name=info.field_name or "semantic collection")
+
+    @field_validator("reason", "method")
+    @classmethod
+    def strip_optional_semantic_text(cls, value: str | None) -> str | None:
+        return _strip_optional(value)
+
+
+class EvidenceSemantic(BaseModel):
+    """Canonical semantic structure published to Data and consumed by Event extraction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    actors: list[str] = Field(min_length=1, max_length=20)
+    action: str = Field(min_length=1, max_length=200)
+    objects: list[str] = Field(min_length=1, max_length=20)
+    stage: EvidenceStage
+    modality: EvidenceModality
+    time: EvidenceTime
+    jurisdictions: list[str] = Field(max_length=20)
+    reason: str | None = Field(max_length=500)
+    method: str | None = Field(max_length=500)
+    metrics: list[EvidenceMetric]
+    attribution: EvidenceAttribution
+
+    @field_validator("action")
+    @classmethod
+    def strip_action(cls, value: str) -> str:
+        return _strip_required(value)
+
+    @field_validator("actors", "objects", "jurisdictions")
+    @classmethod
+    def validate_semantic_collections(cls, values: list[str], info: ValidationInfo) -> list[str]:
+        return _validated_string_collection(values, field_name=info.field_name or "semantic collection")
+
+    @field_validator("reason", "method")
+    @classmethod
+    def strip_optional_semantic_text(cls, value: str | None) -> str | None:
+        return _strip_optional(value)
 
 
 class AtomicEvidenceDraft(BaseModel):
-    """LLM-owned summary and 5W1H meaning for one atomic Evidence."""
+    """LLM-owned minimum complete business proposition."""
 
     model_config = ConfigDict(extra="forbid")
 
     summary: str = Field(min_length=1, max_length=200)
-    semantic: EvidenceSemantic
+    keywords: list[str]
+    semantic: EvidenceSemanticDraft
 
     @field_validator("summary")
     @classmethod
     def strip_summary(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("Evidence summary must not be blank")
-        return stripped
+        return _strip_required(value)
+
+    @field_validator("keywords")
+    @classmethod
+    def validate_keywords(cls, values: list[str]) -> list[str]:
+        return _validated_keywords(values)
 
 
 class EvidenceExtractionDraft(BaseModel):
@@ -218,18 +372,33 @@ class RawEvidencePublication(BaseModel):
     raw_text: str
     published_at: datetime | None
     collected_at: datetime
-    keywords: list[str]
     category_ids: list[EvidenceCategoryID] = Field(min_length=1, max_length=1)
 
 
-class EvidencePublicationItem(AtomicEvidenceDraft):
-    """One complete Data Service Evidence publication item."""
+class EvidencePublicationItem(BaseModel):
+    """One canonical Data Service Evidence publication item."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str = Field(min_length=1, max_length=200)
+    keywords: list[str] = Field(min_length=1, max_length=5)
+    semantic: EvidenceSemantic
+
+    @field_validator("summary")
+    @classmethod
+    def strip_summary(cls, value: str) -> str:
+        return _strip_required(value)
+
+    @field_validator("keywords")
+    @classmethod
+    def validate_keywords(cls, values: list[str]) -> list[str]:
+        return _validated_keywords(values)
 
 
 class PreparedEvidencePublication(BaseModel):
     """Fully validated deterministic publication set for one Raw document."""
 
-    schema_version: Literal["prepared_evidence_publication.v4"] = "prepared_evidence_publication.v4"
+    schema_version: Literal["prepared_evidence_publication.v5"] = "prepared_evidence_publication.v5"
     prepared_raw: PreparedRawDocument
     category_catalog_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     selected_category_code: str = Field(max_length=50, pattern=r"^[A-Z][A-Z0-9_]*$")
@@ -261,21 +430,20 @@ class EvidenceSetPublicationResponse(BaseModel):
 
     raw_evidence_id: RawEvidenceID
     ids: list[EvidenceID] = Field(min_length=1)
-    items: list[EvidencePublicationResponseItem] | None = Field(default=None, min_length=1)
+    items: list[EvidencePublicationResponseItem] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_unique_ids(self) -> "EvidenceSetPublicationResponse":
         if len(set(self.ids)) != len(self.ids):
             raise ValueError("Evidence identities must be unique")
-        if self.items is not None:
-            indexes = [item.input_index for item in self.items]
-            item_ids = [item.id for item in self.items]
-            if indexes != list(range(len(self.items))):
-                raise ValueError("Evidence response indexes must cover the request in order")
-            if len(set(item_ids)) != len(item_ids):
-                raise ValueError("Evidence response item identities must be unique")
-            if set(item_ids) != set(self.ids):
-                raise ValueError("Evidence response items must match the complete identity set")
+        indexes = [item.input_index for item in self.items]
+        item_ids = [item.id for item in self.items]
+        if indexes != list(range(len(self.items))):
+            raise ValueError("Evidence response indexes must cover the request in order")
+        if len(set(item_ids)) != len(item_ids):
+            raise ValueError("Evidence response item identities must be unique")
+        if set(item_ids) != set(self.ids):
+            raise ValueError("Evidence response items must match the complete identity set")
         return self
 
 
@@ -302,32 +470,11 @@ class EvidenceIdentityBindings(BaseModel):
         return self
 
 
-class ResolvedEvidence(AtomicEvidenceDraft):
+class ResolvedEvidence(EvidencePublicationItem):
     """One locally prepared Evidence resolved to its formal Data identity."""
 
     id: EvidenceID
     raw_evidence_id: RawEvidenceID
-
-
-class EvidenceBindingReconciliationIssue(BaseModel):
-    """One historical Artifact that cannot be safely resolved."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    artifact_manifest_path: str
-    reason: str
-
-
-class EvidenceBindingReconciliationResult(BaseModel):
-    """Operator-visible outcome of one explicit historical reconciliation pass."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    schema_version: Literal["evidence_binding_reconciliation.v1"] = "evidence_binding_reconciliation.v1"
-    already_bound: int = Field(default=0, ge=0)
-    locally_bound: int = Field(default=0, ge=0)
-    remotely_bound: int = Field(default=0, ge=0)
-    ineligible: list[EvidenceBindingReconciliationIssue] = Field(default_factory=list)
 
 
 class EvidencePublicationResult(BaseModel):

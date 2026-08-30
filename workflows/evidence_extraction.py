@@ -3,11 +3,12 @@
 from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
-from agno.workflow import Loop, Step, Workflow
+from agno.workflow import Loop, Step, Steps, Workflow
 from agno.workflow.types import HumanReview, OnError
 
 from agents.evidence_extractor import load_evidence_extractor_agent
 from capabilities.evidence.functions import (
+    evidence_extraction_complete,
     prepare_evidence_analysis,
     prepare_raw_document,
     publish_evidences,
@@ -16,7 +17,7 @@ from capabilities.evidence.functions import (
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTION_WORKFLOW_ID = "evidence-extraction"
-EVIDENCE_EXTRACTION_CONTRACT_VERSION = 8
+EVIDENCE_EXTRACTION_CONTRACT_VERSION = 9
 
 
 def _fail_fast_review() -> HumanReview:
@@ -38,40 +39,55 @@ def _seed_workflow(agent: Agent) -> Workflow:
                 name="process-unpublished-raw-documents",
                 description="Process indexed Raw documents until no work remains or the safety cap is reached.",
                 max_iterations=100,
+                end_condition=evidence_extraction_complete,
                 steps=[
-                    Step(
-                        name="prepare-raw-document",
-                        executor=prepare_raw_document,
-                        max_retries=0,
+                    Steps(
+                        name="extract-evidences",
+                        description="Read one pending document and freeze its canonical business propositions.",
                         human_review=_fail_fast_review(),
+                        steps=[
+                            Step(
+                                name="prepare-raw-document",
+                                executor=prepare_raw_document,
+                                max_retries=0,
+                                human_review=_fail_fast_review(),
+                            ),
+                            Step(
+                                name="prepare-evidence-analysis",
+                                executor=prepare_evidence_analysis,  # type: ignore[arg-type]  # Agno injects RunContext.
+                                max_retries=0,
+                                human_review=_fail_fast_review(),
+                                strict_input_validation=True,
+                            ),
+                            Step(
+                                name="analyze-raw-evidence",
+                                agent=agent,
+                                max_retries=0,
+                                human_review=_fail_fast_review(),
+                                strict_input_validation=True,
+                            ),
+                            Step(
+                                name="validate-evidence-analysis",
+                                executor=validate_evidence_analysis,  # type: ignore[arg-type]  # Agno injects RunContext.
+                                max_retries=0,
+                                human_review=_fail_fast_review(),
+                                strict_input_validation=True,
+                            ),
+                        ],
                     ),
-                    Step(
-                        name="prepare-evidence-analysis",
-                        executor=prepare_evidence_analysis,  # type: ignore[arg-type]  # Agno injects RunContext.
-                        max_retries=0,
-                        human_review=_fail_fast_review(),
-                        strict_input_validation=True,
-                    ),
-                    Step(
-                        name="analyze-raw-evidence",
-                        agent=agent,
-                        max_retries=0,
-                        human_review=_fail_fast_review(),
-                        strict_input_validation=True,
-                    ),
-                    Step(
-                        name="validate-evidence-analysis",
-                        executor=validate_evidence_analysis,  # type: ignore[arg-type]  # Agno injects RunContext.
-                        max_retries=0,
-                        human_review=_fail_fast_review(),
-                        strict_input_validation=True,
-                    ),
-                    Step(
+                    Steps(
                         name="publish-evidences",
-                        executor=publish_evidences,
-                        max_retries=0,
+                        description="Publish Raw Evidence and its complete canonical Evidence set to Data Service.",
                         human_review=_fail_fast_review(),
-                        strict_input_validation=True,
+                        steps=[
+                            Step(
+                                name="publish-evidence-set",
+                                executor=publish_evidences,
+                                max_retries=0,
+                                human_review=_fail_fast_review(),
+                                strict_input_validation=True,
+                            ),
+                        ],
                     ),
                 ],
             )

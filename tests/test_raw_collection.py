@@ -249,10 +249,13 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         ):
             output = await collect_raw_evidence(StepInput(input="全球产业链变化"), context)
 
-        content = TitleCurationRequest.model_validate(output.content)
+        progress = RawEvidenceFilterProgress.model_validate(output.content)
+        prepared = await prepare_raw_evidence_filter_batch(StepInput(input="全球产业链变化"), context)
+        content = TitleCurationRequest.model_validate(prepared.content)
         self.assertEqual(adapter.calls, 20)
+        self.assertEqual(progress.total_candidates, 20)
         self.assertEqual(len(content.candidates), 20)
-        self.assertTrue(all("已抓取文章正文" in item.content_excerpt for item in content.candidates))
+        self.assertTrue(all("已抓取文章正文" in item.content for item in content.candidates))
 
     def test_build_then_manifest_last_publish_is_deterministic_and_idempotent(self) -> None:
         now = datetime(2026, 8, 10, 15, 30, tzinfo=UTC)

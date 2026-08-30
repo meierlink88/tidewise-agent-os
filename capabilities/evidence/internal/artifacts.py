@@ -23,7 +23,7 @@ class PublishedEvidenceArtifact:
     manifest: dict[str, Any]
     prepared: PreparedEvidencePublication
     identities: EvidenceSetPublicationResponse
-    bindings: EvidenceIdentityBindings | None
+    bindings: EvidenceIdentityBindings
 
 
 def persist_evidence_identity_bindings(directory: Path, bindings: EvidenceIdentityBindings) -> Path:
@@ -54,15 +54,12 @@ def load_published_evidence_artifact(manifest_path: str | Path) -> PublishedEvid
         prepared = PreparedEvidencePublication.model_validate_json(
             (path.parent / "prepared.json").read_text(encoding="utf-8")
         )
+        bindings_path = path.parent / "bindings.json"
+        bindings = EvidenceIdentityBindings.model_validate_json(bindings_path.read_text(encoding="utf-8"))
         identities = EvidenceSetPublicationResponse(
             raw_evidence_id=manifest.get("raw_evidence_id"),
             ids=manifest.get("evidence_ids"),
-        )
-        bindings_path = path.parent / "bindings.json"
-        bindings = (
-            EvidenceIdentityBindings.model_validate_json(bindings_path.read_text(encoding="utf-8"))
-            if bindings_path.exists()
-            else None
+            items=bindings.items,
         )
     except (OSError, json.JSONDecodeError, ValidationError, ValueError) as exc:
         raise ValueError("published Evidence Artifact is invalid") from exc
@@ -73,7 +70,7 @@ def load_published_evidence_artifact(manifest_path: str | Path) -> PublishedEvid
         or len(identities.ids) != len(prepared.evidences)
     ):
         raise ValueError("published Evidence Artifact identity conflict")
-    if bindings is not None and (
+    if (
         bindings.publication_key != prepared.raw_evidence.publication_key
         or bindings.raw_evidence_id != identities.raw_evidence_id
         or bindings.document_sha256 != prepared.prepared_raw.document_sha256

@@ -17,7 +17,7 @@ manifest:
     description: "一次阅读完成 Raw Evidence 唯一分类、语义补充和原子 Evidence 提取；生产处理请运行 Evidence Extraction Workflow。"
     quick_prompts:
       - "从给定目录选择唯一分类并提取原子 Evidence"
-      - "按 5W1H 提炼原子 Evidence 的 summary 与 semantic"
+      - "按最小完整业务命题提炼 Evidence 的 summary、keywords 与 semantic"
       - "提炼这篇材料的关键词和可核验证据"
 
   event-extractor:

@@ -40,6 +40,7 @@ from capabilities.evidence import (
     PreparedRawDocument,
 )
 from capabilities.evidence.functions import (
+    evidence_extraction_complete,
     prepare_evidence_analysis,
     prepare_raw_document,
     publish_evidences,
@@ -139,6 +140,7 @@ registry = TidewiseRegistry(
         raw_evidence_filter_complete,
         save_raw_evidence_filter_batch,
         prepare_raw_document,
+        evidence_extraction_complete,
         prepare_evidence_analysis,
         validate_evidence_analysis,
         publish_evidences,

@@ -3,7 +3,7 @@
 ## Outcome
 
 Incrementally consume completed Raw Collection manifests, classify each accepted Raw Evidence against the formal
-Evidence Category Catalog, extract atomic Evidence in the same AI reading, publish Raw Evidence metadata and Evidence
+Evidence Category Catalog, extract minimum complete business propositions in the same AI reading, publish Raw Evidence metadata and Evidence
 through Data Service APIs, and advance a crash-safe file checkpoint only after both publications and the local
 Evidence manifest and the downstream Event queue item succeed. The AI reads the verified local Markdown body, while
 Data Service receives only its MinIO URL path through the existing `raw_text` field.
@@ -17,14 +17,16 @@ Evidence Publication. The complete Evidence response retains the unordered `ids`
 
 ```text
 indexes/manifest-index.jsonl + data/evidence/checkpoint.json
-  -> prepare-raw-document       (deterministic Function)
-  -> prepare-evidence-analysis  (deterministic Function, run-scoped Category Catalog)
-  -> analyze-raw-evidence       (Studio-managed Evidence Extractor Agent)
-  -> validate-evidence-analysis (deterministic Function, Category code -> ID)
-  -> publish-evidences          (deterministic Function, Data Service + manifest + Event queue + checkpoint)
+  -> extract-evidences
+       -> prepare-raw-document       (deterministic Function)
+       -> prepare-evidence-analysis  (deterministic Function, run-scoped Category Catalog)
+       -> analyze-raw-evidence       (Studio-managed Evidence Extractor Agent)
+       -> validate-evidence-analysis (deterministic canonicalization, time normalization, Category code -> ID)
+  -> publish-evidences
+       -> publish-evidence-set       (deterministic Function, Data Service + manifest + Event queue + checkpoint)
 ```
 
-The five steps run inside an Agno `Loop` with a 100-document safety cap. `prepare-raw-document` returns
+The two business stages run inside an Agno `Loop` with a 100-document safety cap. `prepare-raw-document` returns
 `stop=True` when no indexed work remains, which ends the loop without invoking the Agent.
 
 The Workflow owns the durable Agno session. The Evidence Extractor remains a PostgreSQL/Studio-managed component,
@@ -53,8 +55,8 @@ runs continue from the file checkpoint.
 
 ## Ownership
 
-- The Agent owns exactly one Catalog-backed Category code, atomic splitting, exclusions, originality/quotation
-  judgment, keywords, one concise `summary`, and one strict 5W1H `semantic` object for every atomic Evidence.
+- The Agent owns exactly one Catalog-backed Category code, business-proposition splitting, exclusions,
+  originality/quotation judgment, one concise `summary`, Evidence-owned keywords, and the structured semantic draft.
 - Functions own Catalog retrieval and freezing, Category code-to-ID mapping, file parsing, trust-boundary validation,
   `publication_key`, API timeouts, response validation, Artifact ordering, and checkpoint transitions. Formal IDs are
   recorded in the final manifest, but Data publication responses do not become separate local receipts.
@@ -72,11 +74,15 @@ runs continue from the file checkpoint.
   `category_ids` array.
 - Raw Evidence is published before its complete `1..N` Evidence set.
 - Raw Evidence Publication sends `publication_key` and no `raw_evidence_id`; Evidence items send no `evidence_id`.
-- Each Evidence publication item contains exactly `summary` and `semantic`. `semantic` contains exactly `who`,
-  `what`, `when`, `where`, `why`, and `how`; `what` is nonblank, and an unsupported optional dimension is `null`.
-- One independently meaningful and verifiable thing is one atomic Evidence. Multiple distinct things are split;
-  details and limitations of the same thing remain together. Statement, forecast, opinion, intention, negation,
-  condition, quantity, time range, and uncertainty modality must be preserved.
+- Each Evidence publication item contains exactly `summary`, `keywords` and `semantic`. `semantic` contains exactly
+  `actors`, `action`, `objects`, `stage`, `modality`, `time`, `jurisdictions`, `reason`, `method`, `metrics` and
+  `attribution`.
+- One minimum complete business proposition is one Evidence. Media attribution does not replace the business actor;
+  title/lead/body repetition collapses; related metrics in one disclosure stay together; actual results and future
+  guidance may split when stage or modality differs.
+- The Workflow trims and canonically orders semantic collections, normalizes only exact source time expressions into
+  UTC using Asia/Shanghai as the business timezone, collapses exact duplicates inside one document, and fails closed
+  when the same business identity carries divergent content. Cross-source Evidence is never merged here.
 - The second publication uses only the `id` returned by the first response. Its response must repeat that identity and
   return exactly one unique formal Evidence ID per submitted item. AgentOS treats `ids` as an unordered compatibility
   set. A one-item publication has one unambiguous local association; a multi-item publication requires the complete
@@ -92,20 +98,17 @@ runs continue from the file checkpoint.
   retry after either successful remote phase repeats the same immutable payload and consumes the same formal IDs.
 - The first prepared publication payload is frozen under `.pending`; retries reuse it even if a later Agent run emits
   different semantics, so an unknown remote outcome can never be retried with drifted content.
-- New frozen publications continue to use `prepared_evidence_publication.v4`. A mapped publication writes immutable
+- New frozen publications use `prepared_evidence_publication.v5`. A mapped publication writes immutable
   `evidence_identity_bindings.v1`, then completes `evidence_extraction_manifest.v5` last. The binding records the Raw
   Evidence identity, publication identity, document digest, Evidence count, and every request index-to-ID association.
-- A one-item legacy response without `items` remains safely readable as a v4 manifest because its only ID can map only
-  to input index zero. A multi-item response without `items` is rejected before local completion. A completed v4 or
-  v5 manifest and its frozen `prepared.json` remain recovery truth; v5 recovery additionally validates its binding
-  Artifact before advancing the checkpoint.
-- Historical v4 manifests are never overwritten. `python -m scripts.reconcile_evidence_bindings` explicitly appends a
-  binding beside eligible history: a one-item set is uniquely resolved locally, while a multi-item set is replayed as
-  the exact frozen Evidence Publication payload so Data Service can return the authoritative mapping. The operation is
-  idempotent, never invokes the Agent, and exits unsuccessfully when any Artifact remains ineligible.
+- Data Service must return `items[{input_index,id}]` for every submitted Evidence. Responses without the complete
+  mapping fail closed; this contract has no v4 Artifact fallback or mixed-version compatibility window. A completed
+  v5 manifest and its frozen `prepared.json` remain recovery truth, and recovery validates its binding Artifact before
+  advancing the checkpoint.
 - Other domains consume resolved Evidence through the public Evidence capability reader, which returns the formal ID,
-  Raw Evidence ID, summary, and 5W1H semantic content. They do not join Artifact files or infer identity order.
-- Keywords contain 1 to 5 unique values, each at most 5 characters.
+  Raw Evidence ID, summary, Evidence keywords and canonical business semantic content. They do not join Artifact files
+  or infer identity order.
+- Evidence keywords contain 1 to 5 ordered unique values, each at most 6 Unicode characters. Raw Evidence has no keywords.
 - Article publication time never substitutes for Evidence fact time.
 - `split_order`, `layer_type`, all Evidence `source_*`/`source_*_core` fields, `expression_fingerprint`,
   `expression_key`, and `fingerprint_version` are not part of the contract.

@@ -25,6 +25,7 @@ class EventEvidenceInput(BaseModel):
     id: EvidenceID
     raw_evidence_id: RawEvidenceID
     summary: str = Field(min_length=1, max_length=200)
+    keywords: list[str] = Field(min_length=1, max_length=5)
     semantic: EvidenceSemantic
 
 
