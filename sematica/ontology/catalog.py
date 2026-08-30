@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from sematica.ontology.entities import (
     chain_node,
+    company,
     concept,
     country,
     geopolitic_rivalry,
@@ -18,7 +19,7 @@ from sematica.ontology.entities import (
     variable,
 )
 
-ONTOLOGY_VERSION = "reasoning-ontology/v4"
+ONTOLOGY_VERSION = "reasoning-ontology/v5"
 
 _ENTITY_SCHEMAS: tuple[ModuleType, ...] = (
     country,
@@ -28,6 +29,7 @@ _ENTITY_SCHEMAS: tuple[ModuleType, ...] = (
     concept,
     industry_chain,
     chain_node,
+    company,
     variable,
     geopolitic_rivalry,
     macro_economic,

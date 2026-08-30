@@ -1,0 +1,1 @@
+"""Private Company capability implementation."""
