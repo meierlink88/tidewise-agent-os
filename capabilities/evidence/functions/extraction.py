@@ -1,11 +1,15 @@
 """Workflow Function executors for the Evidence extraction capability."""
 
 import asyncio
+import calendar
 import hashlib
 import json
+import re
 import shutil
+from datetime import UTC, date, datetime, time
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from agno.run import RunContext
 from agno.workflow import StepInput, StepOutput
@@ -23,9 +27,12 @@ from capabilities.evidence.internal.models import (
     EvidenceExtractionDraft,
     EvidenceExtractionIdle,
     EvidenceIdentityBindings,
+    EvidenceMetric,
     EvidencePublicationItem,
     EvidencePublicationResult,
+    EvidenceSemantic,
     EvidenceSetPublicationResponse,
+    EvidenceTime,
     PreparedEvidencePublication,
     PreparedRawDocument,
     RawEvidencePublication,
@@ -41,6 +48,7 @@ from capabilities.evidence.internal.storage import (
 
 _CATEGORY_CATALOG_DEPENDENCY = "evidence_category_catalog"
 _EVIDENCE_RUN_STATE = "evidence_extraction"
+_BUSINESS_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 def _model_from_content(model: type[Any], content: Any) -> Any:
@@ -81,6 +89,19 @@ def prepare_raw_document(step_input: StepInput) -> StepOutput:
     if prepared is None:
         return StepOutput(content=EvidenceExtractionIdle(checkpoint=checkpoint), stop=True)
     return StepOutput(content=prepared)
+
+
+def evidence_extraction_complete(iteration_outputs: list[StepOutput]) -> bool:
+    """Stop the Agno Loop when the extraction stage reports that no pending document remains."""
+    for output in reversed(iteration_outputs):
+        if output.content is None:
+            continue
+        try:
+            _model_from_content(EvidenceExtractionIdle, output.content)
+        except (ValidationError, ValueError, TypeError):
+            continue
+        return True
+    return False
 
 
 async def prepare_evidence_analysis(step_input: StepInput, run_context: RunContext) -> StepOutput:
@@ -125,6 +146,153 @@ def _category_catalog_sha256(catalog: EvidenceCategoryCatalog) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def _collapse_space(value: str) -> str:
+    return " ".join(value.split())
+
+
+def _canonical_strings(values: list[str], *, required: bool) -> list[str]:
+    unique: dict[str, str] = {}
+    for value in values:
+        normalized = _collapse_space(value.strip())
+        if not normalized:
+            raise ValueError("Evidence semantic collections cannot contain blank values")
+        unique.setdefault(normalized.casefold(), normalized)
+    result = sorted(unique.values(), key=lambda item: (item.casefold(), item))
+    if required and not result:
+        raise ValueError("Evidence semantic collection cannot be empty")
+    return result
+
+
+def _utc_day_bounds(value: date) -> tuple[datetime, datetime]:
+    start = datetime.combine(value, time.min, tzinfo=_BUSINESS_TIMEZONE).astimezone(UTC)
+    end = datetime.combine(value, time.max, tzinfo=_BUSINESS_TIMEZONE).astimezone(UTC)
+    return start, end
+
+
+def _normalize_evidence_time(raw: str | None, fallback_precision: str) -> EvidenceTime:
+    """Normalize only exact source expressions; unresolved relative text remains unguessed."""
+    if raw is None:
+        return EvidenceTime(raw=None, start_at=None, end_at=None, precision="UNKNOWN")
+    value = _collapse_space(raw.strip())
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        parsed = None
+    if parsed is not None and parsed.tzinfo is not None:
+        instant = parsed.astimezone(UTC)
+        return EvidenceTime(raw=value, start_at=instant, end_at=instant, precision="INSTANT")
+
+    day_match = re.fullmatch(r"(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?", value)
+    if day_match:
+        start, end = _utc_day_bounds(date(*(int(part) for part in day_match.groups())))
+        return EvidenceTime(raw=value, start_at=start, end_at=end, precision="DAY")
+
+    range_match = re.fullmatch(
+        r"(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?\s*(?:至|到|—|–|~)\s*"
+        r"(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?",
+        value,
+    )
+    if range_match:
+        parts = [int(part) for part in range_match.groups()]
+        start, _ = _utc_day_bounds(date(*parts[:3]))
+        _, end = _utc_day_bounds(date(*parts[3:]))
+        if start > end:
+            raise ValueError("Evidence source time range is reversed")
+        return EvidenceTime(raw=value, start_at=start, end_at=end, precision="RANGE")
+
+    month_match = re.fullmatch(r"(\d{4})(?:-|年)(\d{1,2})月?", value)
+    if month_match:
+        year, month = (int(part) for part in month_match.groups())
+        start, _ = _utc_day_bounds(date(year, month, 1))
+        _, end = _utc_day_bounds(date(year, month, calendar.monthrange(year, month)[1]))
+        return EvidenceTime(raw=value, start_at=start, end_at=end, precision="MONTH")
+
+    quarter_match = re.fullmatch(r"(\d{4})(?:年)?(?:Q([1-4])|第([一二三四])季度)", value, re.IGNORECASE)
+    if quarter_match:
+        year = int(quarter_match.group(1))
+        quarter = (
+            int(quarter_match.group(2)) if quarter_match.group(2) else "一二三四".index(quarter_match.group(3)) + 1
+        )
+        first_month = (quarter - 1) * 3 + 1
+        last_month = first_month + 2
+        start, _ = _utc_day_bounds(date(year, first_month, 1))
+        _, end = _utc_day_bounds(date(year, last_month, calendar.monthrange(year, last_month)[1]))
+        return EvidenceTime(raw=value, start_at=start, end_at=end, precision="QUARTER")
+
+    year_match = re.fullmatch(r"(\d{4})年?", value)
+    if year_match:
+        year = int(year_match.group(1))
+        start, _ = _utc_day_bounds(date(year, 1, 1))
+        _, end = _utc_day_bounds(date(year, 12, 31))
+        return EvidenceTime(raw=value, start_at=start, end_at=end, precision="YEAR")
+
+    precision = fallback_precision if fallback_precision in {"RANGE", "MONTH", "QUARTER", "YEAR"} else "UNKNOWN"
+    return EvidenceTime(raw=value, start_at=None, end_at=None, precision=precision)
+
+
+def _canonical_metrics(metrics: list[EvidenceMetric]) -> list[EvidenceMetric]:
+    normalized: list[EvidenceMetric] = []
+    identities: set[tuple[str, str]] = set()
+    for metric in metrics:
+        item = EvidenceMetric.model_validate(metric.model_dump())
+        identity = (item.name.casefold(), (item.period or "").casefold())
+        if identity in identities:
+            raise ValueError("Evidence metrics must have unique name and period")
+        identities.add(identity)
+        normalized.append(item)
+    return sorted(normalized, key=lambda item: (item.name.casefold(), (item.period or "").casefold()))
+
+
+def _canonicalize_evidence_drafts(draft: EvidenceExtractionDraft) -> list[EvidencePublicationItem]:
+    items: list[EvidencePublicationItem] = []
+    exact_payloads: set[str] = set()
+    business_identities: dict[str, str] = {}
+    for source in draft.evidences:
+        semantic = EvidenceSemantic(
+            actors=_canonical_strings(source.semantic.actors, required=True),
+            action=_collapse_space(source.semantic.action),
+            objects=_canonical_strings(source.semantic.objects, required=True),
+            stage=source.semantic.stage,
+            modality=source.semantic.modality,
+            time=_normalize_evidence_time(source.semantic.time.raw, source.semantic.time.precision),
+            jurisdictions=_canonical_strings(source.semantic.jurisdictions, required=False),
+            reason=_collapse_space(source.semantic.reason) if source.semantic.reason is not None else None,
+            method=_collapse_space(source.semantic.method) if source.semantic.method is not None else None,
+            metrics=_canonical_metrics(source.semantic.metrics),
+            attribution=source.semantic.attribution,
+        )
+        item = EvidencePublicationItem(
+            summary=_collapse_space(source.summary),
+            keywords=source.keywords,
+            semantic=semantic,
+        )
+        payload = json.dumps(item.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        if payload in exact_payloads:
+            continue
+        identity = json.dumps(
+            {
+                "actors": semantic.actors,
+                "action": semantic.action,
+                "objects": semantic.objects,
+                "stage": semantic.stage,
+                "modality": semantic.modality,
+                "time": semantic.time.model_dump(mode="json"),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        previous = business_identities.get(identity)
+        if previous is not None and previous != payload:
+            raise ValueError("Evidence business identity collision contains divergent content")
+        business_identities[identity] = payload
+        exact_payloads.add(payload)
+        items.append(item)
+    if not items:
+        raise ValueError("Evidence extraction produced no canonical business proposition")
+    return items
 
 
 def _freeze_prepared_publication(
@@ -178,10 +346,9 @@ def validate_evidence_analysis(step_input: StepInput, run_context: RunContext) -
         raw_text=prepared.document_url_path,
         published_at=prepared.published_at,
         collected_at=prepared.collected_at,
-        keywords=draft.raw_evidence.keywords,
         category_ids=[category.id],
     )
-    evidences = [EvidencePublicationItem.model_validate(item.model_dump()) for item in draft.evidences]
+    evidences = _canonicalize_evidence_drafts(draft)
     publication = PreparedEvidencePublication(
         prepared_raw=prepared,
         category_catalog_sha256=_category_catalog_sha256(catalog),
@@ -207,14 +374,13 @@ def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -
     ):
         raise ValueError("published Evidence Artifact source identity conflict")
     schema = manifest.get("schema")
-    if schema not in {"evidence_extraction_manifest.v4", "evidence_extraction_manifest.v5"}:
+    if schema != "evidence_extraction_manifest.v5":
         raise ValueError("published Evidence Artifact identity conflict")
-    if schema == "evidence_extraction_manifest.v5":
-        if (
-            manifest.get("artifacts") != {"prepared": "prepared.json", "bindings": "bindings.json"}
-            or artifact.bindings is None
-        ):
-            raise ValueError("published Evidence Artifact identity conflict")
+    if (
+        manifest.get("artifacts") != {"prepared": "prepared.json", "bindings": "bindings.json"}
+        or artifact.bindings is None
+    ):
+        raise ValueError("published Evidence Artifact identity conflict")
     _enqueue_for_event(path, artifact.identities.ids)
     checkpoint = advance_checkpoint(frozen.prepared_raw)
     return EvidencePublicationResult(
@@ -277,10 +443,8 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
         raise ValueError("Raw Evidence identity mismatch between publication responses")
     if len(evidence_response.ids) != len(publication.evidences):
         raise ValueError("Evidence identity count mismatch in publication response")
-    if evidence_response.items is not None and len(evidence_response.items) != len(publication.evidences):
+    if len(evidence_response.items) != len(publication.evidences):
         raise ValueError("Evidence identity mapping count mismatch in publication response")
-    if evidence_response.items is None and len(publication.evidences) > 1:
-        raise ValueError("Evidence publication response must map every input to its formal identity")
 
     for name in ("prepared.json",):
         source = pending / name
@@ -290,21 +454,17 @@ async def publish_evidences(step_input: StepInput) -> StepOutput:
                 raise ValueError(f"immutable Evidence Artifact conflict: {name}")
         else:
             write_json(target, json.loads(source.read_text(encoding="utf-8")))
-    artifacts = {"prepared": "prepared.json"}
-    manifest_schema = "evidence_extraction_manifest.v4"
-    if evidence_response.items is not None:
-        bindings = EvidenceIdentityBindings(
-            publication_key=publication_key,
-            raw_evidence_id=raw_id,
-            document_sha256=publication.prepared_raw.document_sha256,
-            evidence_count=len(publication.evidences),
-            items=evidence_response.items,
-        )
-        persist_evidence_identity_bindings(final_root, bindings)
-        artifacts["bindings"] = "bindings.json"
-        manifest_schema = "evidence_extraction_manifest.v5"
+    bindings = EvidenceIdentityBindings(
+        publication_key=publication_key,
+        raw_evidence_id=raw_id,
+        document_sha256=publication.prepared_raw.document_sha256,
+        evidence_count=len(publication.evidences),
+        items=evidence_response.items,
+    )
+    persist_evidence_identity_bindings(final_root, bindings)
+    artifacts = {"prepared": "prepared.json", "bindings": "bindings.json"}
     manifest = {
-        "schema": manifest_schema,
+        "schema": "evidence_extraction_manifest.v5",
         "publication_key": publication_key,
         "raw_evidence_id": raw_id,
         "collection_id": publication.prepared_raw.collection_id,
