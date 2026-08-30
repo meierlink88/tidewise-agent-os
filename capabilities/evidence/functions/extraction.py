@@ -33,11 +33,13 @@ from capabilities.evidence.internal.models import (
     EvidencePublicationResult,
     EvidenceSemantic,
     EvidenceSetPublicationResponse,
+    EvidenceSkipResult,
     EvidenceTime,
     PreparedEvidencePublication,
     PreparedRawDocument,
     RawEvidencePublication,
     RawEvidencePublicationResponse,
+    SkippedEvidencePublication,
 )
 from capabilities.evidence.internal.storage import (
     advance_checkpoint,
@@ -309,28 +311,31 @@ def _canonicalize_evidence_drafts(draft: EvidenceExtractionDraft) -> list[Eviden
     items: list[EvidencePublicationItem] = []
     business_identities: set[str] = set()
     for source in draft.evidences:
-        if not source.semantic.actors or not source.semantic.objects:
-            # An incomplete LLM sibling is not a business proposition and must
-            # not discard complete propositions extracted from the document.
+        try:
+            if not source.semantic.actors or not source.semantic.objects:
+                continue
+            semantic = EvidenceSemantic(
+                actors=_canonical_strings(source.semantic.actors, required=True),
+                action=_collapse_space(source.semantic.action),
+                objects=_canonical_strings(source.semantic.objects, required=True),
+                stage=source.semantic.stage,
+                modality=source.semantic.modality,
+                time=_normalize_evidence_time(source.semantic.time.raw, source.semantic.time.precision),
+                jurisdictions=_canonical_strings(source.semantic.jurisdictions, required=False),
+                reason=_collapse_space(source.semantic.reason) if source.semantic.reason is not None else None,
+                method=_collapse_space(source.semantic.method) if source.semantic.method is not None else None,
+                metrics=_canonical_metrics(source.semantic.metrics),
+                attribution=source.semantic.attribution,
+            )
+            item = EvidencePublicationItem(
+                summary=_collapse_space(source.summary),
+                keywords=_canonical_keywords(source.keywords),
+                semantic=semantic,
+            )
+        except (ValidationError, TypeError, ValueError):
+            # LLM output is candidate data. A nonconforming candidate is
+            # ignored without weakening the formal publication contract.
             continue
-        semantic = EvidenceSemantic(
-            actors=_canonical_strings(source.semantic.actors, required=True),
-            action=_collapse_space(source.semantic.action),
-            objects=_canonical_strings(source.semantic.objects, required=True),
-            stage=source.semantic.stage,
-            modality=source.semantic.modality,
-            time=_normalize_evidence_time(source.semantic.time.raw, source.semantic.time.precision),
-            jurisdictions=_canonical_strings(source.semantic.jurisdictions, required=False),
-            reason=_collapse_space(source.semantic.reason) if source.semantic.reason is not None else None,
-            method=_collapse_space(source.semantic.method) if source.semantic.method is not None else None,
-            metrics=_canonical_metrics(source.semantic.metrics),
-            attribution=source.semantic.attribution,
-        )
-        item = EvidencePublicationItem(
-            summary=_collapse_space(source.summary),
-            keywords=_canonical_keywords(source.keywords),
-            semantic=semantic,
-        )
         identity = json.dumps(
             {
                 "actors": semantic.actors,
@@ -348,8 +353,6 @@ def _canonicalize_evidence_drafts(draft: EvidenceExtractionDraft) -> list[Eviden
             continue
         business_identities.add(identity)
         items.append(item)
-    if not items:
-        raise ValueError("Evidence extraction produced no canonical business proposition")
     return items
 
 
@@ -375,7 +378,7 @@ def _freeze_prepared_publication(
 
 def curate_evidence(step_input: StepInput, run_context: RunContext) -> StepOutput:
     """Validate and canonicalize the direct Agent output before any publication side effect."""
-    draft = _model_from_content(EvidenceExtractionDraft, _previous_content(step_input))
+    candidate_content = _previous_content(step_input)
     run_state = _evidence_run_state(run_context)
     prepared_snapshot = run_state.get(_PREPARED_RAW_DOCUMENT_DEPENDENCY)
     if prepared_snapshot is None:
@@ -391,10 +394,32 @@ def curate_evidence(step_input: StepInput, run_context: RunContext) -> StepOutpu
         catalog = EvidenceCategoryCatalog.model_validate(snapshot)
     except ValidationError as exc:
         raise ValueError("run-scoped Evidence Category Catalog is invalid") from exc
+    try:
+        draft = _model_from_content(EvidenceExtractionDraft, candidate_content)
+    except (ValidationError, TypeError, ValueError):
+        return StepOutput(
+            content=SkippedEvidencePublication(
+                prepared_raw=prepared,
+                reason="NONCOMPLIANT_LLM_OUTPUT",
+            )
+        )
     categories_by_code = {item.code: item for item in catalog.categories}
     category = categories_by_code.get(draft.raw_evidence.category_code)
     if category is None:
-        raise ValueError(f"unknown Evidence Category code: {draft.raw_evidence.category_code}")
+        return StepOutput(
+            content=SkippedEvidencePublication(
+                prepared_raw=prepared,
+                reason="UNKNOWN_CATEGORY",
+            )
+        )
+    evidences = _canonicalize_evidence_drafts(draft)
+    if not evidences:
+        return StepOutput(
+            content=SkippedEvidencePublication(
+                prepared_raw=prepared,
+                reason="NO_CANONICAL_PROPOSITION",
+            )
+        )
     quoted_name = draft.raw_evidence.quoted_source_name if not draft.raw_evidence.is_original else None
     is_original = draft.raw_evidence.is_original or quoted_name is None
     quoted_id = _source_reference_id(quoted_name) if quoted_name else None
@@ -413,7 +438,6 @@ def curate_evidence(step_input: StepInput, run_context: RunContext) -> StepOutpu
         collected_at=prepared.collected_at,
         category_ids=[category.id],
     )
-    evidences = _canonicalize_evidence_drafts(draft)
     publication = PreparedEvidencePublication(
         prepared_raw=prepared,
         category_catalog_sha256=_category_catalog_sha256(catalog),
@@ -465,11 +489,43 @@ def _enqueue_for_event(manifest_path: Path, evidence_ids: list[str]) -> None:
     enqueue_evidence_artifact(str(manifest_path), evidence_ids)
 
 
+def _publish_evidence_skip(skip: SkippedEvidencePublication) -> EvidenceSkipResult:
+    """Persist one auditable no-publication outcome and advance its checkpoint."""
+    artifact_id = _publication_artifact_id(skip.prepared_raw.publication_key)
+    path = evidence_artifact_root() / "skips" / f"{artifact_id}.json"
+    payload = {
+        "schema": "evidence_extraction_skip.v1",
+        "publication_key": skip.prepared_raw.publication_key,
+        "collection_id": skip.prepared_raw.collection_id,
+        "document_path": skip.prepared_raw.document_path,
+        "document_sha256": skip.prepared_raw.document_sha256,
+        "reason": skip.reason,
+    }
+    if path.exists():
+        if json.loads(path.read_text(encoding="utf-8")) != payload:
+            raise ValueError("Evidence skip identity conflict")
+    else:
+        write_json(path, payload)
+    checkpoint = advance_checkpoint(skip.prepared_raw)
+    return EvidenceSkipResult(
+        reason=skip.reason,
+        artifact_path=str(path),
+        checkpoint=checkpoint,
+    )
+
+
 async def publish_evidence(step_input: StepInput) -> StepOutput:
     """Publish Raw Evidence then the complete Evidence set and advance the file checkpoint."""
+    content = _previous_content(step_input)
+    try:
+        skip = _model_from_content(SkippedEvidencePublication, content)
+    except (ValidationError, TypeError, ValueError):
+        skip = None
+    if skip is not None:
+        return StepOutput(content=_publish_evidence_skip(skip))
     publication = _model_from_content(
         PreparedEvidencePublication,
-        _previous_content(step_input),
+        content,
     )
     publication_key = publication.raw_evidence.publication_key
     artifact_id = _publication_artifact_id(publication_key)

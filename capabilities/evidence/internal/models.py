@@ -1,9 +1,9 @@
 """Typed contracts for Evidence extraction and Data Service publication."""
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator, model_validator
 
 _RAW_EVIDENCE_ID_PATTERN = r"^RAW[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 _EVIDENCE_ID_PATTERN = r"^EVD[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
@@ -352,12 +352,25 @@ class AtomicEvidenceDraft(BaseModel):
 
 
 class EvidenceExtractionDraft(BaseModel):
-    """Strict structured output returned by the Evidence Extractor Agent."""
+    """LLM candidate envelope that discards nonconforming Evidence items."""
 
     model_config = ConfigDict(extra="forbid")
 
     raw_evidence: RawEvidenceEnrichment
-    evidences: list[AtomicEvidenceDraft] = Field(min_length=1)
+    evidences: list[AtomicEvidenceDraft]
+
+    @field_validator("evidences", mode="before")
+    @classmethod
+    def discard_nonconforming_candidates(cls, values: Any) -> list[AtomicEvidenceDraft]:
+        if not isinstance(values, list):
+            return []
+        accepted: list[AtomicEvidenceDraft] = []
+        for value in values:
+            try:
+                accepted.append(AtomicEvidenceDraft.model_validate(value))
+            except (ValidationError, TypeError, ValueError):
+                continue
+        return accepted
 
 
 class RawEvidencePublication(BaseModel):
@@ -409,6 +422,23 @@ class PreparedEvidencePublication(BaseModel):
     selected_category_code: str = Field(max_length=50, pattern=r"^[A-Z][A-Z0-9_]*$")
     raw_evidence: RawEvidencePublication
     evidences: list[EvidencePublicationItem] = Field(min_length=1)
+
+
+EvidenceSkipReason = Literal[
+    "NONCOMPLIANT_LLM_OUTPUT",
+    "UNKNOWN_CATEGORY",
+    "NO_CANONICAL_PROPOSITION",
+]
+
+
+class SkippedEvidencePublication(BaseModel):
+    """Validated no-publication decision for one Raw document."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["skipped_evidence_publication.v1"] = "skipped_evidence_publication.v1"
+    prepared_raw: PreparedRawDocument
+    reason: EvidenceSkipReason
 
 
 class RawEvidencePublicationResponse(BaseModel):
@@ -490,6 +520,16 @@ class EvidencePublicationResult(BaseModel):
     evidence_ids: list[EvidenceID] = Field(min_length=1)
     evidence_count: int = Field(ge=1)
     artifact_manifest_path: str
+    checkpoint: EvidenceCheckpoint
+
+
+class EvidenceSkipResult(BaseModel):
+    """Workflow-visible terminal result for one intentionally skipped Raw document."""
+
+    schema_version: Literal["evidence_skip_result.v1"] = "evidence_skip_result.v1"
+    status: Literal["skipped"] = "skipped"
+    reason: EvidenceSkipReason
+    artifact_path: str
     checkpoint: EvidenceCheckpoint
 
 
