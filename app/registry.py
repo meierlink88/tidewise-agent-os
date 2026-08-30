@@ -40,11 +40,10 @@ from capabilities.evidence import (
     PreparedRawDocument,
 )
 from capabilities.evidence.functions import (
+    curate_evidence,
     evidence_extraction_complete,
-    prepare_evidence_analysis,
-    prepare_raw_document,
-    publish_evidences,
-    validate_evidence_analysis,
+    prepare_evidence,
+    publish_evidence,
 )
 from capabilities.investment import (
     AcceptedImpactClaim,
@@ -139,11 +138,10 @@ registry = TidewiseRegistry(
         publish_raw_evidence,
         raw_evidence_filter_complete,
         save_raw_evidence_filter_batch,
-        prepare_raw_document,
+        prepare_evidence,
         evidence_extraction_complete,
-        prepare_evidence_analysis,
-        validate_evidence_analysis,
-        publish_evidences,
+        curate_evidence,
+        publish_evidence,
         prepare_event_batch,
         event_batch_requires_analysis,
         freeze_event_analysis,

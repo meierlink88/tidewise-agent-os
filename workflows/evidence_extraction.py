@@ -3,21 +3,20 @@
 from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
-from agno.workflow import Loop, Step, Steps, Workflow
+from agno.workflow import Loop, Step, Workflow
 from agno.workflow.types import HumanReview, OnError
 
 from agents.evidence_extractor import load_evidence_extractor_agent
 from capabilities.evidence.functions import (
+    curate_evidence,
     evidence_extraction_complete,
-    prepare_evidence_analysis,
-    prepare_raw_document,
-    publish_evidences,
-    validate_evidence_analysis,
+    prepare_evidence,
+    publish_evidence,
 )
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTION_WORKFLOW_ID = "evidence-extraction"
-EVIDENCE_EXTRACTION_CONTRACT_VERSION = 9
+EVIDENCE_EXTRACTION_CONTRACT_VERSION = 10
 
 
 def _fail_fast_review() -> HumanReview:
@@ -41,53 +40,33 @@ def _seed_workflow(agent: Agent) -> Workflow:
                 max_iterations=100,
                 end_condition=evidence_extraction_complete,
                 steps=[
-                    Steps(
-                        name="extract-evidences",
-                        description="Read one pending document and freeze its canonical business propositions.",
+                    Step(
+                        name="prepare-evidence",
+                        executor=prepare_evidence,  # type: ignore[arg-type]  # Agno injects RunContext.
+                        max_retries=0,
                         human_review=_fail_fast_review(),
-                        steps=[
-                            Step(
-                                name="prepare-raw-document",
-                                executor=prepare_raw_document,
-                                max_retries=0,
-                                human_review=_fail_fast_review(),
-                            ),
-                            Step(
-                                name="prepare-evidence-analysis",
-                                executor=prepare_evidence_analysis,  # type: ignore[arg-type]  # Agno injects RunContext.
-                                max_retries=0,
-                                human_review=_fail_fast_review(),
-                                strict_input_validation=True,
-                            ),
-                            Step(
-                                name="analyze-raw-evidence",
-                                agent=agent,
-                                max_retries=0,
-                                human_review=_fail_fast_review(),
-                                strict_input_validation=True,
-                            ),
-                            Step(
-                                name="validate-evidence-analysis",
-                                executor=validate_evidence_analysis,  # type: ignore[arg-type]  # Agno injects RunContext.
-                                max_retries=0,
-                                human_review=_fail_fast_review(),
-                                strict_input_validation=True,
-                            ),
-                        ],
+                        strict_input_validation=True,
                     ),
-                    Steps(
-                        name="publish-evidences",
-                        description="Publish Raw Evidence and its complete canonical Evidence set to Data Service.",
+                    Step(
+                        name="extract-evidence",
+                        agent=agent,
+                        max_retries=0,
                         human_review=_fail_fast_review(),
-                        steps=[
-                            Step(
-                                name="publish-evidence-set",
-                                executor=publish_evidences,
-                                max_retries=0,
-                                human_review=_fail_fast_review(),
-                                strict_input_validation=True,
-                            ),
-                        ],
+                        strict_input_validation=True,
+                    ),
+                    Step(
+                        name="curate-evidence",
+                        executor=curate_evidence,  # type: ignore[arg-type]  # Agno injects RunContext.
+                        max_retries=0,
+                        human_review=_fail_fast_review(),
+                        strict_input_validation=True,
+                    ),
+                    Step(
+                        name="publish-evidence",
+                        executor=publish_evidence,
+                        max_retries=0,
+                        human_review=_fail_fast_review(),
+                        strict_input_validation=True,
                     ),
                 ],
             )
