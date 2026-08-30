@@ -682,6 +682,28 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                 self._run_context("run-no-valid-keyword", prepared),
             )
 
+    def test_curation_downgrades_unsupported_time_precision_without_losing_evidence(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        draft = self._draft().model_dump(mode="json")
+        draft["evidences"][0]["semantic"]["time"] = {
+            "raw": "2026年8月29日当周",
+            "start_at": None,
+            "end_at": None,
+            "precision": "WEEK",
+        }
+
+        output = curate_evidence(
+            StepInput(previous_step_content=json.dumps(draft, ensure_ascii=False)),
+            self._run_context("run-unsupported-time-precision", prepared),
+        )
+        publication = PreparedEvidencePublication.model_validate(output.content)
+
+        self.assertEqual(publication.evidences[0].semantic.time.raw, "2026年8月29日当周")
+        self.assertEqual(publication.evidences[0].semantic.time.precision, "UNKNOWN")
+        self.assertIsNone(publication.evidences[0].semantic.time.start_at)
+        self.assertIsNone(publication.evidences[0].semantic.time.end_at)
+
     async def test_publication_writes_manifest_last_and_advances_checkpoint(self) -> None:
         self._publish_raw_fixture()
         publication = self._validated(self._prepared())
