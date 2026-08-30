@@ -111,7 +111,7 @@ Environment or repository Variables:
 - `NEO4J_USER` — Neo4j runtime user; defaults to `neo4j`
 - `GRAPHITI_EMBEDDING_BASE_URL`, `GRAPHITI_EMBEDDING_MODEL`, `GRAPHITI_EMBEDDING_DIM`
   — embedding provider configuration used by the in-process Graphiti SDK
-- `EVENT_EXTRACTION_BATCH_SIZE` — optional `1..50` Event extraction batch size; defaults to `50`
+- `EVENT_EXTRACTION_BATCH_SIZE` — optional `1..50` Event extraction batch size; defaults to `20`
 - `CONTROL_PLANE_JWT_VERIFICATION_KEY` — PEM public key generated for the UAT OS connection in Agno Control Plane
 
 Secrets:

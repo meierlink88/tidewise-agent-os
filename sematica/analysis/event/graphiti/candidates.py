@@ -23,8 +23,7 @@ from sematica.analysis.event.contracts import (
 from sematica.ontology.enums import AnalysisAnchorType, VariableGroup
 from sematica.projection.runtime import GRAPHITI_GROUP_ID
 
-MAX_ANCHORS = 4
-MAX_VARIABLES = 5
+MAX_ANCHORS_PER_TYPE = 4
 SEARCH_LIMIT = 8
 SUPPORTED_ANCHOR_TYPES = frozenset(
     {
@@ -74,7 +73,9 @@ class GraphitiCandidateRetriever:
         self._graphiti = graphiti
 
     async def retrieve(self, event: EventAnalysisInput, classification: EventClassification) -> CandidateSet:
-        allowed = CLASS_ANCHOR_TYPES[classification.event_class]
+        class_allowed = CLASS_ANCHOR_TYPES[classification.event_class]
+        hinted = set(classification.anchor_type_hints)
+        allowed = class_allowed & hinted if hinted else class_allowed
         if not allowed:
             return CandidateSet(anchors=[], variables=[])
         labels = sorted(item.value for item in allowed)
@@ -83,16 +84,21 @@ class GraphitiCandidateRetriever:
         records, _, _ = await self._graphiti.driver.execute_query(
             """
             /* event_analysis_mentioned_anchor_candidates */
-            MATCH (episode:Episodic {uuid: $episode_uuid, group_id: $group_id})
-                  -[:MENTIONS]->(anchor:Entity)
-            WHERE any(label IN labels(anchor) WHERE label IN $labels)
-            RETURN DISTINCT anchor.uuid AS uuid
-            LIMIT $limit
+            UNWIND $labels AS candidate_label
+            CALL (candidate_label) {
+                MATCH (episode:Episodic {uuid: $episode_uuid, group_id: $group_id})
+                      -[:MENTIONS]->(anchor:Entity)
+                WHERE candidate_label IN labels(anchor)
+                RETURN DISTINCT anchor.uuid AS uuid
+                ORDER BY uuid
+                LIMIT $per_type_limit
+            }
+            RETURN DISTINCT uuid
             """,
             episode_uuid=event.episode_uuid,
             group_id=GRAPHITI_GROUP_ID,
             labels=labels,
-            limit=MAX_ANCHORS,
+            per_type_limit=MAX_ANCHORS_PER_TYPE,
             routing_="r",
         )
         for record in records:
@@ -102,20 +108,25 @@ class GraphitiCandidateRetriever:
         fact_records, _, _ = await self._graphiti.driver.execute_query(
             """
             /* event_analysis_fact_endpoint_candidates */
-            MATCH (episode:Episodic {uuid: $episode_uuid, group_id: $group_id})
-            MATCH (source:Entity)-[fact:RELATES_TO]->(target:Entity)
-            WHERE episode.uuid IN coalesce(fact.episodes, [])
-            WITH collect(source) + collect(target) AS endpoints
-            UNWIND endpoints AS anchor
-            WITH DISTINCT anchor
-            WHERE any(label IN labels(anchor) WHERE label IN $labels)
-            RETURN anchor.uuid AS uuid
-            LIMIT $limit
+            UNWIND $labels AS candidate_label
+            CALL (candidate_label) {
+                MATCH (episode:Episodic {uuid: $episode_uuid, group_id: $group_id})
+                MATCH (source:Entity)-[fact:RELATES_TO]->(target:Entity)
+                WHERE episode.uuid IN coalesce(fact.episodes, [])
+                WITH candidate_label, collect(source) + collect(target) AS endpoints
+                UNWIND endpoints AS anchor
+                WITH DISTINCT candidate_label, anchor
+                WHERE candidate_label IN labels(anchor)
+                RETURN anchor.uuid AS uuid
+                ORDER BY uuid
+                LIMIT $per_type_limit
+            }
+            RETURN DISTINCT uuid
             """,
             episode_uuid=event.episode_uuid,
             group_id=GRAPHITI_GROUP_ID,
             labels=labels,
-            limit=MAX_ANCHORS,
+            per_type_limit=MAX_ANCHORS_PER_TYPE,
             routing_="r",
         )
         for record in fact_records:
@@ -146,30 +157,43 @@ class GraphitiCandidateRetriever:
             expanded, _, _ = await self._graphiti.driver.execute_query(
                 """
                 /* event_analysis_topology_anchor_candidates */
-                UNWIND $anchor_uuids AS anchor_uuid
-                MATCH (anchor:Entity {uuid: anchor_uuid, group_id: $group_id})
-                      -[relation:RELATES_TO]-(neighbor:Entity)
-                WHERE relation.name IN $relation_names
-                  AND any(label IN labels(neighbor) WHERE label IN $labels)
-                RETURN DISTINCT neighbor.uuid AS uuid
-                LIMIT $limit
+                UNWIND $labels AS candidate_label
+                CALL (candidate_label) {
+                    UNWIND $anchor_uuids AS anchor_uuid
+                    MATCH (anchor:Entity {uuid: anchor_uuid, group_id: $group_id})
+                          -[relation:RELATES_TO]-(neighbor:Entity)
+                    WHERE relation.name IN $relation_names
+                      AND candidate_label IN labels(neighbor)
+                    RETURN DISTINCT neighbor.uuid AS uuid
+                    ORDER BY uuid
+                    LIMIT $per_type_limit
+                }
+                RETURN DISTINCT uuid
                 """,
                 anchor_uuids=sorted(nodes_by_uuid),
                 group_id=GRAPHITI_GROUP_ID,
                 relation_names=TOPOLOGY_RELATION_NAMES,
                 labels=labels,
-                limit=MAX_ANCHORS,
+                per_type_limit=MAX_ANCHORS_PER_TYPE,
                 routing_="r",
             )
             for record in expanded:
                 node = await EntityNode.get_by_uuid(self._graphiti.driver, str(record["uuid"]))
                 nodes_by_uuid[node.uuid] = node
 
-        anchors = [
+        eligible_anchors = [
             candidate
             for node in nodes_by_uuid.values()
             if (candidate := self._anchor_candidate(node, allowed)) is not None
-        ][:MAX_ANCHORS]
+        ]
+        anchors: list[AnchorCandidate] = []
+        counts: dict[AnalysisAnchorType, int] = {}
+        for candidate in eligible_anchors:
+            count = counts.get(candidate.entity_type, 0)
+            if count >= MAX_ANCHORS_PER_TYPE:
+                continue
+            counts[candidate.entity_type] = count + 1
+            anchors.append(candidate)
         variables = await self._variables(classification)
         return CandidateSet(anchors=anchors, variables=variables)
 
@@ -196,11 +220,16 @@ class GraphitiCandidateRetriever:
                 if candidate := self._variable_candidate(node):
                     semantic[candidate.uuid] = candidate
 
+        hints = set(classification.variable_group_hints)
+        if hints:
+            semantic = {uuid: candidate for uuid, candidate in semantic.items() if candidate.variable_group in hints}
+
         records, _, _ = await self._graphiti.driver.execute_query(
             """
             /* event_analysis_fundamental_variable_candidates */
             MATCH (variable:Variable {group_id: $group_id})
             WHERE variable.variable_role = 'FUNDAMENTAL'
+              AND (size($group_hints) = 0 OR variable.variable_group IN $group_hints)
             RETURN variable.uuid AS uuid, variable.name AS name,
                    variable.variable_id AS variable_id,
                    variable.variable_group AS variable_group,
@@ -208,11 +237,9 @@ class GraphitiCandidateRetriever:
                    variable.definition AS definition
             ORDER BY CASE WHEN variable.variable_group IN $group_hints THEN 0 ELSE 1 END,
                      variable.variable_id
-            LIMIT $limit
             """,
             group_id=GRAPHITI_GROUP_ID,
             group_hints=[item.value for item in classification.variable_group_hints],
-            limit=MAX_VARIABLES * 3,
             routing_="r",
         )
         fallback = [
@@ -225,12 +252,12 @@ class GraphitiCandidateRetriever:
                 definition=str(row["definition"]),
             )
             for row in records
+            if not hints or VariableGroup(str(row["variable_group"])) in hints
         ]
         ordered = [*semantic.values(), *fallback]
         unique: dict[str, VariableCandidate] = {}
         for candidate in ordered:
             unique.setdefault(candidate.uuid, candidate)
-        hints = set(classification.variable_group_hints)
         return sorted(
             unique.values(),
             key=lambda item: (
@@ -238,7 +265,7 @@ class GraphitiCandidateRetriever:
                 0 if item.variable_group in hints else 1,
                 item.variable_id,
             ),
-        )[:MAX_VARIABLES]
+        )
 
     @staticmethod
     def _variable_candidate(node: EntityNode) -> VariableCandidate | None:

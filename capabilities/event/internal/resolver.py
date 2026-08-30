@@ -1,4 +1,4 @@
-"""Event identity resolution and authoritative Data publication stage."""
+"""Event identity resolution and authoritative Data publication policy."""
 
 from __future__ import annotations
 
@@ -30,14 +30,6 @@ class DataPublisher(Protocol):
 
 class ComparisonUnavailable(RuntimeError):
     """The bounded semantic decision could not produce a safe structured result."""
-
-
-class EventHistoryUnavailable(RuntimeError):
-    """The authoritative Data Event history could not be recalled safely."""
-
-
-class PublicationRejected(RuntimeError):
-    """Data rejected a publication with a permanent 4xx contract response."""
 
 
 @dataclass(frozen=True)
@@ -93,7 +85,7 @@ class EventResolver:
         exact_ids = {item.id for item in history if same_occurrence(candidate, item.event)}
         if len(exact_ids) > 1:
             return EventResolutionOutcome(
-                decision="FAILED",
+                decision="IGNORED",
                 event_id=None,
                 event_created=False,
                 evidence_link_result="NOT_ATTEMPTED",
@@ -160,7 +152,7 @@ class EventResolver:
         if len(same_ids) > 1 or (same_ids and review_ids):
             matched = sorted(same_ids | review_ids)
             return EventResolutionOutcome(
-                decision="FAILED",
+                decision="IGNORED",
                 event_id=None,
                 event_created=False,
                 evidence_link_result="NOT_ATTEMPTED",
@@ -181,7 +173,7 @@ class EventResolver:
             )
         if review_ids:
             return EventResolutionOutcome(
-                decision="FAILED",
+                decision="IGNORED",
                 event_id=None,
                 event_created=False,
                 evidence_link_result="NOT_ATTEMPTED",
@@ -234,7 +226,7 @@ class EventResolver:
         if not atomicity.atomic:
             return EventResolution(
                 EventResolutionOutcome(
-                    decision="FAILED",
+                    decision="IGNORED",
                     event_id=None,
                     event_created=False,
                     evidence_link_result="NOT_ATTEMPTED",
@@ -251,7 +243,9 @@ class EventResolver:
         # A second recall immediately before the external write closes the
         # single-worker queue race between initial comparison and publication.
         final_history = await self._history.retrieve(submission.event)
-        if final_outcome := await self._evaluate_history(submission.event, final_history):
+        initial_ids = {item.id for item in history}
+        newly_visible_history = [item for item in final_history if item.id not in initial_ids]
+        if final_outcome := await self._evaluate_history(submission.event, newly_visible_history):
             return EventResolution(final_outcome)
 
         decision = "RELATED_BUT_DISTINCT" if history or final_history else "NEW_EVENT"

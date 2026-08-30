@@ -1,23 +1,19 @@
 """Lifecycle and orchestration for the Studio-managed Event Extraction Workflow."""
 
-from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
-from agno.workflow import Condition, Step, Steps, Workflow
+from agno.workflow import Step, Workflow
 from agno.workflow.types import HumanReview, OnError
 
-from agents.event_extractor import load_event_extractor_agent
 from capabilities.event.functions import (
-    construct_event_signals,
-    event_batch_requires_analysis,
-    freeze_event_analysis,
-    prepare_event_batch,
-    publish_event_candidates,
+    build_signals,
+    extract_events,
+    publish_events,
 )
 from db import get_postgres_db
 
 EVENT_EXTRACTION_WORKFLOW_ID = "event-extraction"
-EVENT_EXTRACTION_CONTRACT_VERSION = 5
+EVENT_EXTRACTION_CONTRACT_VERSION = 7
 
 
 def _fail_fast_review() -> HumanReview:
@@ -25,7 +21,7 @@ def _fail_fast_review() -> HumanReview:
     return HumanReview(on_error=OnError.fail)
 
 
-def _seed_workflow(agent: Agent) -> Workflow:
+def _seed_workflow() -> Workflow:
     """Return the reviewed Workflow graph saved to Studio once."""
     return Workflow(
         id=EVENT_EXTRACTION_WORKFLOW_ID,
@@ -37,50 +33,24 @@ def _seed_workflow(agent: Agent) -> Workflow:
         db=get_postgres_db(),
         metadata={"event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION},
         steps=[
-            Steps(
-                name="extract-event-candidates",
-                description="Freeze Evidence and extract atomic Event Candidates exactly once.",
-                human_review=_fail_fast_review(),
-                steps=[
-                    Step(
-                        name="prepare-event-batch",
-                        executor=prepare_event_batch,
-                        max_retries=0,
-                        human_review=_fail_fast_review(),
-                    ),
-                    Condition(
-                        name="analyze-unfrozen-event-batch",
-                        evaluator=event_batch_requires_analysis,
-                        human_review=_fail_fast_review(),
-                        steps=[
-                            Step(
-                                name="analyze-event-batch",
-                                agent=agent,
-                                max_retries=0,
-                                human_review=_fail_fast_review(),
-                                strict_input_validation=True,
-                            ),
-                            Step(
-                                name="freeze-event-analysis",
-                                executor=freeze_event_analysis,
-                                max_retries=0,
-                                human_review=_fail_fast_review(),
-                                strict_input_validation=True,
-                            ),
-                        ],
-                    ),
-                ],
-            ),
             Step(
-                name="publish-event-candidates",
-                executor=publish_event_candidates,
+                name="extract-events",
+                description="Claim Evidence and freeze atomic Event Candidates exactly once.",
+                executor=extract_events,
                 max_retries=0,
                 human_review=_fail_fast_review(),
                 strict_input_validation=True,
             ),
             Step(
-                name="construct-event-signals",
-                executor=construct_event_signals,
+                name="publish-events",
+                executor=publish_events,
+                max_retries=0,
+                human_review=_fail_fast_review(),
+                strict_input_validation=True,
+            ),
+            Step(
+                name="build-signals",
+                executor=build_signals,
                 max_retries=0,
                 human_review=_fail_fast_review(),
                 strict_input_validation=True,
@@ -107,11 +77,9 @@ def ensure_event_extraction_workflow(registry: Registry) -> int:
             if current is None or not isinstance(current.steps, list) or not current.steps:
                 raise ValueError("Event Extraction published Studio version could not be rehydrated")
             return version
-        agent = load_event_extractor_agent(registry)
-        migrated = _seed_workflow(agent)
+        migrated = _seed_workflow()
         migrated.id = str(config.get("id") or EVENT_EXTRACTION_WORKFLOW_ID)
         migrated.name = str(config.get("name") or "Event Extraction")
-        migrated.description = str(config.get("description") or migrated.description)
         migrated.metadata = {**metadata, "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION}
         published = migrated.save(
             db=db,
@@ -121,8 +89,7 @@ def ensure_event_extraction_workflow(registry: Registry) -> int:
         if not isinstance(published, int):
             raise ValueError("Event Extraction runtime contract migration failed")
         return published
-    agent = load_event_extractor_agent(registry)
-    version = _seed_workflow(agent).save(
+    version = _seed_workflow().save(
         db=db,
         stage="published",
         notes="Initial code-reviewed Event Extraction Workflow seed",

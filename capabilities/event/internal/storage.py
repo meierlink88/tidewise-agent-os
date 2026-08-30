@@ -65,7 +65,7 @@ def _claim_lock() -> Iterator[None]:
 
 def _batch_size() -> int:
     try:
-        value = int(os.getenv("EVENT_EXTRACTION_BATCH_SIZE", "50"))
+        value = int(os.getenv("EVENT_EXTRACTION_BATCH_SIZE", "20"))
     except ValueError as exc:
         raise ValueError("EVENT_EXTRACTION_BATCH_SIZE must be an integer") from exc
     if not 1 <= value <= 50:

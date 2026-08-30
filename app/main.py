@@ -10,7 +10,7 @@ from pathlib import Path
 from agno.os import AgentOS
 from agno.utils.log import log_info
 
-from agents.event_extractor import ensure_event_extractor_agent
+from agents.event_extractor import ensure_event_extractor_agent, load_event_extractor_agent
 from agents.evidence_extractor import ensure_evidence_extractor_agent
 from agents.investment_reasoner import ensure_investment_reasoner_agent, load_investment_reasoner_agent
 from agents.investment_reviewer import ensure_investment_reviewer_agent, load_investment_reviewer_agent
@@ -106,7 +106,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     event_runtime = None
     investment_runtime = None
     try:
-        event_runtime = create_local_event_workflow_runtime(model)
+        event_runtime = create_local_event_workflow_runtime(model, load_event_extractor_agent(registry))
         configure_event_workflow_runtime(event_runtime)
         investment_runtime = create_local_investment_workflow_runtime(
             model,

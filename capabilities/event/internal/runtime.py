@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import Any, Protocol
 
 from capabilities.event.internal.models import (
     EventCandidateSubmission,
+    EventExtractionBatch,
     EventPublicationRecord,
     EventSignalRecord,
 )
@@ -16,6 +17,8 @@ PublicationCheckpoint = Callable[[EventPublicationRecord], None]
 
 class EventWorkflowRuntime(Protocol):
     """Deep interface hiding resolution, Data publication and Graphiti mechanics."""
+
+    async def extract(self, batch: EventExtractionBatch) -> Any: ...
 
     async def publish(
         self,

@@ -13,6 +13,7 @@ from sematica.analysis.event.contracts import (
     EventClass,
     EventClassification,
     SignalProposal,
+    SignalProposalBatch,
     VariableCandidate,
 )
 
@@ -31,7 +32,7 @@ class SignalExtractor(Protocol):
         event: EventAnalysisInput,
         classification: EventClassification,
         candidates: CandidateSet,
-    ) -> list[SignalProposal]: ...
+    ) -> SignalProposalBatch: ...
 
 
 class SignalReviewer(Protocol):
@@ -110,20 +111,21 @@ class EventAnalysisPipeline:
             )
 
         await self._stage(on_stage, "EXTRACTING")
-        proposals = await self._extractor.extract(event, classification, candidates)
+        extraction = await self._extractor.extract(event, classification, candidates)
+        proposals = extraction.proposals
         if not proposals:
             return EventAnalysisOutcome(
                 status="NO_SIGNAL",
                 classification=classification,
                 signal_fact_uuids=[],
-                reason_codes=["EVENT_SUPPORTS_NO_DIRECT_SIGNAL"],
+                reason_codes=extraction.reason_codes or ["EVENT_SUPPORTS_NO_DIRECT_SIGNAL"],
             )
 
         await self._stage(on_stage, "VALIDATING")
         anchors = {item.uuid: item for item in candidates.anchors}
         variables = {item.uuid: item for item in candidates.variables}
         validated: list[tuple[SignalProposal, VariableCandidate, AnchorCandidate]] = []
-        errors: list[str] = []
+        errors: list[str] = list(extraction.reason_codes)
         seen_pairs: set[tuple[str, str]] = set()
         for proposal in proposals:
             anchor = anchors.get(proposal.anchor_uuid)
@@ -147,12 +149,12 @@ class EventAnalysisPipeline:
                 continue
             validated.append((proposal, variable, anchor))
 
-        if errors:
+        if not validated:
             return EventAnalysisOutcome(
                 status="NO_SIGNAL",
                 classification=classification,
                 signal_fact_uuids=[],
-                reason_codes=sorted(set(errors)),
+                reason_codes=sorted(set(errors)) or ["NO_VALID_SIGNAL_PROPOSAL"],
             )
 
         await self._stage(on_stage, "PROJECTING")
@@ -164,7 +166,7 @@ class EventAnalysisPipeline:
             status="SUCCEEDED",
             classification=classification,
             signal_fact_uuids=fact_uuids,
-            reason_codes=["DIRECT_SIGNAL_FACTS_PROJECTED"],
+            reason_codes=["DIRECT_SIGNAL_FACTS_PROJECTED", *sorted(set(errors))],
         )
 
     @staticmethod
