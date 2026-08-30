@@ -27,6 +27,18 @@ manifest:
       - "识别同批 Evidence 中描述同一现实动作的内容"
       - "标记不能安全提炼 Event 的 Evidence"
 
+  event-identity:
+    description: "在冻结的历史 Event 候选集内判断原子性及 SAME、NEW、RELATED 或 IGNORED 身份。"
+    quick_prompts:
+      - "判断这个 Event Candidate 是否为单一现实动作"
+      - "根据给定历史 Event 判断是否为同一事件"
+
+  event-signal-analyst:
+    description: "分类已投影的新 Event，并仅基于给定 Anchor 与 Variable 身份提出直接 Signal。"
+    quick_prompts:
+      - "分类这个 Event 并给出检索提示"
+      - "基于给定候选身份提出直接 Signal"
+
   investment-reasoner:
     description: "按地缘政治、宏观经济、产业链三层复用推理，并从有效 Signal 根沿标准拓扑执行最多三跳传导。"
     quick_prompts:
@@ -53,7 +65,7 @@ manifest:
       - "处理所有尚未提取的 Raw Document"
 
   event-extraction:
-    description: "增量读取本地已映射 Evidence，提炼并去重 Event，投影 Graphiti 后构建变量信号。"
+    description: "五阶段增量处理 Evidence：提炼、身份解析、发布 Event、分析 Signal、发布 Signal。"
     quick_prompts:
       - "处理所有已发布且尚未提炼 Event 的 Evidence"
 

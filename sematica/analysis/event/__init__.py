@@ -1,5 +1,5 @@
 """Controlled analysis of one formal Event."""
 
-from sematica.analysis.event.contracts import EventAnalysisInput, EventAnalysisOutcome
+from sematica.analysis.event.contracts import EventAnalysisInput
 
-__all__ = ["EventAnalysisInput", "EventAnalysisOutcome"]
+__all__ = ["EventAnalysisInput"]
