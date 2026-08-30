@@ -112,13 +112,11 @@ class RawEvidenceEnrichment(BaseModel):
     quoted_source_name: str | None = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
-    def validate_quotation(self) -> "RawEvidenceEnrichment":
-        if self.is_original and self.quoted_source_name is not None:
-            raise ValueError("original Raw Evidence cannot declare a quoted source")
-        if not self.is_original and not (self.quoted_source_name or "").strip():
-            raise ValueError("reposted Raw Evidence requires quoted_source_name")
+    def normalize_quotation_candidate(self) -> "RawEvidenceEnrichment":
         if self.quoted_source_name is not None:
             self.quoted_source_name = self.quoted_source_name.strip()
+            if not self.quoted_source_name:
+                self.quoted_source_name = None
         return self
 
 
@@ -223,8 +221,8 @@ class EvidenceTimeDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     raw: str | None = Field(max_length=200)
-    start_at: None
-    end_at: None
+    start_at: None = None
+    end_at: None = None
     precision: str = Field(min_length=1, max_length=32)
 
     @field_validator("raw")

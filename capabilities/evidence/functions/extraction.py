@@ -52,11 +52,54 @@ _EVIDENCE_RUN_STATE = "evidence_extraction"
 _BUSINESS_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
+def _normalize_json_literals(value: str) -> str:
+    """Normalize non-standard uppercase JSON literals without touching quoted text."""
+    replacements = {"NULL": "null", "TRUE": "true", "FALSE": "false"}
+    output: list[str] = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(value):
+        character = value[index]
+        if in_string:
+            output.append(character)
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            index += 1
+            continue
+        if character == '"':
+            in_string = True
+            output.append(character)
+            index += 1
+            continue
+        matched = False
+        for candidate, replacement in replacements.items():
+            if value.startswith(candidate, index):
+                output.append(replacement)
+                index += len(candidate)
+                matched = True
+                break
+        if not matched:
+            output.append(character)
+            index += 1
+    return "".join(output)
+
+
 def _model_from_content(model: type[Any], content: Any) -> Any:
     if isinstance(content, model):
         return content
     if isinstance(content, str):
-        return model.model_validate_json(content)
+        try:
+            return model.model_validate_json(content)
+        except ValidationError:
+            normalized = _normalize_json_literals(content)
+            if normalized == content:
+                raise
+            return model.model_validate_json(normalized)
     return model.model_validate(content)
 
 
@@ -351,7 +394,8 @@ def curate_evidence(step_input: StepInput, run_context: RunContext) -> StepOutpu
     category = categories_by_code.get(draft.raw_evidence.category_code)
     if category is None:
         raise ValueError(f"unknown Evidence Category code: {draft.raw_evidence.category_code}")
-    quoted_name = draft.raw_evidence.quoted_source_name
+    quoted_name = draft.raw_evidence.quoted_source_name if not draft.raw_evidence.is_original else None
+    is_original = draft.raw_evidence.is_original or quoted_name is None
     quoted_id = _source_reference_id(quoted_name) if quoted_name else None
     raw = RawEvidencePublication(
         publication_key=prepared.publication_key,
@@ -359,7 +403,7 @@ def curate_evidence(step_input: StepInput, run_context: RunContext) -> StepOutpu
         source_name=prepared.source_name,
         source_level=prepared.source_level,
         source_url=prepared.source_url,
-        is_original=draft.raw_evidence.is_original,
+        is_original=is_original,
         quoted_source_id=quoted_id,
         quoted_source_name=quoted_name,
         title=prepared.title,

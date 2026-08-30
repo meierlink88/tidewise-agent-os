@@ -704,6 +704,64 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(publication.evidences[0].semantic.time.start_at)
         self.assertIsNone(publication.evidences[0].semantic.time.end_at)
 
+    def test_curation_defaults_omitted_draft_time_bounds_to_null(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        draft = self._draft().model_dump(mode="json")
+        draft["evidences"][0]["semantic"]["time"] = {
+            "raw": "正在进行",
+            "precision": "UNKNOWN",
+        }
+
+        output = curate_evidence(
+            StepInput(previous_step_content=json.dumps(draft, ensure_ascii=False)),
+            self._run_context("run-omitted-time-bounds", prepared),
+        )
+        publication = PreparedEvidencePublication.model_validate(output.content)
+
+        self.assertEqual(publication.evidences[0].semantic.time.raw, "正在进行")
+        self.assertEqual(publication.evidences[0].semantic.time.precision, "UNKNOWN")
+        self.assertIsNone(publication.evidences[0].semantic.time.start_at)
+        self.assertIsNone(publication.evidences[0].semantic.time.end_at)
+
+    def test_curation_defaults_incomplete_repost_claim_to_original(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        draft = self._draft().model_dump(mode="json")
+        draft["raw_evidence"] = {
+            "category_code": "EVENT_BRIEF",
+            "is_original": False,
+            "quoted_source_name": None,
+        }
+
+        output = curate_evidence(
+            StepInput(previous_step_content=json.dumps(draft, ensure_ascii=False)),
+            self._run_context("run-incomplete-repost", prepared),
+        )
+        publication = PreparedEvidencePublication.model_validate(output.content)
+
+        self.assertTrue(publication.raw_evidence.is_original)
+        self.assertIsNone(publication.raw_evidence.quoted_source_id)
+        self.assertIsNone(publication.raw_evidence.quoted_source_name)
+
+    def test_curation_repairs_uppercase_json_null_outside_strings(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        draft = self._draft().model_dump(mode="json")
+        draft["evidences"][0]["summary"] = "NULL是原文内容"
+        draft["evidences"][0]["semantic"]["attribution"]["claimed_by"] = None
+        content = json.dumps(draft, ensure_ascii=False)
+        content = content.replace('"claimed_by": null', '"claimed_by": NULL')
+
+        output = curate_evidence(
+            StepInput(previous_step_content=content),
+            self._run_context("run-uppercase-json-null", prepared),
+        )
+        publication = PreparedEvidencePublication.model_validate(output.content)
+
+        self.assertIsNone(publication.evidences[0].semantic.attribution.claimed_by)
+        self.assertEqual(publication.evidences[0].summary, "NULL是原文内容")
+
     async def test_publication_writes_manifest_last_and_advances_checkpoint(self) -> None:
         self._publish_raw_fixture()
         publication = self._validated(self._prepared())
