@@ -77,7 +77,7 @@ class GraphitiCandidateRetrieverTest(unittest.IsolatedAsyncioTestCase):
                 "variable_id": f"demand_{index}",
                 "name": f"需求变量{index}",
                 "variable_group": "DEMAND",
-                "allowed_anchor_types": ["IndustryChain"],
+                "allowed_anchor_types": ["ChainNode"],
                 "definition": f"需求定义{index}",
             }
             for index in range(1, 36)
@@ -88,7 +88,7 @@ class GraphitiCandidateRetrieverTest(unittest.IsolatedAsyncioTestCase):
                 "variable_id": "supply_1",
                 "name": "供给变量",
                 "variable_group": "SUPPLY_CAPACITY",
-                "allowed_anchor_types": ["IndustryChain"],
+                "allowed_anchor_types": ["ChainNode"],
                 "definition": "供给定义",
             }
         ]
@@ -134,7 +134,7 @@ class GraphitiCandidateRetrieverTest(unittest.IsolatedAsyncioTestCase):
                 "variable_id": f"demand_{index:02d}",
                 "name": f"需求变量{index}",
                 "variable_group": "DEMAND",
-                "allowed_anchor_types": ["IndustryChain"],
+                "allowed_anchor_types": ["ChainNode"],
                 "definition": f"需求定义{index}",
             }
             for index in range(1, 66)
@@ -242,11 +242,8 @@ class GraphitiCandidateRetrieverTest(unittest.IsolatedAsyncioTestCase):
         with patch.object(EntityNode, "get_by_uuids", new=get_by_uuids):
             candidates = await GraphitiCandidateRetriever(graphiti).retrieve(self._event(), classification)
 
-        type_counts = {
-            entity_type: sum(item.entity_type.value == entity_type for item in candidates.anchors)
-            for entity_type in ("ChainNode", "IndustryChain")
-        }
-        self.assertEqual(type_counts, {"ChainNode": 6, "IndustryChain": 3})
+        self.assertEqual({item.entity_type.value for item in candidates.anchors}, {"ChainNode"})
+        self.assertEqual(len(candidates.anchors), 6)
         self.assertNotIn("country-us", {item.uuid for item in candidates.anchors})
         self.assertNotIn("foreign-chain", {item.uuid for item in candidates.anchors})
         self.assertNotIn("contextual-chain", {item.uuid for item in candidates.anchors})
@@ -254,11 +251,54 @@ class GraphitiCandidateRetrieverTest(unittest.IsolatedAsyncioTestCase):
         narrowed = classification.model_copy(update={"anchor_type_hints": [classification.anchor_type_hints[0]]})
         with patch.object(EntityNode, "get_by_uuids", new=get_by_uuids):
             narrowed_candidates = await GraphitiCandidateRetriever(graphiti).retrieve(self._event(), narrowed)
-        self.assertEqual(
-            {item.entity_type.value for item in narrowed_candidates.anchors},
-            {"IndustryChain", "ChainNode"},
+        self.assertEqual({item.entity_type.value for item in narrowed_candidates.anchors}, {"ChainNode"})
+
+    async def test_industry_chain_retrieval_expands_to_members_but_never_becomes_an_anchor(self) -> None:
+        graphiti = MagicMock()
+        graphiti.search_ = AsyncMock(return_value=MagicMock(nodes=[], node_reranker_scores=[]))
+        chain = EntityNode(
+            uuid="chain-compute",
+            name="AI计算产业链",
+            group_id="neo4j",
+            labels=["Entity", "IndustryChain"],
+            attributes={"data_object_id": "ICH00000000-0000-4000-8000-000000000001"},
         )
-        self.assertEqual(narrowed_candidates.anchors[0].entity_type.value, "IndustryChain")
+        node = EntityNode(
+            uuid="node-server",
+            name="AI服务器",
+            group_id="neo4j",
+            labels=["Entity", "ChainNode"],
+            attributes={"data_object_id": "CND00000000-0000-4000-8000-000000000001"},
+        )
+        nodes = {chain.uuid: chain, node.uuid: node}
+
+        async def execute_query(query, **kwargs):
+            del kwargs
+            if "exact_anchor_candidates" in query:
+                return ([{"uuid": chain.uuid}], None, None)
+            if "topology_anchor_candidates" in query:
+                return ([{"uuid": node.uuid}], None, None)
+            return ([], None, None)
+
+        async def get_by_uuids(_driver, uuids, group_id=None):
+            self.assertEqual(group_id, "neo4j")
+            return [nodes[uuid] for uuid in uuids]
+
+        graphiti.driver.execute_query = AsyncMock(side_effect=execute_query)
+        classification = EventClassification(
+            event_class=EventClass.INDUSTRY_CHAIN,
+            confidence="HIGH",
+            anchor_type_hints=["IndustryChain", "ChainNode"],
+            variable_group_hints=[],
+            retrieval_queries=["AI计算产业链"],
+            rationale="产业链名称用于定位成员节点。",
+        )
+
+        with patch.object(EntityNode, "get_by_uuids", new=get_by_uuids):
+            candidates = await GraphitiCandidateRetriever(graphiti).retrieve(self._event(), classification)
+
+        self.assertEqual([item.uuid for item in candidates.anchors], [node.uuid])
+        self.assertEqual(candidates.anchors[0].retrieval_sources, ["TOPOLOGY"])
 
     async def test_exact_alias_match_recalls_authoritative_anchor_without_semantic_hit(self) -> None:
         graphiti = MagicMock()
@@ -397,7 +437,8 @@ class GraphitiCandidateRetrieverTest(unittest.IsolatedAsyncioTestCase):
         expected = set(fixture["expected_business_ids"])
         recalls = {cutoff: len(expected.intersection(ranked_ids[:cutoff])) / len(expected) for cutoff in (10, 20, 30)}
         self.assertEqual(recalls, {10: 0.5, 20: 0.75, 30: 1.0})
-        self.assertEqual(len(ranked_ids), 30)
+        self.assertEqual(len(ranked_ids), 24)
+        self.assertNotIn("IndustryChain", {item.entity_type.value for item in candidates.anchors})
 
     async def test_candidate_exposes_all_retrieval_sources_in_strength_order(self) -> None:
         graphiti = MagicMock()
@@ -476,7 +517,7 @@ class GraphitiCandidateRetrieverTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("market_demand", [item.variable_id for item in candidates.variables])
 
-    async def test_company_event_can_recall_existing_chain_anchors(self) -> None:
+    async def test_company_event_uses_chain_context_but_exposes_only_chain_node_anchors(self) -> None:
         graphiti = MagicMock()
         graphiti.search_ = AsyncMock(return_value=MagicMock(nodes=[]))
         graphiti.driver.execute_query = AsyncMock()
@@ -520,10 +561,16 @@ class GraphitiCandidateRetrieverTest(unittest.IsolatedAsyncioTestCase):
         with patch.object(EntityNode, "get_by_uuids", new=get_by_uuids):
             candidates = await GraphitiCandidateRetriever(graphiti).retrieve(self._event(), classification)
 
-        self.assertEqual(
-            {item.entity_type.value for item in candidates.anchors},
-            {"IndustryChain", "ChainNode"},
-        )
+        self.assertEqual({item.entity_type.value for item in candidates.anchors}, {"ChainNode"})
+
+    def test_industry_chain_cannot_be_constructed_as_a_direct_signal_anchor(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "aggregate view"):
+            AnchorCandidate(
+                uuid="chain-compute",
+                name="AI计算产业链",
+                entity_type="IndustryChain",
+                business_id="ICH00000000-0000-4000-8000-000000000001",
+            )
 
 
 class ControlledSignalReviewerTest(unittest.IsolatedAsyncioTestCase):

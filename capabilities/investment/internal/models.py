@@ -153,6 +153,8 @@ class FactSnapshot(FrozenModel):
     def is_active_signal(self, decision_at: datetime) -> bool:
         return (
             self.kind == "SIGNAL"
+            and self.anchor_type != "IndustryChain"
+            and "IndustryChain" not in self.target_labels
             and self.direction not in {None, Direction.UNKNOWN}
             and bool(self.horizons)
             and self.confidence is not None

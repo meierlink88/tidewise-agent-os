@@ -237,6 +237,8 @@ class GraphitiSignalFactProjector:
 
     @staticmethod
     def _validate_anchor(node: EntityNode, expected: AnchorCandidate) -> None:
+        if expected.entity_type.value == "IndustryChain":
+            raise PermanentEventAnalysisFailure("IndustryChain cannot own a direct Signal Fact")
         if node.uuid != expected.uuid or expected.entity_type.value not in node.labels:
             raise PermanentEventAnalysisFailure("Anchor endpoint is not an eligible existing identity")
         stable_id = (

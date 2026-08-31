@@ -404,7 +404,7 @@ class GraphitiCandidateRetriever:
         if node.group_id != GRAPHITI_GROUP_ID:
             return None
         entity_type = next((item for item in allowed if item.value in node.labels), None)
-        if entity_type is None:
+        if entity_type is None or entity_type == AnalysisAnchorType.INDUSTRY_CHAIN:
             return None
         business_id = (
             node.attributes.get("data_object_id")

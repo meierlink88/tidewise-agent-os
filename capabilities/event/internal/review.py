@@ -41,6 +41,7 @@ class ControlledSignalReviewer:
             (
                 proposal.anchor_uuid == anchor.uuid,
                 proposal.variable_uuid == variable.uuid,
+                anchor.entity_type.value != "IndustryChain",
                 anchor.entity_type in variable.allowed_anchor_types,
                 proposal.direction != SignalDirection.UNKNOWN,
                 proposal.valid_at == event.reference_time,

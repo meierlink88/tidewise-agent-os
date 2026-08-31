@@ -172,8 +172,9 @@ class LocalInvestmentWorkflowRuntime:
                 "但后者必须同时引用把父层影响连接到宏观锚点的普通 mechanism Fact。"
             ),
             ImpactLayer.INDUSTRY: (
-                "只分析预置 IndustryChain/ChainNode 锚点。可引用直接产业 Signal；或引用已接受的上层结论，"
-                "但后者必须同时引用连接到产业锚点的普通 mechanism Fact。"
+                "只对预置 ChainNode 提出产业层 Claim。IndustryChain 只是节点集合与后续汇总视图，"
+                "不拥有直接 Signal 或单独 Claim。可引用节点直接 Signal；或引用已接受的上层结论，"
+                "但后者必须同时引用连接到该节点的普通 mechanism Fact。"
             ),
         }[context.layer]
         payload = context.model_dump(mode="json")

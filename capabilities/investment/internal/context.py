@@ -214,19 +214,23 @@ class InvestmentContextBuilder:
         facts = list(facts_by_id.values())
         anchor_node_ids: set[str] = set()
         direct_chain_ids: set[str] = set()
-        # Semantic candidates are a reasoning search space, not topology authority.
-        # A chain is expanded only when an Event/Signal directly touched its standard
-        # anchor, or when a claim survived the deterministic layer gate.
+        eligible_signals = [
+            fact for fact in facts if fact.uuid in base.eligible_signal_fact_ids and fact.anchor_type == "ChainNode"
+        ]
+        signal_node_ids = {
+            endpoint
+            for fact in eligible_signals
+            for endpoint in (fact.source_business_id, fact.target_business_id)
+            if endpoint is not None
+        }
+        # IndustryChain is an aggregate view. Only Signal-backed ChainNodes and
+        # accepted node claims may select chains for topology expansion.
         for anchor in base.anchors:
-            if anchor.entity_type == "ChainNode":
+            if anchor.entity_type == "ChainNode" and anchor.business_id in signal_node_ids:
                 anchor_node_ids.add(anchor.business_id)
-            elif anchor.entity_type == "IndustryChain":
-                direct_chain_ids.add(anchor.business_id)
         for claim in industry_claims:
             if claim.anchor_type == "ChainNode":
                 anchor_node_ids.add(claim.anchor_id)
-            elif claim.anchor_type == "IndustryChain":
-                direct_chain_ids.add(claim.anchor_id)
         chains = await self._load_chains(
             base.request,
             anchor_node_ids,
@@ -559,10 +563,7 @@ class InvestmentContextBuilder:
             roots = [
                 fact
                 for fact in active_signals
-                if fact.target_business_id == chain_id
-                or fact.source_business_id == chain_id
-                or fact.target_business_id in node_ids
-                or fact.source_business_id in node_ids
+                if fact.target_business_id in node_ids or fact.source_business_id in node_ids
             ]
             root_nodes = [
                 endpoint
@@ -573,7 +574,8 @@ class InvestmentContextBuilder:
             claim_roots = [
                 claim
                 for claim in claims
-                if (claim.anchor_id == chain_id or claim.anchor_id in node_ids)
+                if claim.anchor_type == "ChainNode"
+                and claim.anchor_id in node_ids
                 and set(claim.root_signal_fact_ids) <= eligible_signal_fact_ids
             ]
             root_nodes.extend(claim.anchor_id for claim in claim_roots if claim.anchor_id in node_ids)

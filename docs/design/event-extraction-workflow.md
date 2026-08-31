@@ -119,14 +119,17 @@ same exact pinned Event Signal Analyst version. The Analyst receives the complet
 
 Classification is journaled before candidate retrieval, so a retrieval failure cannot cause reclassification. A
 Function then retrieves a complete bounded set of eligible Anchors and fundamental Variables and freezes it before the
-proposal call. No Agent may invent or alter a UUID. Deterministic validation enforces UUID membership, allowed Anchor
-types, Variable direction semantics, time bounds, duplicate pairs and direct Event support. Classification remains in
-the Artifact even when the terminal result is `NO_SIGNAL` or `NO_SUPPORTED_ANCHOR`.
+proposal call. `IndustryChain` may be used as retrieval context to expand its canonical members, but it is never
+exposed as a direct Signal Anchor; industrial Signals terminate on an existing `ChainNode`. No Agent may invent or
+alter a UUID. Deterministic validation enforces UUID membership, allowed Anchor types, the `ChainNode` ownership rule,
+Variable direction semantics, time bounds, duplicate pairs and direct Event support. Classification remains in the
+Artifact even when the terminal result is `NO_SIGNAL` or `NO_SUPPORTED_ANCHOR`.
 
 ## Publish Signals
 
 Each validated proposal has a deterministic key and its own projection acknowledgement. Existing Variable, Anchor and
-formal Event Episode identities are revalidated before Graphiti `add_triplet`. Graphiti retains native Fact resolution,
+formal Event Episode identities are revalidated before Graphiti `add_triplet`; the writer rejects `IndustryChain`
+targets even if stale catalog or model output reaches this boundary. Graphiti retains native Fact resolution,
 deduplication, temporal contradiction handling and invalidation. A lost acknowledgement may repeat the native call,
 but the deterministic Fact identity prevents a second Signal Fact.
 

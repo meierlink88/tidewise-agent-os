@@ -113,9 +113,10 @@ class EventAgentContractTest(unittest.TestCase):
 
     def test_signal_analyst_contract_supports_ranked_intents_and_direct_cross_layer_signals(self) -> None:
         agent = build_event_signal_analyst_agent()
-        self.assertGreaterEqual(EVENT_SIGNAL_ANALYST_CONTRACT_VERSION, 6)
+        self.assertGreaterEqual(EVENT_SIGNAL_ANALYST_CONTRACT_VERSION, 7)
         self.assertIn("ranking hints", str(agent.additional_context))
         self.assertIn("Company Events may directly affect", str(agent.additional_context))
+        self.assertIn("IndustryChain is a retrieval and aggregation context", str(agent.additional_context))
         self.assertIn("retrieval as recall, not evidence", str(agent.additional_context))
         self.assertIn("LOW confidence never authorizes", str(agent.additional_context))
         self.assertIn("宽泛对象缩小", str(agent.instructions))

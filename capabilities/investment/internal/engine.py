@@ -78,6 +78,8 @@ class InvestmentReasoningEngine:
             anchor = anchors.get(proposal.anchor_id)
             if anchor is None:
                 continue
+            if layer == ImpactLayer.INDUSTRY and anchor.entity_type != "ChainNode":
+                continue
             cited_signals = [active_signals[item] for item in proposal.source_fact_ids if item in active_signals]
             referenced_parents = [parents[item] for item in proposal.parent_claim_ids if item in parents]
             if any(item.layer not in allowed_parent_layers for item in referenced_parents):
