@@ -19,7 +19,7 @@ from sematica.ontology.enums import AnalysisAnchorType, VariableGroup, VariableR
 from sematica.projection.authoritative_writer import GROUP_ID, write_projection
 from sematica.projection.runtime import ProjectionError
 
-CATALOG_PATH = Path(__file__).with_name("catalog.v1.json")
+CATALOG_PATH = Path(__file__).with_name("catalog.v2.json")
 VARIABLE_CATALOG_SOURCE = "tidewise-reason/fundamental-variable-catalog"
 EXPECTED_VARIABLE_COUNT = 56
 EXPECTED_GROUP_COUNTS = {

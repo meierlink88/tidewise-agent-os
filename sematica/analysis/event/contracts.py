@@ -82,6 +82,12 @@ class AnchorCandidate(BaseModel):
         max_length=5,
     )
 
+    @model_validator(mode="after")
+    def industry_chain_is_not_a_direct_signal_anchor(self) -> AnchorCandidate:
+        if self.entity_type == AnalysisAnchorType.INDUSTRY_CHAIN:
+            raise ValueError("IndustryChain is an aggregate view, not a direct Signal anchor")
+        return self
+
 
 class VariableCandidate(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -190,6 +196,12 @@ class SignalFactAttributes(BaseModel):
     mechanism_confidence: ConfidenceLevel
     temporal_confidence: ConfidenceLevel
     methodology_version: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def industry_chain_is_not_a_direct_signal_anchor(self) -> SignalFactAttributes:
+        if self.anchor_type == AnalysisAnchorType.INDUSTRY_CHAIN:
+            raise ValueError("IndustryChain cannot own a direct Signal Fact")
+        return self
 
 
 class SignalDetailDraft(BaseModel):

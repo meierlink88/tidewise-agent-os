@@ -198,6 +198,32 @@ class InvestmentReasoningGateTest(unittest.TestCase):
         self.assertEqual(accepted[0].root_signal_fact_ids, [fact.uuid])
         self.assertEqual(accepted[0].confidence, Confidence.MEDIUM)
 
+    def test_industry_chain_signal_cannot_start_directional_reasoning(self) -> None:
+        fact = self._active_signal().model_copy(
+            update={
+                "uuid": "legacy-chain-signal",
+                "anchor_type": "IndustryChain",
+                "target_uuid": "chain-uuid",
+                "target_name": "测试产业链",
+                "target_business_id": "chain-1",
+                "target_labels": ["Entity", "IndustryChain"],
+            }
+        )
+
+        context = self._context(fact)
+
+        self.assertFalse(fact.is_active_signal(context.request.decision_at))
+        self.assertEqual(context.eligible_signal_fact_ids, set())
+        self.assertEqual(
+            InvestmentReasoningEngine.validate_round(
+                context,
+                [],
+                self._proposal(fact.uuid),
+                round_number=1,
+            ),
+            [],
+        )
+
     def test_first_hop_cannot_escape_signal_horizon(self) -> None:
         fact = self._active_signal()
         proposal = self._proposal(fact.uuid).proposals[0].model_copy(update={"horizon": Horizon.LONG})
@@ -1531,7 +1557,7 @@ class GraphitiInvestmentRetrievalTest(unittest.IsolatedAsyncioTestCase):
             query = call.args[0]
             self.assertIn("fact.created_at IS NULL OR fact.created_at <= $decision_at", query)
 
-    async def test_unscoped_event_signals_cannot_become_industry_chain_roots(self) -> None:
+    async def test_unscoped_event_signals_do_not_even_select_industry_chains(self) -> None:
         gate = InvestmentReasoningGateTest()
         for label, base, signal in gate._unscoped_signal_contexts():
             with self.subTest(source_scope=label):
@@ -1587,9 +1613,8 @@ class GraphitiInvestmentRetrievalTest(unittest.IsolatedAsyncioTestCase):
 
                 expanded = await builder.expand_industry_context(base, layer_context, [])
 
-                self.assertEqual(len(expanded.chains), 1)
-                self.assertEqual(expanded.chains[0].signal_root_fact_ids, [])
-                self.assertEqual(expanded.chains[0].signal_root_node_ids, [])
+                self.assertEqual(expanded.chains, [])
+                reader.load_chain_candidates.assert_not_awaited()
 
     async def test_layer_context_carries_the_schedule_question_and_current_events(self) -> None:
         reader = MagicMock()
