@@ -279,25 +279,31 @@ def _compile_candidate_time(
         evidence_by_id[evidence_id] for evidence_id in candidate.evidence_ids if evidence_id in evidence_by_id
     ]
 
-    def supported_business_time(field: str, value: datetime | None) -> datetime | None:
+    def supported_business_time(field: str, value: datetime | None) -> tuple[datetime | None, str | None]:
         if value is None:
-            return None
+            return None, None
         supported_stages = _BUSINESS_TIME_STAGES[field]
+        supported_times = []
         for evidence in supporting_evidence:
             evidence_time = evidence.semantic.time
             if (
                 evidence.semantic.stage in supported_stages
+                and evidence_time.precision == time.precision
                 and evidence_time.start_at is not None
                 and evidence_time.end_at is not None
                 and evidence_time.start_at <= value <= evidence_time.end_at
             ):
-                return value
-        return None
+                supported_times.append(evidence_time)
+        if not supported_times:
+            return None, None
+        selected = min(supported_times, key=lambda item: (item.start_at, item.end_at))
+        return selected.start_at, selected.precision
 
-    occurred_at = supported_business_time("occurred_at", time.occurred_at)
-    announced_at = supported_business_time("announced_at", time.announced_at)
-    effective_at = supported_business_time("effective_at", time.effective_at)
+    occurred_at, occurred_precision = supported_business_time("occurred_at", time.occurred_at)
+    announced_at, announced_precision = supported_business_time("announced_at", time.announced_at)
+    effective_at, effective_precision = supported_business_time("effective_at", time.effective_at)
     business_time = occurred_at or announced_at or effective_at
+    business_precision = occurred_precision or announced_precision or effective_precision
     source_times = sorted(
         observed
         for evidence in supporting_evidence
@@ -312,7 +318,7 @@ def _compile_candidate_time(
         "announced_at": announced_at,
         "effective_at": effective_at,
         "observed_at": observed_at,
-        "precision": "INSTANT" if observed_at is not None else time.precision,
+        "precision": "INSTANT" if observed_at is not None else (business_precision or time.precision),
     }
     event_payload = candidate.event.model_dump(mode="json")
     event_payload["semantic"] = semantic_payload
