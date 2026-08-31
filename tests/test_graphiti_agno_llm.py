@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 from agno.models.response import ModelResponse
 from graphiti_core.prompts.models import Message
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from sematica.graphiti.agno_llm import AgnoGraphitiLLM, AgnoGraphitiReranker
 
@@ -17,6 +17,10 @@ class StructuredAnswer(BaseModel):
 
 class StructuredTags(BaseModel):
     tags: list[str]
+
+
+class StructuredDefaultTags(BaseModel):
+    tags: list[str] = Field(default_factory=list)
 
 
 class AgnoGraphitiLLMTest(unittest.IsolatedAsyncioTestCase):
@@ -87,6 +91,34 @@ class AgnoGraphitiLLMTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, {"tags": ["macro"]})
         correction = model.aresponse.await_args_list[1].kwargs["messages"][-1]
         self.assertIn("tags: list_type", correction.content)
+
+    async def test_applies_declared_non_null_default_when_model_returns_null(self) -> None:
+        model = AsyncMock()
+        model.id = "registered-deepseek"
+        model.aresponse.return_value = ModelResponse(content='{"tags":null}')
+        client = AgnoGraphitiLLM(model)
+
+        result = await client._generate_response(
+            [Message(role="user", content="question")],
+            response_model=StructuredDefaultTags,
+        )
+
+        self.assertEqual(result, {"tags": []})
+        self.assertEqual(model.aresponse.await_count, 1)
+
+    async def test_does_not_replace_non_null_wrong_type_with_default(self) -> None:
+        model = AsyncMock()
+        model.id = "registered-deepseek"
+        model.aresponse.return_value = ModelResponse(content='{"tags":"macro"}')
+        client = AgnoGraphitiLLM(model)
+
+        with self.assertRaises(ValueError):
+            await client._generate_response(
+                [Message(role="user", content="question")],
+                response_model=StructuredDefaultTags,
+            )
+
+        self.assertEqual(model.aresponse.await_count, 2)
 
     async def test_applies_the_lower_configured_or_per_call_token_cap_without_mutating_registry_model(self) -> None:
         class Model:
