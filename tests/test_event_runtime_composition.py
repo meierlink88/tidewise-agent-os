@@ -2,7 +2,7 @@
 
 import os
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from agno.run import RunContext
 from agno.run.agent import RunOutput
@@ -59,65 +59,107 @@ class EventRuntimeCompositionTest(unittest.TestCase):
 
 
 class PinnedEventAgentExecutionTest(unittest.IsolatedAsyncioTestCase):
-    async def test_loads_and_audits_only_the_exact_published_agent_version(self) -> None:
+    async def test_consecutive_pinned_agent_runs_preserve_workflow_metadata(self) -> None:
         db = MagicMock(name="agentos-db")
         registry = MagicMock(name="registry")
         loaded_agent = MagicMock(name="pinned-agent")
         loaded_agent.id = "event-identity"
         loaded_agent.db = db
-        loaded_agent.arun = AsyncMock(
-            return_value=RunOutput(content={"decision": "SAME_EVENT"}, metadata={"trace": "preserved"})
-        )
+
+        async def agent_run(**kwargs):
+            child_context = kwargs.get("run_context")
+            if child_context is not None:
+                child_context.metadata = dict(kwargs["metadata"])
+            return RunOutput(content={"decision": "SAME_EVENT"}, metadata={"trace": "preserved"})
+
+        loaded_agent.arun = AsyncMock(side_effect=agent_run)
         runtime = LocalEventWorkflowRuntime(
             MagicMock(name="agentos-graphiti"),
             MagicMock(name="data-event-client"),
             db,
             registry,
         )
+        workflow_metadata = {
+            "event_agent_versions": {
+                "event-extractor": 10,
+                "event-identity": 17,
+                "event-signal-analyst": 2,
+            }
+        }
         run_context = RunContext(
             run_id="workflow-run-1",
             session_id="event-session-1",
             user_id="event-user-1",
             dependencies={},
+            metadata=dict(workflow_metadata),
         )
-        request = {"candidate_key": "candidate-1"}
 
         with patch(
             "capabilities.event.internal.local_runtime.Agent.load",
             return_value=loaded_agent,
         ) as load_agent:
-            response = await runtime.invoke_agent(
+            first = await runtime.invoke_agent(
                 "event-identity",
                 17,
-                request,
+                {"candidate_key": "candidate-1"},
+                run_context,
+            )
+            second = await runtime.invoke_agent(
+                "event-identity",
+                17,
+                {"candidate_key": "candidate-2"},
                 run_context,
             )
 
-        load_agent.assert_called_once_with(
-            "event-identity",
-            db=db,
-            registry=registry,
-            version=17,
-            strict=True,
-            published_only=True,
+        load_agent.assert_has_calls(
+            [
+                call(
+                    "event-identity",
+                    db=db,
+                    registry=registry,
+                    version=17,
+                    strict=True,
+                    published_only=True,
+                ),
+                call(
+                    "event-identity",
+                    db=db,
+                    registry=registry,
+                    version=17,
+                    strict=True,
+                    published_only=True,
+                ),
+            ]
         )
-        loaded_agent.arun.assert_awaited_once_with(
-            input=request,
-            stream=False,
-            session_id="event-session-1:event-identity",
-            user_id="event-user-1",
-            run_context=run_context,
-            metadata={"event_agent_id": "event-identity", "event_agent_version": 17},
+        loaded_agent.arun.assert_has_awaits(
+            [
+                call(
+                    input={"candidate_key": "candidate-1"},
+                    stream=False,
+                    session_id="event-session-1:event-identity",
+                    user_id="event-user-1",
+                    metadata={"event_agent_id": "event-identity", "event_agent_version": 17},
+                ),
+                call(
+                    input={"candidate_key": "candidate-2"},
+                    stream=False,
+                    session_id="event-session-1:event-identity",
+                    user_id="event-user-1",
+                    metadata={"event_agent_id": "event-identity", "event_agent_version": 17},
+                ),
+            ]
         )
+        self.assertEqual(run_context.metadata, workflow_metadata)
         self.assertIsNone(loaded_agent.db)
-        self.assertEqual(
-            response.metadata,
-            {
-                "trace": "preserved",
-                "event_agent_id": "event-identity",
-                "event_agent_version": 17,
-            },
-        )
+        for response in (first, second):
+            self.assertEqual(
+                response.metadata,
+                {
+                    "trace": "preserved",
+                    "event_agent_id": "event-identity",
+                    "event_agent_version": 17,
+                },
+            )
 
 
 if __name__ == "__main__":
