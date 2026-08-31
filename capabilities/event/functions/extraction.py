@@ -92,6 +92,12 @@ _EVENT_AGENT_EXECUTION_VERSIONS = "event_agent_execution_versions"
 _EVENT_RESOLUTION_LIMIT = 50
 _EVENT_SIGNAL_TASK_LIMIT = _EVENT_RESOLUTION_LIMIT * 2
 
+_BUSINESS_TIME_STAGES: dict[str, frozenset[str]] = {
+    "occurred_at": frozenset({"OCCURRED", "IMPLEMENTED", "UPDATED", "SUSPENDED", "TERMINATED"}),
+    "announced_at": frozenset({"ANNOUNCED"}),
+    "effective_at": frozenset({"EFFECTIVE", "EXPECTED"}),
+}
+
 
 def _raise_stage_failure(stage: str, batch_id: str, error: Exception) -> NoReturn:
     """Emit a safe correlation handle without logging provider payloads or secrets."""
@@ -269,11 +275,32 @@ def _compile_candidate_time(
     """Compile missing business time from immutable source observation metadata."""
 
     time = candidate.event.semantic.time
-    business_time = time.occurred_at or time.announced_at or time.effective_at
+    supporting_evidence = [
+        evidence_by_id[evidence_id] for evidence_id in candidate.evidence_ids if evidence_id in evidence_by_id
+    ]
+
+    def supported_business_time(field: str, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        supported_stages = _BUSINESS_TIME_STAGES[field]
+        for evidence in supporting_evidence:
+            evidence_time = evidence.semantic.time
+            if (
+                evidence.semantic.stage in supported_stages
+                and evidence_time.start_at is not None
+                and evidence_time.end_at is not None
+                and evidence_time.start_at <= value <= evidence_time.end_at
+            ):
+                return value
+        return None
+
+    occurred_at = supported_business_time("occurred_at", time.occurred_at)
+    announced_at = supported_business_time("announced_at", time.announced_at)
+    effective_at = supported_business_time("effective_at", time.effective_at)
+    business_time = occurred_at or announced_at or effective_at
     source_times = sorted(
         observed
-        for evidence_id in candidate.evidence_ids
-        if (evidence := evidence_by_id.get(evidence_id)) is not None
+        for evidence in supporting_evidence
         if (observed := evidence.published_at or evidence.collected_at) is not None
     )
     observed_at = None if business_time is not None else (source_times[0] if source_times else None)
@@ -281,9 +308,9 @@ def _compile_candidate_time(
         return None
     semantic_payload = candidate.event.semantic.model_dump(mode="json")
     semantic_payload["time"] = {
-        "occurred_at": time.occurred_at,
-        "announced_at": time.announced_at,
-        "effective_at": time.effective_at,
+        "occurred_at": occurred_at,
+        "announced_at": announced_at,
+        "effective_at": effective_at,
         "observed_at": observed_at,
         "precision": "INSTANT" if observed_at is not None else time.precision,
     }

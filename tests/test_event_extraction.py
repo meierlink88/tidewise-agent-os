@@ -985,6 +985,73 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         published = next(iter(self.runtime._published_by_key.values()))
         self.assertEqual(published["event"]["semantic"]["time"]["observed_at"], "2026-08-29T13:46:38Z")
 
+    async def test_source_observation_cannot_be_relabelled_as_announced_business_time(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        candidate = self.extraction_draft().candidates[0]
+        event_payload = candidate.event.model_dump(mode="json")
+        event_payload["semantic"]["stage"] = "EXPECTED"
+        event_payload["semantic"]["time"] = {
+            "occurred_at": None,
+            "announced_at": "2026-08-29T13:46:38Z",
+            "effective_at": None,
+            "observed_at": None,
+            "precision": "INSTANT",
+        }
+        evidences = self.evidences()
+        expected_semantic = evidences[0].semantic.model_copy(
+            update={
+                "stage": "EXPECTED",
+                "time": evidences[0].semantic.time.model_copy(
+                    update={
+                        "raw": "2026年",
+                        "start_at": datetime(2025, 12, 31, 16, tzinfo=UTC),
+                        "end_at": datetime(2026, 12, 31, 15, 59, 59, 999999, tzinfo=UTC),
+                        "precision": "YEAR",
+                    }
+                ),
+            }
+        )
+        draft = EventExtractionDraft(
+            candidates=[{"event": event_payload, "evidence_ids": candidate.evidence_ids}],
+            no_event=[],
+        )
+        studio = FakeStudioResponses(
+            extraction=draft,
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
+
+        with patch.object(
+            self,
+            "evidences",
+            return_value=[
+                evidences[0].model_copy(update={"semantic": expected_semantic}),
+                evidences[1].model_copy(update={"semantic": expected_semantic}),
+            ],
+        ):
+            response = await self.execute_workflow(
+                workflow,
+                extractor,
+                identity,
+                signal_analyst,
+                studio,
+                run_id="run-reject-relabelled-observation",
+                enqueue=True,
+            )
+
+        self.assertEqual(response.status, RunStatus.completed)
+        compiled_time = studio.identity_inputs[0].candidate.event.semantic.time
+        self.assertIsNone(compiled_time.announced_at)
+        self.assertEqual(compiled_time.observed_at, datetime(2026, 8, 29, 13, 46, 38, tzinfo=UTC))
+        self.assertEqual(compiled_time.precision, "INSTANT")
+
     def test_formal_history_rejects_time_without_business_or_observed_anchor(self) -> None:
         payload = self.extraction_draft().candidates[0].event.model_dump(mode="json")
         payload["semantic"]["time"] = {
