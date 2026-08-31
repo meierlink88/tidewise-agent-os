@@ -880,6 +880,7 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         proposed = cast(EventSignalAnalysisRequest, studio.signal_inputs[1])
         self.assertEqual(proposed.classification, self.classification())
         self.assertEqual(proposed.candidates, self.candidates())
+        self.assertEqual(proposed.analysis.reference_time, datetime(2026, 8, 25, tzinfo=UTC))
         self.assertEqual(
             proposed.analysis.event.event.semantic.model_dump(mode="json"),
             resolved_semantic.model_dump(mode="json"),
@@ -979,6 +980,8 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(compiled_time.occurred_at)
         self.assertIsNone(compiled_time.announced_at)
         self.assertIsNone(compiled_time.effective_at)
+        classified = cast(EventSignalClassificationRequest, studio.signal_inputs[0])
+        self.assertEqual(classified.analysis.reference_time, compiled_time.observed_at)
         published = next(iter(self.runtime._published_by_key.values()))
         self.assertEqual(published["event"]["semantic"]["time"]["observed_at"], "2026-08-29T13:46:38Z")
 

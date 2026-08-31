@@ -7,7 +7,7 @@ import json
 import logging
 import traceback
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any, Literal, NoReturn, cast
 from uuid import uuid4
 
@@ -780,7 +780,13 @@ def _analysis_input(publication: EventPublicationRecord) -> EventAnalysisInput:
         id=publication.published_event.id,
         event=EventCandidateDTO.model_validate(publication.published_event.event.model_dump(mode="json")),
     )
-    return EventAnalysisInput(event=historical, episode_uuid=publication.episode_uuid, reference_time=datetime.now(UTC))
+    reference_time = event_time_anchor(historical.event.semantic.time)
+    assert reference_time is not None
+    return EventAnalysisInput(
+        event=historical,
+        episode_uuid=publication.episode_uuid,
+        reference_time=reference_time,
+    )
 
 
 async def prepare_signal_task(step_input: StepInput, run_context: RunContext) -> StepOutput:
