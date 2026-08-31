@@ -28,20 +28,21 @@ class EventTimeDTO(BaseModel):
     occurred_at: datetime | None
     announced_at: datetime | None
     effective_at: datetime | None
+    observed_at: datetime | None = None
     precision: TimePrecision
 
-    @field_validator("occurred_at", "announced_at", "effective_at")
+    @field_validator("occurred_at", "announced_at", "effective_at", "observed_at")
     @classmethod
     def event_times_are_utc(cls, value: datetime | None) -> datetime | None:
         if value is not None and (value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value)):
             raise ValueError("Event time values must be explicit UTC")
         return value
 
-    @model_validator(mode="after")
-    def occurrence_has_a_time_anchor(self) -> EventTimeDTO:
-        if self.occurred_at is None and self.announced_at is None and self.effective_at is None:
-            raise ValueError("Event time requires an occurrence, announcement, or effective time")
-        return self
+
+def event_time_anchor(value: EventTimeDTO) -> datetime | None:
+    """Return the ordered formal Event time anchor."""
+
+    return value.occurred_at or value.announced_at or value.effective_at or value.observed_at
 
 
 def _metric_key(metric: EvidenceMetric) -> tuple[str, str, str, str, str]:
@@ -137,3 +138,9 @@ class HistoricalEvent(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     id: str
     event: EventCandidateDTO
+
+    @model_validator(mode="after")
+    def require_formal_time_anchor(self) -> HistoricalEvent:
+        if event_time_anchor(self.event.semantic.time) is None:
+            raise ValueError("formal Event time requires a business or observed time anchor")
+        return self

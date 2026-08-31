@@ -80,7 +80,7 @@ from capabilities.event.internal.storage import (
 from sematica.analysis.event.contracts import EventAnalysisInput, EventClassification, SignalProposal
 from sematica.analysis.event.errors import PermanentEventAnalysisFailure
 from sematica.ingestion.episcode.event.adapters import PublicationRejected
-from sematica.ingestion.episcode.event.contracts import EventCandidateDTO, HistoricalEvent
+from sematica.ingestion.episcode.event.contracts import EventCandidateDTO, HistoricalEvent, event_time_anchor
 
 logger = logging.getLogger(__name__)
 
@@ -246,18 +246,12 @@ def _event_draft_from_content(content: Any) -> EventExtractionDraft:
     for item in candidates_payload:
         try:
             candidates.append(EventCandidateSubmission.model_validate(item))
-        except ValidationError as exc:
-            missing_time = bool(exc.errors()) and all(
-                error.get("type") == "value_error"
-                and "Event time requires an occurrence, announcement, or effective time" in str(error.get("msg"))
-                for error in exc.errors()
-            )
+        except ValidationError:
             evidence_ids = item.get("evidence_ids") if isinstance(item, dict) else None
-            reason = "missing_reliable_time" if missing_time else "invalid_event_semantics"
             if isinstance(evidence_ids, list):
                 for evidence_id in evidence_ids:
                     try:
-                        dispositions.append(EventDisposition(evidence_id=evidence_id, reason=reason))
+                        dispositions.append(EventDisposition(evidence_id=evidence_id, reason="invalid_event_semantics"))
                     except ValidationError:
                         continue
     for item in no_event_payload:
@@ -268,11 +262,53 @@ def _event_draft_from_content(content: Any) -> EventExtractionDraft:
     return EventExtractionDraft(candidates=candidates, no_event=dispositions)
 
 
+def _compile_candidate_time(
+    candidate: EventCandidateSubmission,
+    evidence_by_id: dict[str, Any],
+) -> EventCandidateSubmission | None:
+    """Compile missing business time from immutable source observation metadata."""
+
+    time = candidate.event.semantic.time
+    business_time = time.occurred_at or time.announced_at or time.effective_at
+    source_times = sorted(
+        observed
+        for evidence_id in candidate.evidence_ids
+        if (evidence := evidence_by_id.get(evidence_id)) is not None
+        if (observed := evidence.published_at or evidence.collected_at) is not None
+    )
+    observed_at = None if business_time is not None else (source_times[0] if source_times else None)
+    if business_time is None and observed_at is None:
+        return None
+    semantic_payload = candidate.event.semantic.model_dump(mode="json")
+    semantic_payload["time"] = {
+        "occurred_at": time.occurred_at,
+        "announced_at": time.announced_at,
+        "effective_at": time.effective_at,
+        "observed_at": observed_at,
+        "precision": "INSTANT" if observed_at is not None else time.precision,
+    }
+    event_payload = candidate.event.model_dump(mode="json")
+    event_payload["semantic"] = semantic_payload
+    return EventCandidateSubmission.model_validate({"event": event_payload, "evidence_ids": candidate.evidence_ids})
+
+
 def _validate_partition(batch: EventExtractionBatch, draft: EventExtractionDraft) -> EventExtractionDraft:
     expected = {item.id for item in batch.evidences}
     evidence_by_id = {item.id: item for item in batch.evidences}
-    occurrence_merged: list[EventCandidateSubmission] = []
+    time_dispositions: list[EventDisposition] = []
+    compiled_candidates: list[EventCandidateSubmission] = []
     for candidate in draft.candidates:
+        compiled = _compile_candidate_time(candidate, evidence_by_id)
+        if compiled is None:
+            time_dispositions.extend(
+                EventDisposition(evidence_id=evidence_id, reason="missing_reliable_time")
+                for evidence_id in candidate.evidence_ids
+                if evidence_id in expected
+            )
+        else:
+            compiled_candidates.append(compiled)
+    occurrence_merged: list[EventCandidateSubmission] = []
+    for candidate in compiled_candidates:
         duplicate_index = next(
             (
                 index
@@ -339,7 +375,7 @@ def _validate_partition(batch: EventExtractionBatch, draft: EventExtractionDraft
 
     candidate_ids = {evidence_id for candidate in normalized_candidates for evidence_id in candidate.evidence_ids}
     dispositions_by_id: dict[str, EventDisposition] = {}
-    for disposition in draft.no_event:
+    for disposition in [*draft.no_event, *time_dispositions]:
         if disposition.evidence_id in expected and disposition.evidence_id not in candidate_ids:
             dispositions_by_id.setdefault(disposition.evidence_id, disposition)
     for evidence_id in ambiguous:
@@ -867,11 +903,7 @@ async def _validated_signal_analysis(
 
     anchors = {item.uuid: item for item in request.candidates.anchors}
     variables = {item.uuid: item for item in request.candidates.variables}
-    event_time = (
-        request.analysis.event.event.semantic.time.occurred_at
-        or request.analysis.event.event.semantic.time.announced_at
-        or request.analysis.event.event.semantic.time.effective_at
-    )
+    event_time = event_time_anchor(request.analysis.event.event.semantic.time)
     assert event_time is not None
     assertion_modality = cast(
         Literal["ACTUAL", "ANTICIPATED", "SOURCE_FORECAST", "ASSUMED"],

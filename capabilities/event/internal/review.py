@@ -12,6 +12,7 @@ from sematica.analysis.event.contracts import (
     SignalProposal,
     VariableCandidate,
 )
+from sematica.ingestion.episcode.event.contracts import event_time_anchor
 
 
 class ControlledSignalReviewer:
@@ -25,11 +26,7 @@ class ControlledSignalReviewer:
         variable: VariableCandidate,
         anchor: AnchorCandidate,
     ) -> bool:
-        event_time = (
-            event.event.event.semantic.time.occurred_at
-            or event.event.event.semantic.time.announced_at
-            or event.event.event.semantic.time.effective_at
-        )
+        event_time = event_time_anchor(event.event.event.semantic.time)
         assert event_time is not None
         expected_modality = {
             "FACT": "ACTUAL",

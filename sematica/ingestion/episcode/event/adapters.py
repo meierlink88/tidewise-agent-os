@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from sematica.ingestion.episcode.event.contracts import (
     EventCandidateDTO,
     HistoricalEvent,
+    event_time_anchor,
 )
 from sematica.ingestion.episcode.event.provenance import EVENT_SOURCE_DESCRIPTION
 from sematica.projection.runtime import GRAPHITI_GROUP_ID
@@ -126,12 +127,8 @@ def _identity_rank(candidate: EventCandidateDTO, historical: HistoricalEvent) ->
     object_overlap = len(objects & {value.casefold() for value in event.semantic.objects})
     action_match = candidate.semantic.action.casefold() == event.semantic.action.casefold()
     stage_match = candidate.semantic.stage == event.semantic.stage
-    anchor = (
-        candidate.semantic.time.occurred_at
-        or candidate.semantic.time.announced_at
-        or candidate.semantic.time.effective_at
-    )
-    other = event.semantic.time.occurred_at or event.semantic.time.announced_at or event.semantic.time.effective_at
+    anchor = event_time_anchor(candidate.semantic.time)
+    other = event_time_anchor(event.semantic.time)
     distance = abs((anchor - other).total_seconds()) if anchor and other else float("inf")
     return (-int(stage_match), -actor_overlap, -object_overlap, -int(action_match), distance, historical.id)
 

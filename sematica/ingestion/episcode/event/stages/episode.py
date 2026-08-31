@@ -9,7 +9,7 @@ from graphiti_core import Graphiti
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 from pydantic import BaseModel
 
-from sematica.ingestion.episcode.event.contracts import HistoricalEvent
+from sematica.ingestion.episcode.event.contracts import HistoricalEvent, event_time_anchor
 from sematica.ingestion.episcode.event.provenance import (
     EVENT_SOURCE_DESCRIPTION,
     PENDING_EVENT_SOURCE_DESCRIPTION,
@@ -142,11 +142,7 @@ class GraphitiEpisodeStage:
             if source_description == EVENT_SOURCE_DESCRIPTION or int(row["mention_count"]) > 0:
                 native_projection_required = False
 
-        valid_at = (
-            historical.event.semantic.time.occurred_at
-            or historical.event.semantic.time.announced_at
-            or historical.event.semantic.time.effective_at
-        )
+        valid_at = event_time_anchor(historical.event.semantic.time)
         assert valid_at is not None
         if native_projection_required:
             if not records:
