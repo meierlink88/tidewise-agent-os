@@ -152,7 +152,7 @@ def _publish_pinned_workflow(
     return version
 
 
-def _validate_published_agent_pins(db: Any, version: int, metadata: dict[str, Any]) -> None:
+def _validate_published_agent_pins(db: Any, version: int, metadata: dict[str, Any]) -> dict[str, int]:
     if metadata.get("event_extraction_publication_policy") != EVENT_EXTRACTION_PUBLICATION_POLICY:
         raise ValueError("Event Extraction must use its code-managed exact-link publication policy")
     pinned_metadata = metadata.get("event_agent_versions")
@@ -178,6 +178,7 @@ def _validate_published_agent_pins(db: Any, version: int, metadata: dict[str, An
     )
     if len(links) != len(_AGENT_LINK_BINDINGS) or linked_bindings != expected_bindings:
         raise ValueError("Event Extraction published Workflow does not pin all exact Agent versions")
+    return pinned_versions
 
 
 def _loaded_agents(registry: Registry) -> tuple[Agent, Agent, Agent, dict[str, int]]:
@@ -207,18 +208,35 @@ def ensure_event_extraction_workflow(registry: Registry) -> int:
             raise ValueError("Event Extraction published Studio config is missing")
         metadata = dict(config.get("metadata") or {})
         if metadata.get("event_extraction_contract_version") == EVENT_EXTRACTION_CONTRACT_VERSION:
-            _validate_published_agent_pins(db, version, metadata)
-            current = Workflow.load(
-                EVENT_EXTRACTION_WORKFLOW_ID,
-                db=db,
-                registry=registry,
-                version=version,
-                strict=True,
-                published_only=True,
+            pinned_versions = _validate_published_agent_pins(db, version, metadata)
+            extractor, identity, analyst, versions = _loaded_agents(registry)
+            if pinned_versions == versions:
+                current = Workflow.load(
+                    EVENT_EXTRACTION_WORKFLOW_ID,
+                    db=db,
+                    registry=registry,
+                    version=version,
+                    strict=True,
+                    published_only=True,
+                )
+                if current is None or not isinstance(current.steps, list) or not current.steps:
+                    raise ValueError("Event Extraction published Studio version could not be rehydrated")
+                return version
+
+            refreshed = _seed_workflow(extractor, identity, analyst, agent_versions=versions)
+            refreshed.id = str(config.get("id") or EVENT_EXTRACTION_WORKFLOW_ID)
+            refreshed.name = str(config.get("name") or "Event Extraction")
+            refreshed.description = str(config.get("description") or refreshed.description)
+            refreshed.metadata = {
+                **metadata,
+                "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
+                "event_agent_versions": dict(sorted(versions.items())),
+            }
+            return _publish_pinned_workflow(
+                refreshed,
+                agent_versions=versions,
+                notes="Refresh Event Extraction exact Agent version pins",
             )
-            if current is None or not isinstance(current.steps, list) or not current.steps:
-                raise ValueError("Event Extraction published Studio version could not be rehydrated")
-            return version
 
         extractor, identity, analyst, versions = _loaded_agents(registry)
         migrated = _seed_workflow(extractor, identity, analyst, agent_versions=versions)

@@ -163,6 +163,131 @@ class _PinnedVersionRuntime:
 
 
 class EventWorkflowVersioningTest(unittest.IsolatedAsyncioTestCase):
+    def test_same_contract_keeps_workflow_version_when_agent_pins_are_current(self) -> None:
+        versions = {
+            "event-extractor": 11,
+            "event-identity": 2,
+            "event-signal-analyst": 8,
+        }
+        agents = {
+            agent_id: Agent(id=agent_id, name=agent_id, instructions=f"published {agent_id}") for agent_id in versions
+        }
+        loaded_agents = (
+            LoadedEventExtractorAgent(agents["event-extractor"], 11, "a" * 64),
+            LoadedEventIdentityAgent(agents["event-identity"], 2, "b" * 64),
+            LoadedEventSignalAnalystAgent(agents["event-signal-analyst"], 8, "c" * 64),
+        )
+        database = MagicMock()
+        database.get_component.return_value = {"current_version": 30}
+        database.get_config.return_value = {
+            "config": {
+                "metadata": {
+                    "event_extraction_contract_version": 13,
+                    "event_extraction_publication_policy": "code_managed_exact_agent_links.v1",
+                    "event_agent_versions": versions,
+                },
+            },
+            "version": 30,
+        }
+        database.get_links.return_value = [
+            {
+                "link_kind": "step_agent",
+                "link_key": step_id,
+                "child_component_id": agent_id,
+                "child_version": versions[agent_id],
+                "position": position,
+            }
+            for step_id, agent_id, position in (
+                ("event-extract", "event-extractor", 0),
+                ("event-resolve", "event-identity", 1),
+                ("event-signal-analyze", "event-signal-analyst", 3),
+            )
+        ]
+        rehydrated = MagicMock()
+        rehydrated.steps = [MagicMock()]
+
+        with (
+            patch("workflows.event_extraction.get_postgres_db", return_value=database),
+            patch("workflows.event_extraction.load_event_extractor_agent", return_value=loaded_agents[0]),
+            patch("workflows.event_extraction.load_event_identity_agent", return_value=loaded_agents[1]),
+            patch("workflows.event_extraction.load_event_signal_analyst_agent", return_value=loaded_agents[2]),
+            patch("workflows.event_extraction.Workflow.load", return_value=rehydrated) as workflow_load,
+        ):
+            self.assertEqual(ensure_event_extraction_workflow(MagicMock()), 30)
+
+        workflow_load.assert_called_once()
+        database.upsert_config.assert_not_called()
+
+    def test_same_contract_republishes_workflow_when_pinned_agent_version_is_stale(self) -> None:
+        stale_versions = {
+            "event-extractor": 10,
+            "event-identity": 2,
+            "event-signal-analyst": 8,
+        }
+        current_versions = {**stale_versions, "event-extractor": 11}
+        agents = {
+            agent_id: Agent(id=agent_id, name=agent_id, instructions=f"published {agent_id}")
+            for agent_id in current_versions
+        }
+        loaded_agents = (
+            LoadedEventExtractorAgent(agents["event-extractor"], 11, "a" * 64),
+            LoadedEventIdentityAgent(agents["event-identity"], 2, "b" * 64),
+            LoadedEventSignalAnalystAgent(agents["event-signal-analyst"], 8, "c" * 64),
+        )
+        database = MagicMock()
+        database.get_component.return_value = {"current_version": 29}
+        database.get_config.return_value = {
+            "config": {
+                "id": "event-extraction",
+                "name": "Event Extraction",
+                "description": "Studio-managed description",
+                "metadata": {
+                    "event_extraction_contract_version": 13,
+                    "event_extraction_publication_policy": "code_managed_exact_agent_links.v1",
+                    "event_agent_versions": stale_versions,
+                },
+            },
+            "version": 29,
+        }
+        database.get_links.return_value = [
+            {
+                "link_kind": "step_agent",
+                "link_key": step_id,
+                "child_component_id": agent_id,
+                "child_version": stale_versions[agent_id],
+                "position": position,
+            }
+            for step_id, agent_id, position in (
+                ("event-extract", "event-extractor", 0),
+                ("event-resolve", "event-identity", 1),
+                ("event-signal-analyze", "event-signal-analyst", 3),
+            )
+        ]
+        database.upsert_config.return_value = {"version": 30}
+
+        with (
+            patch("workflows.event_extraction.get_postgres_db", return_value=database),
+            patch("workflows.event_extraction.load_event_extractor_agent", return_value=loaded_agents[0]),
+            patch("workflows.event_extraction.load_event_identity_agent", return_value=loaded_agents[1]),
+            patch("workflows.event_extraction.load_event_signal_analyst_agent", return_value=loaded_agents[2]),
+            patch("workflows.event_extraction.Workflow.load") as workflow_load,
+        ):
+            self.assertEqual(ensure_event_extraction_workflow(MagicMock()), 30)
+
+        workflow_load.assert_not_called()
+        publication = database.upsert_config.call_args.kwargs
+        self.assertEqual(publication["config"]["name"], "Event Extraction")
+        self.assertEqual(publication["config"]["description"], "Studio-managed description")
+        self.assertEqual(publication["config"]["metadata"]["event_agent_versions"], current_versions)
+        self.assertEqual(
+            {
+                link["child_component_id"]: link["child_version"]
+                for link in publication["links"]
+                if link["link_kind"] == "step_agent"
+            },
+            current_versions,
+        )
+
     def test_application_registry_rehydrates_flat_and_historical_event_workflows(self) -> None:
         from app.registry import registry
 
