@@ -407,6 +407,8 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
                 summary="示例公司宣布签署服务器订单",
                 keywords=["服务器", "订单"],
                 semantic=semantic,
+                published_at=datetime(2026, 8, 29, 13, 46, 38, tzinfo=UTC),
+                collected_at=datetime(2026, 8, 30, 3, 40, 33, tzinfo=UTC),
             ),
             ResolvedEvidence(
                 id=cls.SECOND_EVIDENCE_ID,
@@ -414,6 +416,8 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
                 summary="示例公司的同一服务器订单公告",
                 keywords=["服务器", "订单"],
                 semantic={**semantic, "method": "通过正式采购合同签署"},
+                published_at=None,
+                collected_at=datetime(2026, 8, 30, 3, 42, tzinfo=UTC),
             ),
         ]
 
@@ -876,12 +880,14 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         proposed = cast(EventSignalAnalysisRequest, studio.signal_inputs[1])
         self.assertEqual(proposed.classification, self.classification())
         self.assertEqual(proposed.candidates, self.candidates())
+        self.assertEqual(proposed.analysis.reference_time, datetime(2026, 8, 24, 16, tzinfo=UTC))
         self.assertEqual(
             proposed.analysis.event.event.semantic.model_dump(mode="json"),
             resolved_semantic.model_dump(mode="json"),
         )
         published = next(iter(self.runtime._published_by_key.values()))
         self.assertEqual(published["event"]["semantic"], resolved_semantic.model_dump(mode="json"))
+        self.assertIsNone(resolved_semantic.time.observed_at)
         execution_journal = EventAgentExecutionJournal.model_validate_json(
             (self.event_root / "batches" / result.batch_id / "agent-executions.json").read_text(encoding="utf-8")
         )
@@ -921,6 +927,278 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
             ),
             (1, 1, 1, 1, 1),
         )
+
+    async def test_missing_business_time_uses_earliest_evidence_observation(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        candidate = self.extraction_draft().candidates[0]
+        event_payload = candidate.event.model_dump(mode="json")
+        event_payload["semantic"]["time"] = {
+            "occurred_at": None,
+            "announced_at": None,
+            "effective_at": None,
+            "observed_at": None,
+            "precision": "UNKNOWN",
+        }
+        draft = EventExtractionDraft(
+            candidates=[
+                {
+                    "event": event_payload,
+                    "evidence_ids": candidate.evidence_ids,
+                }
+            ],
+            no_event=[],
+        )
+        studio = FakeStudioResponses(
+            extraction=draft,
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
+
+        response = await self.execute_workflow(
+            workflow,
+            extractor,
+            identity,
+            signal_analyst,
+            studio,
+            run_id="run-observed-time-fallback",
+            enqueue=True,
+        )
+
+        self.assertEqual(response.status, RunStatus.completed)
+        result = EventExtractionResult.model_validate(response.content)
+        self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID])
+        compiled_time = studio.identity_inputs[0].candidate.event.semantic.time
+        self.assertEqual(compiled_time.observed_at, datetime(2026, 8, 29, 13, 46, 38, tzinfo=UTC))
+        self.assertEqual(compiled_time.precision, "INSTANT")
+        self.assertIsNone(compiled_time.occurred_at)
+        self.assertIsNone(compiled_time.announced_at)
+        self.assertIsNone(compiled_time.effective_at)
+        classified = cast(EventSignalClassificationRequest, studio.signal_inputs[0])
+        self.assertEqual(classified.analysis.reference_time, compiled_time.observed_at)
+        published = next(iter(self.runtime._published_by_key.values()))
+        self.assertEqual(published["event"]["semantic"]["time"]["observed_at"], "2026-08-29T13:46:38Z")
+
+    async def test_source_observation_cannot_be_relabelled_as_announced_business_time(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        candidate = self.extraction_draft().candidates[0]
+        event_payload = candidate.event.model_dump(mode="json")
+        event_payload["semantic"]["stage"] = "EXPECTED"
+        event_payload["semantic"]["time"] = {
+            "occurred_at": None,
+            "announced_at": "2026-08-29T13:46:38Z",
+            "effective_at": None,
+            "observed_at": None,
+            "precision": "INSTANT",
+        }
+        evidences = self.evidences()
+        expected_semantic = evidences[0].semantic.model_copy(
+            update={
+                "stage": "EXPECTED",
+                "time": evidences[0].semantic.time.model_copy(
+                    update={
+                        "raw": "2026年",
+                        "start_at": datetime(2025, 12, 31, 16, tzinfo=UTC),
+                        "end_at": datetime(2026, 12, 31, 15, 59, 59, 999999, tzinfo=UTC),
+                        "precision": "YEAR",
+                    }
+                ),
+            }
+        )
+        draft = EventExtractionDraft(
+            candidates=[{"event": event_payload, "evidence_ids": candidate.evidence_ids}],
+            no_event=[],
+        )
+        studio = FakeStudioResponses(
+            extraction=draft,
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
+
+        with patch.object(
+            self,
+            "evidences",
+            return_value=[
+                evidences[0].model_copy(update={"semantic": expected_semantic}),
+                evidences[1].model_copy(update={"semantic": expected_semantic}),
+            ],
+        ):
+            response = await self.execute_workflow(
+                workflow,
+                extractor,
+                identity,
+                signal_analyst,
+                studio,
+                run_id="run-reject-relabelled-observation",
+                enqueue=True,
+            )
+
+        self.assertEqual(response.status, RunStatus.completed)
+        compiled_time = studio.identity_inputs[0].candidate.event.semantic.time
+        self.assertIsNone(compiled_time.announced_at)
+        self.assertEqual(compiled_time.observed_at, datetime(2026, 8, 29, 13, 46, 38, tzinfo=UTC))
+        self.assertEqual(compiled_time.precision, "INSTANT")
+
+    async def test_business_time_cannot_claim_more_precision_than_evidence(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        candidate = self.extraction_draft().candidates[0]
+        event_payload = candidate.event.model_dump(mode="json")
+        event_payload["semantic"]["stage"] = "EXPECTED"
+        event_payload["semantic"]["time"] = {
+            "occurred_at": None,
+            "announced_at": None,
+            "effective_at": "2026-08-29T13:46:38Z",
+            "observed_at": None,
+            "precision": "INSTANT",
+        }
+        evidences = self.evidences()
+        expected_semantic = evidences[0].semantic.model_copy(
+            update={
+                "stage": "EXPECTED",
+                "time": evidences[0].semantic.time.model_copy(
+                    update={
+                        "raw": "2026年",
+                        "start_at": datetime(2025, 12, 31, 16, tzinfo=UTC),
+                        "end_at": datetime(2026, 12, 31, 15, 59, 59, 999999, tzinfo=UTC),
+                        "precision": "YEAR",
+                    }
+                ),
+            }
+        )
+        draft = EventExtractionDraft(
+            candidates=[{"event": event_payload, "evidence_ids": candidate.evidence_ids}],
+            no_event=[],
+        )
+        studio = FakeStudioResponses(
+            extraction=draft,
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
+
+        with patch.object(
+            self,
+            "evidences",
+            return_value=[
+                evidences[0].model_copy(update={"semantic": expected_semantic}),
+                evidences[1].model_copy(update={"semantic": expected_semantic}),
+            ],
+        ):
+            response = await self.execute_workflow(
+                workflow,
+                extractor,
+                identity,
+                signal_analyst,
+                studio,
+                run_id="run-reject-invented-time-precision",
+                enqueue=True,
+            )
+
+        self.assertEqual(response.status, RunStatus.completed)
+        compiled_time = studio.identity_inputs[0].candidate.event.semantic.time
+        self.assertIsNone(compiled_time.effective_at)
+        self.assertEqual(compiled_time.observed_at, datetime(2026, 8, 29, 13, 46, 38, tzinfo=UTC))
+        self.assertEqual(compiled_time.precision, "INSTANT")
+
+    async def test_business_time_uses_evidence_boundary_for_matching_precision(self) -> None:
+        workflow, extractor, identity, signal_analyst = self.workflow()
+        candidate = self.extraction_draft().candidates[0]
+        event_payload = candidate.event.model_dump(mode="json")
+        event_payload["semantic"]["stage"] = "EXPECTED"
+        event_payload["semantic"]["time"] = {
+            "occurred_at": None,
+            "announced_at": None,
+            "effective_at": "2026-08-29T13:46:38Z",
+            "observed_at": None,
+            "precision": "YEAR",
+        }
+        evidences = self.evidences()
+        period_start = datetime(2025, 12, 31, 16, tzinfo=UTC)
+        expected_semantic = evidences[0].semantic.model_copy(
+            update={
+                "stage": "EXPECTED",
+                "time": evidences[0].semantic.time.model_copy(
+                    update={
+                        "raw": "2026年",
+                        "start_at": period_start,
+                        "end_at": datetime(2026, 12, 31, 15, 59, 59, 999999, tzinfo=UTC),
+                        "precision": "YEAR",
+                    }
+                ),
+            }
+        )
+        draft = EventExtractionDraft(
+            candidates=[{"event": event_payload, "evidence_ids": candidate.evidence_ids}],
+            no_event=[],
+        )
+        studio = FakeStudioResponses(
+            extraction=draft,
+            identity=EventIdentityDecision(
+                decision="NEW_EVENT",
+                atomic=True,
+                matched_event_ids=[],
+                reason_codes=["NO_SAME_OCCURRENCE_FOUND"],
+                summary="没有同一正式 Event。",
+            ),
+            classification=self.classification(),
+            proposals=[],
+        )
+
+        with patch.object(
+            self,
+            "evidences",
+            return_value=[
+                evidences[0].model_copy(update={"semantic": expected_semantic}),
+                evidences[1].model_copy(update={"semantic": expected_semantic}),
+            ],
+        ):
+            response = await self.execute_workflow(
+                workflow,
+                extractor,
+                identity,
+                signal_analyst,
+                studio,
+                run_id="run-use-evidence-period-boundary",
+                enqueue=True,
+            )
+
+        self.assertEqual(response.status, RunStatus.completed)
+        compiled_time = studio.identity_inputs[0].candidate.event.semantic.time
+        self.assertEqual(compiled_time.effective_at, period_start)
+        self.assertIsNone(compiled_time.observed_at)
+        self.assertEqual(compiled_time.precision, "YEAR")
+
+    def test_formal_history_rejects_time_without_business_or_observed_anchor(self) -> None:
+        payload = self.extraction_draft().candidates[0].event.model_dump(mode="json")
+        payload["semantic"]["time"] = {
+            "occurred_at": None,
+            "announced_at": None,
+            "effective_at": None,
+            "observed_at": None,
+            "precision": "UNKNOWN",
+        }
+
+        with self.assertRaisesRegex(ValueError, "formal Event time requires"):
+            HistoricalEvent(id=self.HISTORICAL_EVENT_ID, event=EventCandidateDTO.model_validate(payload))
 
     async def test_visible_outer_loop_returns_idle_without_invoking_any_agent(self) -> None:
         workflow, extractor, identity, signal_analyst = self.workflow()

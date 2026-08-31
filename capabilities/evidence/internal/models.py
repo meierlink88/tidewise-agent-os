@@ -1,6 +1,6 @@
 """Typed contracts for Evidence extraction and Data Service publication."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator, model_validator
@@ -510,6 +510,15 @@ class ResolvedEvidence(EvidencePublicationItem):
 
     id: EvidenceID
     raw_evidence_id: RawEvidenceID
+    published_at: datetime | None = None
+    collected_at: datetime | None = None
+
+    @field_validator("published_at", "collected_at")
+    @classmethod
+    def source_times_are_utc(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value)):
+            raise ValueError("resolved Evidence source times must use UTC")
+        return value
 
 
 class EvidencePublicationResult(BaseModel):

@@ -9,7 +9,7 @@ from graphiti_core import Graphiti
 from graphiti_core.nodes import EpisodeType, EpisodicNode
 from pydantic import BaseModel
 
-from sematica.ingestion.episcode.event.contracts import HistoricalEvent
+from sematica.ingestion.episcode.event.contracts import HistoricalEvent, event_time_anchor
 from sematica.ingestion.episcode.event.provenance import (
     EVENT_SOURCE_DESCRIPTION,
     PENDING_EVENT_SOURCE_DESCRIPTION,
@@ -73,6 +73,24 @@ RETURN episode.uuid AS uuid, episode.episode_kind AS episode_kind,
        episode.domain_object_id AS domain_object_id
 """.strip()
 
+ISOLATE_CONTEXTUAL_ENTITIES = """
+/* graphiti_event_contextual_entity_isolation */
+MATCH (episode:Episodic {uuid: $episode_uuid, group_id: $group_id})
+      -[:MENTIONS]->(entity:Entity {group_id: $group_id})
+WHERE coalesce(trim(toString(entity.data_object_id)), '') = ''
+  AND coalesce(trim(toString(entity.demo_catalog_key)), '') = ''
+  AND coalesce(trim(toString(entity.policy_key)), '') = ''
+  AND any(label IN labels(entity) WHERE label IN $controlled_labels)
+SET entity:ContextualEntity,
+    entity.contextual_entity_type = head(
+        [label IN labels(entity) WHERE label IN $controlled_labels]
+    )
+REMOVE entity:Country:Region:Concept:IndustryChain:ChainNode
+RETURN count(entity) AS isolated_count
+""".strip()
+
+CONTROLLED_EVENT_ANCHOR_LABELS = ["Country", "Region", "Concept", "IndustryChain", "ChainNode"]
+
 
 class GraphitiEpisodeStage:
     """Internal Pipeline stage; never a standalone Event publication interface."""
@@ -124,11 +142,7 @@ class GraphitiEpisodeStage:
             if source_description == EVENT_SOURCE_DESCRIPTION or int(row["mention_count"]) > 0:
                 native_projection_required = False
 
-        valid_at = (
-            historical.event.semantic.time.occurred_at
-            or historical.event.semantic.time.announced_at
-            or historical.event.semantic.time.effective_at
-        )
+        valid_at = event_time_anchor(historical.event.semantic.time)
         assert valid_at is not None
         if native_projection_required:
             if not records:
@@ -158,6 +172,16 @@ class GraphitiEpisodeStage:
             )
             if result.episode.uuid != projected_uuid:
                 raise RuntimeError("Graphiti returned an unexpected Event Episode identity")
+
+        # Native extraction is allowed to create contextual entities, but only
+        # catalog-backed entities may retain labels used as controlled Anchors.
+        # Facts and MENTIONS remain connected to the generic Entity node.
+        await self._graphiti.driver.execute_query(
+            ISOLATE_CONTEXTUAL_ENTITIES,
+            episode_uuid=projected_uuid,
+            group_id=GRAPHITI_GROUP_ID,
+            controlled_labels=CONTROLLED_EVENT_ANCHOR_LABELS,
+        )
 
         written, _, _ = await self._graphiti.driver.execute_query(
             MARK_EVENT,

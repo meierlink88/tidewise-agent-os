@@ -29,7 +29,7 @@ from capabilities.event.functions import (
 from db import get_postgres_db
 
 EVENT_EXTRACTION_WORKFLOW_ID = "event-extraction"
-EVENT_EXTRACTION_CONTRACT_VERSION = 9
+EVENT_EXTRACTION_CONTRACT_VERSION = 13
 EVENT_EXTRACTION_BATCH_LIMIT = 50
 EVENT_EXTRACTION_PUBLICATION_POLICY = "code_managed_exact_agent_links.v1"
 _AGENT_LINK_BINDINGS = (

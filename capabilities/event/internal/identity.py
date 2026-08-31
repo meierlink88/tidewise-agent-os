@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from sematica.ingestion.episcode.event.contracts import event_time_anchor
+
 
 def _term(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().casefold()
@@ -15,7 +17,7 @@ def _terms(values: list[str]) -> set[str]:
 
 
 def _time(event: Any) -> Any:
-    return event.semantic.time.occurred_at or event.semantic.time.announced_at or event.semantic.time.effective_at
+    return event_time_anchor(event.semantic.time)
 
 
 def same_occurrence(candidate: Any, historical: Any) -> bool:

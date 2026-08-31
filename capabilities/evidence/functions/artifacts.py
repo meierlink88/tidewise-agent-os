@@ -21,6 +21,8 @@ def read_resolved_evidences(manifest_path: str | Path) -> list[ResolvedEvidence]
                 summary=artifact.prepared.evidences[0].summary,
                 keywords=artifact.prepared.evidences[0].keywords,
                 semantic=artifact.prepared.evidences[0].semantic,
+                published_at=artifact.prepared.prepared_raw.published_at,
+                collected_at=artifact.prepared.prepared_raw.collected_at,
             )
         ]
     return [
@@ -30,6 +32,8 @@ def read_resolved_evidences(manifest_path: str | Path) -> list[ResolvedEvidence]
             summary=artifact.prepared.evidences[binding.input_index].summary,
             keywords=artifact.prepared.evidences[binding.input_index].keywords,
             semantic=artifact.prepared.evidences[binding.input_index].semantic,
+            published_at=artifact.prepared.prepared_raw.published_at,
+            collected_at=artifact.prepared.prepared_raw.collected_at,
         )
         for binding in artifact.bindings.items
     ]

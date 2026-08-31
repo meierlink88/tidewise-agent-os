@@ -83,6 +83,7 @@ class DataEventClientPublicationTest(unittest.IsolatedAsyncioTestCase):
                         "occurred_at": None,
                         "announced_at": "2026-08-25T00:00:00Z",
                         "effective_at": None,
+                        "observed_at": None,
                         "precision": "DAY",
                     },
                     "jurisdictions": ["中国"],

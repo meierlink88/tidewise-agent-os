@@ -111,6 +111,17 @@ class EventAgentContractTest(unittest.TestCase):
                 save.assert_called_once()
                 self.assertIn("runtime contract repair", save.call_args.kwargs["notes"])
 
+    def test_signal_analyst_contract_supports_ranked_intents_and_direct_cross_layer_signals(self) -> None:
+        agent = build_event_signal_analyst_agent()
+        self.assertGreaterEqual(EVENT_SIGNAL_ANALYST_CONTRACT_VERSION, 6)
+        self.assertIn("ranking hints", str(agent.additional_context))
+        self.assertIn("Company Events may directly affect", str(agent.additional_context))
+        self.assertIn("retrieval as recall, not evidence", str(agent.additional_context))
+        self.assertIn("LOW confidence never authorizes", str(agent.additional_context))
+        self.assertIn("宽泛对象缩小", str(agent.instructions))
+        self.assertIn("一跳", str(agent.instructions))
+        self.assertIn("检索意图", str(agent.instructions))
+
 
 if __name__ == "__main__":
     unittest.main()

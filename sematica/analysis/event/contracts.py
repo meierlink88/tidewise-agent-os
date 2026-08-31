@@ -65,7 +65,7 @@ class EventClassification(BaseModel):
     confidence: ConfidenceLevel
     anchor_type_hints: list[AnalysisAnchorType] = Field(max_length=6)
     variable_group_hints: list[VariableGroup] = Field(max_length=9)
-    retrieval_queries: list[str] = Field(min_length=1, max_length=8)
+    retrieval_queries: list[str] = Field(min_length=1, max_length=5)
     rationale: str = Field(min_length=1, max_length=1000)
 
 
@@ -77,6 +77,10 @@ class AnchorCandidate(BaseModel):
     entity_type: AnalysisAnchorType
     business_id: str = Field(min_length=1)
     summary: str = ""
+    retrieval_sources: list[Literal["EXACT", "MENTION", "FACT", "SEMANTIC", "TOPOLOGY"]] = Field(
+        default_factory=list,
+        max_length=5,
+    )
 
 
 class VariableCandidate(BaseModel):
@@ -229,11 +233,12 @@ class DirectSignalDraft(SignalDetailDraft):
         self,
         *,
         event_time: datetime,
+        reference_time: datetime,
         assertion_modality: Literal["ACTUAL", "ANTICIPATED", "SOURCE_FORECAST", "ASSUMED"],
     ) -> SignalProposal:
-        valid_at = event_time + timedelta(days=self.impact_onset_days)
+        impact_onset = event_time + timedelta(days=self.impact_onset_days)
         impact_peak = event_time + timedelta(days=self.impact_peak_days)
-        expected_end = valid_at + timedelta(days=self.expected_duration_days)
+        expected_end = impact_onset + timedelta(days=self.expected_duration_days)
         horizon = (
             "SHORT" if self.expected_duration_days <= 90 else "MEDIUM" if self.expected_duration_days <= 365 else "LONG"
         )
@@ -245,9 +250,9 @@ class DirectSignalDraft(SignalDetailDraft):
             magnitude=self.magnitude,
             derivation_type="DERIVED",
             assertion_modality=assertion_modality,
-            valid_at=valid_at,
-            impact_onset_earliest=valid_at,
-            impact_onset_latest=valid_at,
+            valid_at=reference_time,
+            impact_onset_earliest=impact_onset,
+            impact_onset_latest=impact_onset,
             impact_peak_earliest=impact_peak,
             impact_peak_latest=impact_peak,
             expected_end_earliest=expected_end,

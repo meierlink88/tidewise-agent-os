@@ -9,8 +9,10 @@ from graphiti_core.errors import NodeNotFoundError
 from graphiti_core.graphiti import AddTripletResults
 from graphiti_core.nodes import EntityNode, EpisodeType, EpisodicNode
 
+from capabilities.event.internal.review import ControlledSignalReviewer
 from sematica.analysis.event.contracts import (
     AnchorCandidate,
+    DirectSignalDraft,
     EventAnalysisInput,
     EventClassification,
     SignalProposal,
@@ -391,6 +393,102 @@ class GraphitiSignalFactProjectionTest(unittest.IsolatedAsyncioTestCase):
                 "methodology_version": "event-analysis/v1",
             },
         )
+
+    async def test_company_candidate_is_reviewed_and_projected_to_existing_chain_node(self) -> None:
+        candidate = EventCandidateDTO.model_validate(
+            {
+                "title": "示例芯片企业获得AI服务器订单",
+                "summary": "示例芯片企业宣布获得AI服务器订单。",
+                "semantic": {
+                    "actors": ["示例芯片企业"],
+                    "action": "获得订单",
+                    "objects": ["AI服务器"],
+                    "stage": "ANNOUNCED",
+                    "modality": "FACT",
+                    "time": {
+                        "occurred_at": None,
+                        "announced_at": self.EVENT_TIME,
+                        "effective_at": None,
+                        "precision": "DAY",
+                    },
+                    "jurisdictions": ["中国"],
+                    "reason": "客户扩容需求",
+                    "method": "公告披露",
+                    "metrics": [],
+                },
+            }
+        )
+        event = EventAnalysisInput(
+            event=HistoricalEvent(id=self.EVENT_ID, event=candidate),
+            episode_uuid=event_episode_uuid(self.EVENT_ID),
+            reference_time=self.EVENT_TIME,
+        )
+        classification = EventClassification(
+            event_class="COMPANY",
+            confidence="HIGH",
+            anchor_type_hints=["ChainNode"],
+            variable_group_hints=["DEMAND"],
+            retrieval_queries=["AI服务器 订单"],
+            rationale="公司订单直接改变既有产业链节需求。",
+        )
+        variable = self.variable().model_copy(
+            update={
+                "variable_id": "market_demand",
+                "name": "市场需求",
+                "variable_group": "DEMAND",
+                "definition": "产业链节面向客户的真实需求。",
+            }
+        )
+        anchor = self.anchor().model_copy(update={"name": "AI服务器", "business_id": "CND-AI-SERVER"})
+        proposal = DirectSignalDraft(
+            anchor_uuid=anchor.uuid,
+            variable_uuid=variable.uuid,
+            fact="新增订单提高AI服务器市场需求。",
+            direction="UP",
+            magnitude="MEDIUM",
+            impact_onset_days=0,
+            impact_peak_days=30,
+            expected_duration_days=90,
+            mechanism="已披露订单直接增加AI服务器需求。",
+            duration_basis="订单履行周期。",
+            assumptions=[],
+            invalidation_conditions=["订单取消"],
+            provenance_confidence="HIGH",
+            mechanism_confidence="HIGH",
+            temporal_confidence="MEDIUM",
+        ).proposal(
+            event_time=self.EVENT_TIME,
+            reference_time=self.EVENT_TIME,
+            assertion_modality="ACTUAL",
+        )
+
+        accepted = await ControlledSignalReviewer().review(
+            event,
+            classification,
+            proposal,
+            variable,
+            anchor,
+        )
+        self.assertTrue(accepted)
+        state, graphiti = self.graph()
+        state.nodes[self.VARIABLE_UUID].name = variable.name
+        state.nodes[self.VARIABLE_UUID].attributes.update(
+            {"variable_id": variable.variable_id, "variable_role": "FUNDAMENTAL"}
+        )
+        state.nodes[self.ANCHOR_UUID].name = anchor.name
+        state.nodes[self.ANCHOR_UUID].attributes["data_object_id"] = anchor.business_id
+
+        fact_uuid = await GraphitiSignalFactProjector(graphiti).project(  # type: ignore[arg-type]
+            event,
+            classification,
+            variable,
+            anchor,
+            proposal,
+        )
+
+        self.assertEqual(set(state.nodes), {self.VARIABLE_UUID, self.ANCHOR_UUID})
+        self.assertEqual(state.facts[fact_uuid].attributes["event_class"], "COMPANY")
+        self.assertEqual(state.facts[fact_uuid].attributes["anchor_business_id"], "CND-AI-SERVER")
         self.assertEqual(state.episodes[self.event().episode_uuid].entity_edges, [fact_uuid])
 
     async def test_retry_after_lost_add_triplet_ack_does_not_create_a_second_fact(self) -> None:
