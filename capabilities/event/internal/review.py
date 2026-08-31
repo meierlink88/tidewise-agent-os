@@ -7,7 +7,6 @@ from datetime import timedelta
 from sematica.analysis.event.contracts import (
     AnchorCandidate,
     EventAnalysisInput,
-    EventClass,
     EventClassification,
     SignalDirection,
     SignalProposal,
@@ -37,20 +36,21 @@ class ControlledSignalReviewer:
             "PLAN": "ANTICIPATED",
             "SPEC": "ASSUMED",
         }[event.event.event.semantic.modality]
+        onset = proposal.impact_onset_latest or proposal.impact_onset_earliest
         latest_end = proposal.expected_end_latest or proposal.expected_end_earliest
-        if latest_end is None:
+        if onset is None or latest_end is None:
             return False
         return all(
             (
-                classification.event_class != EventClass.COMPANY,
                 proposal.anchor_uuid == anchor.uuid,
                 proposal.variable_uuid == variable.uuid,
                 anchor.entity_type in variable.allowed_anchor_types,
                 proposal.direction != SignalDirection.UNKNOWN,
-                proposal.valid_at >= event_time,
-                proposal.valid_at <= event_time + timedelta(days=1095),
+                proposal.valid_at == event.reference_time,
+                onset >= event_time,
+                onset <= event_time + timedelta(days=1095),
                 proposal.invalid_at is None,
                 proposal.assertion_modality == expected_modality,
-                latest_end <= proposal.valid_at + timedelta(days=1095),
+                latest_end <= onset + timedelta(days=1095),
             )
         )

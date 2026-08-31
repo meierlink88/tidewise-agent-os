@@ -23,6 +23,27 @@ class StatefulDriver:
     def __init__(self) -> None:
         self.episode: dict[str, object] | None = None
         self.counts = {"event_episodes": 0, "mentions": 0, "ordinary_facts": 0, "signal_facts": 0}
+        self.contextual_entity_isolation_calls = 0
+        self.entities = [
+            {
+                "uuid": "contextual-chain",
+                "group_id": "neo4j",
+                "labels": {"Entity", "IndustryChain"},
+                "data_object_id": None,
+            },
+            {
+                "uuid": "catalog-chain",
+                "group_id": "neo4j",
+                "labels": {"Entity", "IndustryChain"},
+                "data_object_id": "ICH-authoritative",
+            },
+            {
+                "uuid": "foreign-contextual-chain",
+                "group_id": "another-tenant",
+                "labels": {"Entity", "IndustryChain"},
+                "data_object_id": None,
+            },
+        ]
 
     async def execute_query(self, query: str, **parameters):
         if "graphiti_event_projection_identity" in query:
@@ -50,6 +71,26 @@ class StatefulDriver:
                 None,
                 None,
             )
+        if "graphiti_event_contextual_entity_isolation" in query:
+            self.contextual_entity_isolation_calls += 1
+            assert "entity:Entity {group_id: $group_id}" in query
+            isolated = 0
+            for entity in self.entities:
+                labels = entity["labels"]
+                if (
+                    entity["group_id"] == parameters["group_id"]
+                    and not entity["data_object_id"]
+                    and not entity.get("demo_catalog_key")
+                    and not entity.get("policy_key")
+                    and labels.intersection(parameters["controlled_labels"])
+                ):
+                    entity["contextual_entity_type"] = next(
+                        label for label in parameters["controlled_labels"] if label in labels
+                    )
+                    labels.add("ContextualEntity")
+                    labels.difference_update({"Country", "Region", "Concept", "IndustryChain", "ChainNode"})
+                    isolated += 1
+            return [{"isolated_count": isolated}], None, None
         raise AssertionError("unexpected Stage query")
 
 
@@ -132,6 +173,14 @@ class GraphitiEpisodeStageTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(episode_uuid, event_episode_uuid(historical.id))
         self.assertEqual(graphiti.add_episode_calls, 1)
+        self.assertEqual(driver.contextual_entity_isolation_calls, 1)
+        entities = {str(entity["uuid"]): entity for entity in driver.entities}
+        self.assertEqual(entities["contextual-chain"]["labels"], {"Entity", "ContextualEntity"})
+        self.assertEqual(entities["contextual-chain"]["contextual_entity_type"], "IndustryChain")
+        self.assertIn("IndustryChain", entities["catalog-chain"]["labels"])
+        self.assertNotIn("ContextualEntity", entities["catalog-chain"]["labels"])
+        self.assertIn("IndustryChain", entities["foreign-contextual-chain"]["labels"])
+        self.assertNotIn("ContextualEntity", entities["foreign-contextual-chain"]["labels"])
         self.assertEqual(driver.counts, counts_after_bulk_write)
         self.assertEqual(
             driver.counts,

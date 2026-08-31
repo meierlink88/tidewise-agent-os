@@ -890,7 +890,11 @@ async def _validated_signal_analysis(
             continue
         pairs.add(pair)
         try:
-            proposal = source.proposal(event_time=event_time, assertion_modality=assertion_modality)
+            proposal = source.proposal(
+                event_time=event_time,
+                reference_time=request.analysis.reference_time,
+                assertion_modality=assertion_modality,
+            )
         except (ValidationError, ValueError, TypeError):
             reason_codes.add("SIGNAL_REVIEW_REJECTED")
             continue

@@ -1,0 +1,62 @@
+{
+  "retrieval_queries": ["HBM出口管制", "AI服务器订单", "先进封装产能", "美国产业政策", "中国影响范围"],
+  "expected_business_ids": ["ANCHOR-005", "ANCHOR-010", "ANCHOR-020", "ANCHOR-030"],
+  "search_batches": [
+    {
+      "query": "HBM出口管制",
+      "candidates": [
+        {"uuid": "anchor-001", "name": "候选锚点001", "entity_type": "Country", "business_id": "ANCHOR-001", "score": 0.99},
+        {"uuid": "anchor-002", "name": "候选锚点002", "entity_type": "MacroEconomic", "business_id": "ANCHOR-002", "score": 0.98},
+        {"uuid": "anchor-003", "name": "候选锚点003", "entity_type": "IndustryChain", "business_id": "ANCHOR-003", "score": 0.97},
+        {"uuid": "anchor-004", "name": "候选锚点004", "entity_type": "ChainNode", "business_id": "ANCHOR-004", "score": 0.96},
+        {"uuid": "anchor-005", "name": "美国", "entity_type": "Country", "business_id": "ANCHOR-005", "score": 0.95},
+        {"uuid": "anchor-006", "name": "候选锚点006", "entity_type": "MacroEconomic", "business_id": "ANCHOR-006", "score": 0.94},
+        {"uuid": "anchor-007", "name": "候选锚点007", "entity_type": "IndustryChain", "business_id": "ANCHOR-007", "score": 0.93},
+        {"uuid": "anchor-008", "name": "候选锚点008", "entity_type": "ChainNode", "business_id": "ANCHOR-008", "score": 0.92}
+      ]
+    },
+    {
+      "query": "AI服务器订单",
+      "candidates": [
+        {"uuid": "anchor-009", "name": "候选锚点009", "entity_type": "Country", "business_id": "ANCHOR-009", "score": 0.91},
+        {"uuid": "anchor-010", "name": "美国货币政策", "entity_type": "MacroEconomic", "business_id": "ANCHOR-010", "score": 0.90},
+        {"uuid": "anchor-011", "name": "候选锚点011", "entity_type": "IndustryChain", "business_id": "ANCHOR-011", "score": 0.89},
+        {"uuid": "anchor-012", "name": "候选锚点012", "entity_type": "ChainNode", "business_id": "ANCHOR-012", "score": 0.88},
+        {"uuid": "anchor-013", "name": "候选锚点013", "entity_type": "Country", "business_id": "ANCHOR-013", "score": 0.87},
+        {"uuid": "anchor-014", "name": "候选锚点014", "entity_type": "MacroEconomic", "business_id": "ANCHOR-014", "score": 0.86},
+        {"uuid": "anchor-015", "name": "候选锚点015", "entity_type": "IndustryChain", "business_id": "ANCHOR-015", "score": 0.85},
+        {"uuid": "anchor-016", "name": "候选锚点016", "entity_type": "ChainNode", "business_id": "ANCHOR-016", "score": 0.84}
+      ]
+    },
+    {
+      "query": "先进封装产能",
+      "candidates": [
+        {"uuid": "anchor-017", "name": "候选锚点017", "entity_type": "Country", "business_id": "ANCHOR-017", "score": 0.83},
+        {"uuid": "anchor-018", "name": "候选锚点018", "entity_type": "MacroEconomic", "business_id": "ANCHOR-018", "score": 0.82},
+        {"uuid": "anchor-019", "name": "候选锚点019", "entity_type": "IndustryChain", "business_id": "ANCHOR-019", "score": 0.81},
+        {"uuid": "anchor-020", "name": "先进封装", "entity_type": "ChainNode", "business_id": "ANCHOR-020", "score": 0.80},
+        {"uuid": "anchor-021", "name": "候选锚点021", "entity_type": "Country", "business_id": "ANCHOR-021", "score": 0.79},
+        {"uuid": "anchor-022", "name": "候选锚点022", "entity_type": "MacroEconomic", "business_id": "ANCHOR-022", "score": 0.78},
+        {"uuid": "anchor-023", "name": "候选锚点023", "entity_type": "IndustryChain", "business_id": "ANCHOR-023", "score": 0.77},
+        {"uuid": "anchor-024", "name": "候选锚点024", "entity_type": "ChainNode", "business_id": "ANCHOR-024", "score": 0.76}
+      ]
+    },
+    {
+      "query": "美国产业政策",
+      "candidates": [
+        {"uuid": "anchor-025", "name": "候选锚点025", "entity_type": "Country", "business_id": "ANCHOR-025", "score": 0.75},
+        {"uuid": "anchor-026", "name": "候选锚点026", "entity_type": "MacroEconomic", "business_id": "ANCHOR-026", "score": 0.74},
+        {"uuid": "anchor-027", "name": "候选锚点027", "entity_type": "IndustryChain", "business_id": "ANCHOR-027", "score": 0.73},
+        {"uuid": "anchor-028", "name": "候选锚点028", "entity_type": "ChainNode", "business_id": "ANCHOR-028", "score": 0.72},
+        {"uuid": "anchor-029", "name": "候选锚点029", "entity_type": "Country", "business_id": "ANCHOR-029", "score": 0.71},
+        {"uuid": "anchor-030", "name": "美国产业政策", "entity_type": "MacroEconomic", "business_id": "ANCHOR-030", "score": 0.70},
+        {"uuid": "anchor-031", "name": "候选锚点031", "entity_type": "IndustryChain", "business_id": "ANCHOR-031", "score": 0.69},
+        {"uuid": "anchor-032", "name": "候选锚点032", "entity_type": "ChainNode", "business_id": "ANCHOR-032", "score": 0.68}
+      ]
+    },
+    {
+      "query": "中国影响范围",
+      "candidates": []
+    }
+  ]
+}
