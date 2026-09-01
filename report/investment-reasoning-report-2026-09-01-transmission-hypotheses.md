@@ -27,7 +27,7 @@ adaptive_stopped_by_confidence: 23
 adaptive_stopped_by_no_unvisited_neighbor: 6
 adaptive_rejected_below_inclusion: 2
 frozen_source_report_sha256: 62ebb496ad59d98774adac963cb9622c76473c83e79fc6573321d370b123f80b
-frozen_source_commit: e825f81132d69b23b363d35857cd1da44be67719
+frozen_source_commit: 1414722f7c66ba235486cba7cd828f4d5b44a9ab
 geopolitic_anchor_count: 2
 macroeconomic_anchor_count: 2
 signaled_chain_node_count: 43
