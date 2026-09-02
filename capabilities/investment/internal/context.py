@@ -211,6 +211,13 @@ class InvestmentContextBuilder:
     ) -> LayerAnalysisContext:
         """Retrieve only the ontology and Facts needed by one reasoning layer."""
 
+        if layer == ImpactLayer.INDUSTRY:
+            return self._build_signal_rooted_industry_layer_context(
+                base,
+                parent_assessments,
+                retrieval_round=retrieval_round,
+            )
+
         labels = LAYER_LABELS[layer]
         queries = self._layer_queries(base, parent_assessments, supplemental_queries or [])
         candidate_records = await self._reader.search_anchor_nodes(queries, labels, limit=MAX_LAYER_ANCHORS)
@@ -272,6 +279,116 @@ class InvestmentContextBuilder:
                 anchor_ids=[item.business_id for item in anchors],
                 fact_ids=[item.uuid for item in facts],
                 direct_signal_fact_ids=list(dict.fromkeys(direct_signal_ids)),
+            ),
+            retrieval_round=retrieval_round,
+        )
+
+    @staticmethod
+    def _build_signal_rooted_industry_layer_context(
+        base: InvestmentAnalysisContext,
+        parent_assessments: list[LayerAssessment],
+        *,
+        retrieval_round: int,
+    ) -> LayerAnalysisContext:
+        """Select industry evidence from current Event Signal roots before loading topology.
+
+        The industry layer must not expand semantic anchor candidates and bulk-load every
+        relationship touching them.  Current-window Signal Facts already identify the
+        canonical ChainNode roots; chain membership and topology are loaded only after
+        those roots have been assessed.
+        """
+
+        eligible_ids = base.eligible_signal_fact_ids
+        signals: list[FactSnapshot] = []
+        root_endpoints: dict[str, tuple[str, str, str]] = {}
+        for fact in base.facts:
+            if fact.uuid not in eligible_ids:
+                continue
+            endpoints = [
+                (fact.source_uuid, fact.source_business_id, fact.source_name, fact.source_labels),
+                (fact.target_uuid, fact.target_business_id, fact.target_name, fact.target_labels),
+            ]
+            chain_node_endpoints = [item for item in endpoints if "ChainNode" in item[3]]
+            if not chain_node_endpoints and fact.anchor_type == "ChainNode":
+                chain_node_endpoints = [endpoints[1]]
+            valid_endpoints = [item for item in chain_node_endpoints if item[1]]
+            if not valid_endpoints:
+                continue
+            signals.append(fact)
+            for uuid, business_id, name, _ in valid_endpoints:
+                root_endpoints[uuid] = (business_id or "", name, uuid)
+
+        root_uuids = set(root_endpoints)
+        root_ids = {item[0] for item in root_endpoints.values()}
+        anchors_by_uuid = {
+            item.uuid: item
+            for item in base.anchors
+            if item.entity_type == "ChainNode" and (item.uuid in root_uuids or item.business_id in root_ids)
+        }
+        for uuid, (business_id, name, _) in root_endpoints.items():
+            anchors_by_uuid.setdefault(
+                uuid,
+                AnalysisAnchorSnapshot(
+                    uuid=uuid,
+                    business_id=business_id,
+                    name=name,
+                    entity_type="ChainNode",
+                    source_event_ids=list(
+                        dict.fromkeys(
+                            event_id
+                            for signal in signals
+                            if signal.source_uuid == uuid or signal.target_uuid == uuid
+                            for event_id in signal.source_event_ids
+                        )
+                    ),
+                ),
+            )
+        anchors = list(anchors_by_uuid.values())[:MAX_LAYER_ANCHORS]
+        selected_uuids = {item.uuid for item in anchors}
+        selected_ids = {item.business_id for item in anchors}
+        direct_signals = [
+            fact
+            for fact in signals
+            if fact.source_uuid in selected_uuids
+            or fact.target_uuid in selected_uuids
+            or fact.source_business_id in selected_ids
+            or fact.target_business_id in selected_ids
+        ]
+        related_ordinary = [
+            fact
+            for fact in base.facts
+            if fact.kind == "ORDINARY"
+            and (
+                fact.source_uuid in selected_uuids
+                or fact.target_uuid in selected_uuids
+                or fact.source_business_id in selected_ids
+                or fact.target_business_id in selected_ids
+            )
+        ]
+        facts_by_id = {item.uuid: item for item in [*direct_signals, *related_ordinary]}
+        facts = list(facts_by_id.values())[:MAX_LAYER_FACTS]
+        direct_signal_ids = [item.uuid for item in direct_signals]
+        actions = ["select_signal_root_anchors", "select_signal_scoped_facts"]
+        return LayerAnalysisContext(
+            layer=ImpactLayer.INDUSTRY,
+            decision_at=base.request.decision_at,
+            question=base.request.question,
+            events=base.events,
+            anchors=anchors,
+            facts=facts,
+            parent_assessments=parent_assessments,
+            direct_signal_fact_ids=direct_signal_ids,
+            ontology=REASONING_ONTOLOGY,
+            retrieval_receipt=RetrievalReceipt(
+                stage="INDUSTRY",
+                layer=ImpactLayer.INDUSTRY,
+                retrieval_round=retrieval_round,
+                required_actions=actions,
+                completed_actions=actions,
+                event_ids=[item.event_id for item in base.events],
+                anchor_ids=[item.business_id for item in anchors],
+                fact_ids=[item.uuid for item in facts],
+                direct_signal_fact_ids=direct_signal_ids,
             ),
             retrieval_round=retrieval_round,
         )

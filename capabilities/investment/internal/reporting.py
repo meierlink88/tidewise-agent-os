@@ -235,9 +235,14 @@ class InvestmentReportAssembler:
         cards = self._cards(geo, macro, chains)
         pending_nodes = sum(1 for chain in chains for node in chain.nodes if node.result.code == "pending")
         signaled_nodes = {
-            fact.target_business_id or fact.source_business_id
+            business_id
             for fact in context.facts
             if fact.kind == "SIGNAL" and fact.uuid in context.eligible_signal_fact_ids
+            for business_id, labels in (
+                (fact.source_business_id, fact.source_labels),
+                (fact.target_business_id, fact.target_labels),
+            )
+            if business_id and "ChainNode" in labels
         }
         content = ReportContent(
             title="每日投研推理报告",

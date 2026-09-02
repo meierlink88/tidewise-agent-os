@@ -1418,6 +1418,66 @@ class _SearchOnlyGraphiti:
 
 
 class GraphitiInvestmentRetrievalTest(unittest.IsolatedAsyncioTestCase):
+    async def test_industry_layer_is_signal_rooted_and_skips_broad_anchor_fact_loading(self) -> None:
+        gate = InvestmentReasoningGateTest()
+        signal = gate._active_signal().model_copy(update={"anchor_type": "ChainNode"})
+        node_anchor = AnalysisAnchorSnapshot(
+            uuid="node-a-uuid",
+            business_id="node-a",
+            name="上游",
+            entity_type="ChainNode",
+            source_event_ids=["event-1"],
+        )
+        relevant = FactSnapshot(
+            uuid="mechanism-1",
+            kind="ORDINARY",
+            name="AFFECTS",
+            fact="上层风险通过投入成本作用于上游节点",
+            source_uuid="macro-uuid",
+            source_name="投入成本",
+            source_business_id="macro-1",
+            source_labels=["Entity", "MacroEconomic"],
+            target_uuid="node-a-uuid",
+            target_name="上游",
+            target_business_id="node-a",
+            target_labels=["Entity", "ChainNode"],
+            source_event_ids=["event-1"],
+        )
+        unrelated = FactSnapshot(
+            uuid="unrelated-1",
+            kind="ORDINARY",
+            name="AFFECTS",
+            fact="其他事件作用于其他节点",
+            source_uuid="other-source-uuid",
+            source_name="其他主体",
+            source_business_id="other-source",
+            source_labels=["Entity"],
+            target_uuid="other-node-uuid",
+            target_name="其他节点",
+            target_business_id="other-node",
+            target_labels=["Entity", "ChainNode"],
+            source_event_ids=["event-1"],
+        )
+        base = gate._context(signal).model_copy(
+            update={"facts": [signal, relevant, unrelated], "anchors": [node_anchor], "chains": []}
+        )
+        reader = MagicMock()
+        reader.search_anchor_nodes = AsyncMock(side_effect=AssertionError("industry must not use broad anchor search"))
+        reader.load_anchor_facts = AsyncMock(side_effect=AssertionError("industry must not bulk-load anchor facts"))
+        builder = InvestmentContextBuilder(cast(Any, reader))
+
+        context = await builder.build_layer_context(base, ImpactLayer.INDUSTRY, [])
+
+        self.assertEqual([item.business_id for item in context.anchors], ["node-a"])
+        self.assertEqual(context.direct_signal_fact_ids, [signal.uuid])
+        self.assertEqual([item.uuid for item in context.facts], [signal.uuid, relevant.uuid])
+        self.assertEqual(
+            context.retrieval_receipt.required_actions,
+            ["select_signal_root_anchors", "select_signal_scoped_facts"],
+        )
+        reader.search_anchor_nodes.assert_not_awaited()
+        reader.load_anchor_facts.assert_not_awaited()
+
     async def test_layer_queries_have_a_strict_budget_under_maximum_context(self) -> None:
         gate = InvestmentReasoningGateTest()
         base_signal = gate._active_signal()

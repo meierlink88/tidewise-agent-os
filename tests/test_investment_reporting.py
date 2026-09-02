@@ -302,6 +302,7 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(package.content.included_layers, ["geopolitics", "macroeconomics", "industry_chain"])
         self.assertEqual(package.content.status, "generated")
         self.assertEqual(package.content.statistics.industry_chain_count, 1)
+        self.assertEqual(package.content.statistics.signaled_chain_node_count, 1)
         self.assertEqual(package.content.geopolitics.anchors[0].evidence_refs[0].evidence_id, self.GEO_EVIDENCE)
         direct, inferred = package.content.industry_chains[0].nodes
         self.assertEqual(direct.nature.code, "direct_evidence")
