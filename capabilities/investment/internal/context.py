@@ -9,7 +9,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from capabilities.investment.internal.models import (
-    AcceptedImpactClaim,
     AnalysisAnchorSnapshot,
     ChainNodeSnapshot,
     Confidence,
@@ -22,19 +21,24 @@ from capabilities.investment.internal.models import (
     InvestmentAnalysisContext,
     InvestmentAnalysisRequest,
     LayerAnalysisContext,
+    LayerAssessment,
+    ReasoningOntologyContext,
+    RetrievalReceipt,
     TopologyEdgeSnapshot,
 )
 from sematica.graphiti.investment import GraphitiInvestmentReader
 
 MAX_EVENTS = 500
 MAX_FACTS = 2000
-MAX_CHAIN_CANDIDATES = 100
+CHAIN_CANDIDATE_PAGE_SIZE = 100
+MAX_CHAINS_PER_RUN = 2000
 MAX_NODES_PER_CHAIN = 200
 MAX_EDGES_PER_CHAIN = 500
+TOPOLOGY_LOAD_CONCURRENCY = 4
 EVENTS_PER_NATIVE_QUERY = 20
 MAX_NATIVE_EVENT_FRAGMENT_LENGTH = 24
 MAX_LAYER_ANCHORS = 100
-MAX_LAYER_FACTS = 1200
+MAX_LAYER_FACTS = 2000
 MAX_LAYER_QUERIES = 25
 MAX_LAYER_QUERY_LENGTH = 500
 LAYER_EVENTS_PER_QUERY = 20
@@ -48,6 +52,37 @@ LAYER_LABELS: dict[ImpactLayer, set[str]] = {
     ImpactLayer.MACRO_ECONOMIC: {"MacroEconomic"},
     ImpactLayer.INDUSTRY: {"IndustryChain", "ChainNode"},
 }
+
+
+REASONING_ONTOLOGY = ReasoningOntologyContext(
+    entity_types={
+        "Event": "经 Evidence 归并后的真实世界业务发生、公告、计划或预期。",
+        "Variable": "用于衡量锚点变化的预置分析维度，不是事件或结论。",
+        "GeopoliticRivalry": "地缘政治分析层的预置锚点。",
+        "MacroEconomic": "宏观经济分析层的预置锚点。",
+        "IndustryChain": "由产业链节点组成的分析视图，不直接承载 Variable Signal。",
+        "ChainNode": "产业链中承载 Variable Signal 和链内传导结果的业务节点。",
+    },
+    fact_types={
+        "SIGNAL_ON": "Signal Fact：Variable 在某个锚点上的方向、周期、幅度和置信度变化。",
+        "ORDINARY": "普通 Fact：实体之间已存在的事实关系，可作为背景或传导机制依据。",
+    },
+    relationship_types={
+        "MENTIONS": "Event Episode 对实体的提及关系，不等于影响结论。",
+        "SIGNAL_ON": "Variable 指向真实锚点的直接影响事实。",
+        "ChainNodeBelongsToIndustryChain": "ChainNode 归属于 IndustryChain 分析视图，不表示信号自动跨链传播。",
+        "ChainNodeInputTo": "产业链节点的投入传导方向。",
+        "ChainNodeIsComponentOf": "节点与下游系统或产品的组成关系。",
+        "ChainNodeDependsOn": "产业链节点之间的依赖关系。",
+    },
+    usage_rules=[
+        "直接 Signal Fact 是图谱事实，不转换或改写为 Claim。",
+        "普通 Fact 可解释背景或传导机制，不单独代替 Signal。",
+        "拓扑关系表示可分析的传导路径，不表示影响必然发生。",
+        "无直接 Signal 的新方向判断必须标记为传导假设或待验证。",
+        "实例 ID 只能引用当前检索上下文中已给出的数据。",
+    ],
+)
 
 
 def _native_datetime(value: Any) -> datetime | None:
@@ -81,6 +116,14 @@ def _confidence(*values: str | None) -> Confidence | None:
         except ValueError:
             continue
     return min(normalized, key=rank.__getitem__) if normalized else None
+
+
+def _is_chain_node_signal(fact: FactSnapshot) -> bool:
+    """Recognize a ChainNode Signal from either normalized metadata or graph labels."""
+
+    return fact.kind == "SIGNAL" and (
+        fact.anchor_type == "ChainNode" or "ChainNode" in fact.source_labels or "ChainNode" in fact.target_labels
+    )
 
 
 class InvestmentContextBuilder:
@@ -135,7 +178,35 @@ class InvestmentContextBuilder:
             facts=selected_facts,
             anchors=anchors,
             chains=[],
+            ontology=REASONING_ONTOLOGY,
             native_retrieved_fact_ids=native_ids,
+            retrieval_receipts=[
+                RetrievalReceipt(
+                    stage="PREPARE",
+                    required_actions=[
+                        "load_events",
+                        "load_mentions",
+                        "load_event_facts",
+                        "graphiti_native_fact_search",
+                    ],
+                    completed_actions=[
+                        "load_events",
+                        "load_mentions",
+                        "load_event_facts",
+                        "graphiti_native_fact_search",
+                    ],
+                    queries=queries[:25],
+                    event_ids=event_ids,
+                    anchor_ids=[item.business_id for item in anchors],
+                    fact_ids=[item.uuid for item in selected_facts],
+                    direct_signal_fact_ids=[
+                        item.uuid
+                        for item in selected_facts
+                        if item.is_active_signal(request.decision_at)
+                        and bool(scoped_event_ids.intersection(item.source_event_ids))
+                    ],
+                )
+            ],
             validation_issues=issues,
         )
 
@@ -143,15 +214,22 @@ class InvestmentContextBuilder:
         self,
         base: InvestmentAnalysisContext,
         layer: ImpactLayer,
-        parent_claims: list[AcceptedImpactClaim],
+        parent_assessments: list[LayerAssessment],
         *,
         supplemental_queries: list[str] | None = None,
         retrieval_round: int = 1,
     ) -> LayerAnalysisContext:
         """Retrieve only the ontology and Facts needed by one reasoning layer."""
 
+        if layer == ImpactLayer.INDUSTRY:
+            return self._build_signal_rooted_industry_layer_context(
+                base,
+                parent_assessments,
+                retrieval_round=retrieval_round,
+            )
+
         labels = LAYER_LABELS[layer]
-        queries = self._layer_queries(base, parent_claims, supplemental_queries or [])
+        queries = self._layer_queries(base, parent_assessments, supplemental_queries or [])
         candidate_records = await self._reader.search_anchor_nodes(queries, labels, limit=MAX_LAYER_ANCHORS)
         direct = [item for item in base.anchors if item.entity_type in labels]
         candidates = self._parse_search_anchors(candidate_records)
@@ -197,8 +275,133 @@ class InvestmentContextBuilder:
             events=base.events,
             anchors=anchors,
             facts=facts,
-            parent_claims=parent_claims,
+            parent_assessments=parent_assessments,
             direct_signal_fact_ids=list(dict.fromkeys(direct_signal_ids)),
+            ontology=REASONING_ONTOLOGY,
+            retrieval_receipt=RetrievalReceipt(
+                stage=layer.value,
+                layer=layer,
+                retrieval_round=retrieval_round,
+                required_actions=["search_anchor_nodes", "load_anchor_facts"],
+                completed_actions=["search_anchor_nodes", "load_anchor_facts"],
+                queries=queries,
+                event_ids=[item.event_id for item in base.events],
+                anchor_ids=[item.business_id for item in anchors],
+                fact_ids=[item.uuid for item in facts],
+                direct_signal_fact_ids=list(dict.fromkeys(direct_signal_ids)),
+            ),
+            retrieval_round=retrieval_round,
+        )
+
+    @staticmethod
+    def _build_signal_rooted_industry_layer_context(
+        base: InvestmentAnalysisContext,
+        parent_assessments: list[LayerAssessment],
+        *,
+        retrieval_round: int,
+    ) -> LayerAnalysisContext:
+        """Select industry evidence from current Event Signal roots before loading topology.
+
+        The industry layer must not expand semantic anchor candidates and bulk-load every
+        relationship touching them.  Current-window Signal Facts already identify the
+        canonical ChainNode roots; chain membership and topology are loaded only after
+        those roots have been assessed.
+        """
+
+        eligible_ids = base.eligible_signal_fact_ids
+        signals: list[FactSnapshot] = []
+        root_endpoints: dict[str, tuple[str, str, str]] = {}
+        for fact in base.facts:
+            if fact.uuid not in eligible_ids:
+                continue
+            if not _is_chain_node_signal(fact):
+                continue
+            endpoints = [
+                (fact.source_uuid, fact.source_business_id, fact.source_name, fact.source_labels),
+                (fact.target_uuid, fact.target_business_id, fact.target_name, fact.target_labels),
+            ]
+            chain_node_endpoints = [item for item in endpoints if "ChainNode" in item[3]]
+            if not chain_node_endpoints and fact.anchor_type == "ChainNode":
+                chain_node_endpoints = [endpoints[1]]
+            valid_endpoints = [item for item in chain_node_endpoints if item[1]]
+            if not valid_endpoints:
+                continue
+            signals.append(fact)
+            for uuid, business_id, name, _ in valid_endpoints:
+                root_endpoints[uuid] = (business_id or "", name, uuid)
+
+        root_uuids = set(root_endpoints)
+        root_ids = {item[0] for item in root_endpoints.values()}
+        anchors_by_uuid = {
+            item.uuid: item
+            for item in base.anchors
+            if item.entity_type == "ChainNode" and (item.uuid in root_uuids or item.business_id in root_ids)
+        }
+        for uuid, (business_id, name, _) in root_endpoints.items():
+            anchors_by_uuid.setdefault(
+                uuid,
+                AnalysisAnchorSnapshot(
+                    uuid=uuid,
+                    business_id=business_id,
+                    name=name,
+                    entity_type="ChainNode",
+                    source_event_ids=list(
+                        dict.fromkeys(
+                            event_id
+                            for signal in signals
+                            if signal.source_uuid == uuid or signal.target_uuid == uuid
+                            for event_id in signal.source_event_ids
+                        )
+                    ),
+                ),
+            )
+        anchors = list(anchors_by_uuid.values())
+        selected_uuids = {item.uuid for item in anchors}
+        selected_ids = {item.business_id for item in anchors}
+        direct_signals = [
+            fact
+            for fact in signals
+            if fact.source_uuid in selected_uuids
+            or fact.target_uuid in selected_uuids
+            or fact.source_business_id in selected_ids
+            or fact.target_business_id in selected_ids
+        ]
+        related_ordinary = [
+            fact
+            for fact in base.facts
+            if fact.kind == "ORDINARY"
+            and (
+                fact.source_uuid in selected_uuids
+                or fact.target_uuid in selected_uuids
+                or fact.source_business_id in selected_ids
+                or fact.target_business_id in selected_ids
+            )
+        ]
+        facts_by_id = {item.uuid: item for item in [*direct_signals, *related_ordinary]}
+        facts = list(facts_by_id.values())[:MAX_LAYER_FACTS]
+        direct_signal_ids = [item.uuid for item in direct_signals]
+        actions = ["select_signal_root_anchors", "select_signal_scoped_facts"]
+        return LayerAnalysisContext(
+            layer=ImpactLayer.INDUSTRY,
+            decision_at=base.request.decision_at,
+            question=base.request.question,
+            events=base.events,
+            anchors=anchors,
+            facts=facts,
+            parent_assessments=parent_assessments,
+            direct_signal_fact_ids=direct_signal_ids,
+            ontology=REASONING_ONTOLOGY,
+            retrieval_receipt=RetrievalReceipt(
+                stage="INDUSTRY",
+                layer=ImpactLayer.INDUSTRY,
+                retrieval_round=retrieval_round,
+                required_actions=actions,
+                completed_actions=actions,
+                event_ids=[item.event_id for item in base.events],
+                anchor_ids=[item.business_id for item in anchors],
+                fact_ids=[item.uuid for item in facts],
+                direct_signal_fact_ids=direct_signal_ids,
+            ),
             retrieval_round=retrieval_round,
         )
 
@@ -206,7 +409,7 @@ class InvestmentContextBuilder:
         self,
         base: InvestmentAnalysisContext,
         layer_context: LayerAnalysisContext,
-        industry_claims: list[AcceptedImpactClaim],
+        industry_assessments: list[LayerAssessment],
     ) -> InvestmentAnalysisContext:
         """Load canonical chain membership and topology only after industry candidates exist."""
 
@@ -215,7 +418,7 @@ class InvestmentContextBuilder:
         anchor_node_ids: set[str] = set()
         direct_chain_ids: set[str] = set()
         eligible_signals = [
-            fact for fact in facts if fact.uuid in base.eligible_signal_fact_ids and fact.anchor_type == "ChainNode"
+            fact for fact in facts if fact.uuid in base.eligible_signal_fact_ids and _is_chain_node_signal(fact)
         ]
         signal_node_ids = {
             endpoint
@@ -223,31 +426,29 @@ class InvestmentContextBuilder:
             for endpoint in (fact.source_business_id, fact.target_business_id)
             if endpoint is not None
         }
-        # IndustryChain is an aggregate view. Only Signal-backed ChainNodes and
-        # accepted node claims may select chains for topology expansion.
+        # IndustryChain is an aggregate view. Signal-backed ChainNodes select
+        # chain topology; the layer assessment does not create graph identity.
         for anchor in base.anchors:
             if anchor.entity_type == "ChainNode" and anchor.business_id in signal_node_ids:
                 anchor_node_ids.add(anchor.business_id)
-        for claim in industry_claims:
-            if claim.anchor_type == "ChainNode":
-                anchor_node_ids.add(claim.anchor_id)
+        for assessment in industry_assessments:
+            if assessment.anchor_type == "ChainNode":
+                anchor_node_ids.add(assessment.anchor_id)
         chains = await self._load_chains(
             base.request,
             anchor_node_ids,
             direct_chain_ids,
             facts,
             eligible_signal_fact_ids=base.eligible_signal_fact_ids,
-            industry_claims=industry_claims,
+            industry_assessments=industry_assessments,
         )
-        selected_anchor_ids = {item.anchor_id for item in industry_claims} | anchor_node_ids | direct_chain_ids
+        selected_anchor_ids = {item.anchor_id for item in industry_assessments} | anchor_node_ids | direct_chain_ids
         selected_layer_anchors = [item for item in layer_context.anchors if item.business_id in selected_anchor_ids]
         anchors_by_uuid = {item.uuid: item for item in [*base.anchors, *selected_layer_anchors]}
         chain_ids = {item.business_id for item in chains}
         node_ids = {node.business_id for chain in chains for node in chain.nodes}
         cited_fact_ids = {
-            fact_id
-            for claim in industry_claims
-            for fact_id in [*claim.source_fact_ids, *claim.mechanism_fact_ids, *claim.root_signal_fact_ids]
+            fact_id for assessment in industry_assessments for fact_id in assessment.direct_signal_fact_ids
         }
         base_fact_ids = {item.uuid for item in base.facts}
         facts = [
@@ -263,22 +464,36 @@ class InvestmentContextBuilder:
                 "facts": facts[:MAX_FACTS],
                 "anchors": list(anchors_by_uuid.values()),
                 "chains": chains,
+                "retrieval_receipts": [
+                    *base.retrieval_receipts,
+                    layer_context.retrieval_receipt,
+                    RetrievalReceipt(
+                        stage="INDUSTRY",
+                        layer=ImpactLayer.INDUSTRY,
+                        required_actions=["load_chain_candidates", "load_chain_nodes", "load_topology_edges"],
+                        completed_actions=["load_chain_candidates", "load_chain_nodes", "load_topology_edges"],
+                        event_ids=[item.event_id for item in base.events],
+                        anchor_ids=[*sorted(anchor_node_ids), *sorted(direct_chain_ids)],
+                        fact_ids=[item.uuid for item in facts[:MAX_FACTS]],
+                        direct_signal_fact_ids=sorted(base.eligible_signal_fact_ids),
+                    ),
+                ],
             }
         )
 
     @staticmethod
     def _layer_queries(
         base: InvestmentAnalysisContext,
-        parent_claims: list[AcceptedImpactClaim],
+        parent_assessments: list[LayerAssessment],
         supplemental_queries: list[str],
     ) -> list[str]:
         event_fragments = [f"{event.title[:8]} {event.summary[:4]}".strip() for event in base.events]
         signal_fragments = [
             f"{fact.source_name[:12]} {fact.target_name[:12]}" for fact in base.facts if fact.kind == "SIGNAL"
         ][:MAX_LAYER_SIGNAL_FRAGMENTS]
-        parent_fragments = [f"{claim.anchor_name[:16]} {claim.summary[:24]}" for claim in parent_claims][
-            :MAX_LAYER_PARENT_FRAGMENTS
-        ]
+        parent_fragments = [
+            f"{assessment.anchor_name[:16]} {assessment.summary[:24]}" for assessment in parent_assessments
+        ][:MAX_LAYER_PARENT_FRAGMENTS]
         supplements = [item.strip()[:120] for item in supplemental_queries if item.strip()][:4]
         batch_count = max(
             1,
@@ -413,6 +628,11 @@ class InvestmentContextBuilder:
                     modality=modality,
                     occurred_at=occurred_at,
                     effective_at=_native_datetime(semantic.get("effective_at")),
+                    evidence_ids=[
+                        item
+                        for item in content.get("evidence_ids", [])
+                        if isinstance(item, str) and item.startswith("EVD")
+                    ][:50],
                 )
             )
         if len(result) > MAX_EVENTS:
@@ -494,17 +714,26 @@ class InvestmentContextBuilder:
         facts: list[FactSnapshot],
         *,
         eligible_signal_fact_ids: set[str],
-        industry_claims: list[AcceptedImpactClaim] | None = None,
+        industry_assessments: list[LayerAssessment] | None = None,
     ) -> list[IndustryChainSnapshot]:
         if not anchor_node_ids and not direct_chain_ids:
             return []
-        records = await self._reader.load_chain_candidates(
-            anchor_node_ids,
-            direct_chain_ids,
-            limit=MAX_CHAIN_CANDIDATES + 1,
-        )
-        if len(records) > MAX_CHAIN_CANDIDATES:
-            raise ValueError(f"investment chain candidate scope exceeds limit {MAX_CHAIN_CANDIDATES}")
+        records: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            page = await self._reader.load_chain_candidates(
+                anchor_node_ids,
+                direct_chain_ids,
+                limit=CHAIN_CANDIDATE_PAGE_SIZE,
+                offset=offset,
+            )
+            records.extend(page)
+            if len(records) > MAX_CHAINS_PER_RUN:
+                raise ValueError(f"investment chain scope exceeds safety limit {MAX_CHAINS_PER_RUN}")
+            if len(page) < CHAIN_CANDIDATE_PAGE_SIZE:
+                break
+            offset += len(page)
+        records = list({record["business_id"]: record for record in records}.values())
         candidates = sorted(
             (
                 {**record, "matched_node_ids": [item for item in record["matched_node_ids"] if item]}
@@ -513,18 +742,27 @@ class InvestmentContextBuilder:
                 or len([item for item in record["matched_node_ids"] if item]) >= request.min_anchor_matches
             ),
             key=lambda item: (-len(item["matched_node_ids"]), item["name"], item["business_id"]),
-        )[: request.max_chains]
+        )
         if not candidates:
             return []
         chain_ids = [item["business_id"] for item in candidates]
-        node_records, edge_records = await asyncio.gather(
-            self._reader.load_chain_nodes(chain_ids, limit=len(chain_ids) * MAX_NODES_PER_CHAIN + 1),
-            self._reader.load_topology_edges(chain_ids, limit=len(chain_ids) * MAX_EDGES_PER_CHAIN + 1),
-        )
-        if len(node_records) > len(chain_ids) * MAX_NODES_PER_CHAIN:
-            raise ValueError("investment topology node scope exceeds deterministic limit")
-        if len(edge_records) > len(chain_ids) * MAX_EDGES_PER_CHAIN:
-            raise ValueError("investment topology edge scope exceeds deterministic limit")
+        topology_slots = asyncio.Semaphore(TOPOLOGY_LOAD_CONCURRENCY)
+
+        async def load_topology(chain_id: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+            async with topology_slots:
+                node_page, edge_page = await asyncio.gather(
+                    self._reader.load_chain_nodes([chain_id], limit=MAX_NODES_PER_CHAIN + 1),
+                    self._reader.load_topology_edges([chain_id], limit=MAX_EDGES_PER_CHAIN + 1),
+                )
+            if len(node_page) > MAX_NODES_PER_CHAIN:
+                raise ValueError(f"investment chain {chain_id} exceeds {MAX_NODES_PER_CHAIN} nodes")
+            if len(edge_page) > MAX_EDGES_PER_CHAIN:
+                raise ValueError(f"investment chain {chain_id} exceeds {MAX_EDGES_PER_CHAIN} topology edges")
+            return node_page, edge_page
+
+        topology = await asyncio.gather(*(load_topology(chain_id) for chain_id in chain_ids))
+        node_records = [record for node_page, _ in topology for record in node_page]
+        edge_records = [record for _, edge_page in topology for record in edge_page]
         nodes_by_chain: dict[str, list[ChainNodeSnapshot]] = {item: [] for item in chain_ids}
         for record in node_records:
             nodes_by_chain[record["chain_id"]].append(
@@ -555,7 +793,7 @@ class InvestmentContextBuilder:
         if any(len(items) > MAX_EDGES_PER_CHAIN for items in edges_by_chain.values()):
             raise ValueError(f"investment chain exceeds {MAX_EDGES_PER_CHAIN} topology edges")
         active_signals = [item for item in facts if item.uuid in eligible_signal_fact_ids]
-        claims = industry_claims or []
+        assessments = industry_assessments or []
         result: list[IndustryChainSnapshot] = []
         for candidate in candidates:
             chain_id = candidate["business_id"]
@@ -571,14 +809,16 @@ class InvestmentContextBuilder:
                 for endpoint in (fact.source_business_id, fact.target_business_id)
                 if endpoint in node_ids
             ]
-            claim_roots = [
-                claim
-                for claim in claims
-                if claim.anchor_type == "ChainNode"
-                and claim.anchor_id in node_ids
-                and set(claim.root_signal_fact_ids) <= eligible_signal_fact_ids
+            assessment_roots = [
+                assessment
+                for assessment in assessments
+                if assessment.anchor_type == "ChainNode"
+                and assessment.anchor_id in node_ids
+                and set(assessment.direct_signal_fact_ids) <= eligible_signal_fact_ids
             ]
-            root_nodes.extend(claim.anchor_id for claim in claim_roots if claim.anchor_id in node_ids)
+            root_nodes.extend(
+                assessment.anchor_id for assessment in assessment_roots if assessment.anchor_id in node_ids
+            )
             result.append(
                 IndustryChainSnapshot(
                     uuid=candidate["uuid"],
@@ -589,7 +829,11 @@ class InvestmentContextBuilder:
                     signal_root_fact_ids=list(
                         dict.fromkeys(
                             [fact.uuid for fact in roots]
-                            + [fact_id for claim in claim_roots for fact_id in claim.root_signal_fact_ids]
+                            + [
+                                fact_id
+                                for assessment in assessment_roots
+                                for fact_id in assessment.direct_signal_fact_ids
+                            ]
                         )
                     ),
                     signal_root_node_ids=list(dict.fromkeys(root_nodes)),

@@ -8,7 +8,7 @@
 - Agent：`title-curator`（Raw Evidence Filter），对采集素材做投研相关性判断，由 Raw Collection Workflow 调用。
 - Agent：`evidence-extractor`，从 Raw Evidence 提取 Atomic Evidence，由 Studio/PostgreSQL 管理。
 - Agent：`event-extractor`，按主体、动作、对象、阶段与时间身份语义把同批 Evidence 提炼为 Event Candidate。
-- Agent：`investment-reasoner`、`investment-reviewer`，分别负责分层影响/Signal 传导和最终谱系审核。
+- Agent：`investment-reasoner`、`investment-report-writer`、`investment-reviewer`，分别负责分层影响与 Signal 传导、报告中文撰写和推理/报告审核。
 - Workflow：`local-ping`，无模型依赖的运行时检查。
 - Workflow：`deployment-check`，检查数据库、MCP、组件和调度状态。
 - Workflow：`raw-collection`，由 Agno Studio/PostgreSQL 管理编排版本，执行采集、语义过滤、确定性去重和 manifest-last 发布。

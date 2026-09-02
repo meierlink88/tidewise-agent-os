@@ -11,14 +11,14 @@ from capabilities.investment import ReviewResult
 from db import get_postgres_db
 
 INVESTMENT_REVIEWER_AGENT_ID = "investment-reviewer"
-INVESTMENT_REVIEWER_CONTRACT_VERSION = 2
+INVESTMENT_REVIEWER_CONTRACT_VERSION = 8
 _PROMPT = Path(__file__).with_name("investment_reviewer.seed.md")
 
 
 def _configure(agent: Agent) -> Agent:
     agent.db = get_postgres_db()
     agent.name = "Investment Reviewer"
-    agent.description = "Audits Event-to-Signal layer lineage, topology, horizons, and unsupported claims."
+    agent.description = "Audits required retrieval actions, output references, and direct-versus-inferred boundaries."
     agent.tools = []
     agent.instructions = _PROMPT.read_text(encoding="utf-8").strip()
     agent.output_schema = ReviewResult

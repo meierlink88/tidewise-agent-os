@@ -311,7 +311,10 @@ class GraphitiInvestmentReader:
         direct_chain_ids: set[str],
         *,
         limit: int,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
+        if limit < 1 or offset < 0:
+            return []
         records, _, _ = await self._graphiti.driver.execute_query(
             """
             MATCH (node:ChainNode)-[membership:RELATES_TO]->(chain:IndustryChain)
@@ -324,11 +327,13 @@ class GraphitiInvestmentReader:
                    collect(DISTINCT CASE WHEN node.data_object_id IN $anchor_node_ids
                                         THEN node.data_object_id ELSE null END) AS matched_node_ids
             ORDER BY direct_match DESC, size(matched_node_ids) DESC, name, business_id
+            SKIP $offset
             LIMIT $limit
             """,
             group_id=self._group_id,
             anchor_node_ids=sorted(anchor_node_ids),
             direct_chain_ids=sorted(direct_chain_ids),
+            offset=offset,
             limit=limit,
             routing_="r",
         )

@@ -11,8 +11,8 @@ Event 进入 Graphiti 前后的分类、锚点匹配和直接 Signal Fact 构建
 - Schedule Payload 是投研命题和 Event 回看时长的唯一运行输入。
 - 核心 Workflow 不使用 Planner Agent；`prepare-investment-context` 直接解析 Schedule 输入并冻结 `decision_at`。
 - 当前只执行地缘政治、宏观经济和产业链三层；Company 层暂不执行，也不得在结果中生成 Company 结论。
-- `capabilities/investment/` 持有投研合同、分层检索政策、根谱门禁、传导和结论规则。
-- `agents/investment_reasoner.py` 负责受限语义判断，`agents/investment_reviewer.py` 负责最终语义审核。
+- `capabilities/investment/` 持有投研合同、分层检索政策、检索回执、引用边界、传导和结论规则。
+- `agents/investment_reasoner.py` 负责受限语义判断，`agents/investment_reviewer.py` 同时承担推理轮内部的局部 Transmission 审核和最终整体一致性审核。
 - `workflows/investment_reasoning.py` 只组装固定 Step、生命周期和 Studio seed。
 - `sematica/graphiti/investment.py` 只封装 Graphiti 原生检索与 group/time/ID/拓扑精确读取，不持有投研业务规则。
 
@@ -28,9 +28,9 @@ Event 进入 Graphiti 前后的分类、锚点匹配和直接 Signal Fact 构建
 }
 ```
 
-Agno 的 HTTP 层在配置 Workflow `input_schema` 时会先把原始 message 当 JSON 解码，因此本 Workflow 不在 Agno 入口声明 `input_schema`，而由第一个确定性 Function 把原始自然语言或 JSON 统一校验为 `InvestmentReasoningInput`。该合同必须拒绝未知字段和 `include_company=true`。为迁移现有本地 Schedule，可在一个兼容周期内接受包含明确“最近 N 小时”的旧中文 message；不得静默使用另一个隐藏时间窗。`decision_at`、产业链上限、检索预算和最多三跳由确定性代码控制，不接受 Schedule 覆盖。
+Agno 的 HTTP 层在配置 Workflow `input_schema` 时会先把原始 message 当 JSON 解码，因此本 Workflow 不在 Agno 入口声明 `input_schema`，而由第一个确定性 Function 把原始自然语言或 JSON 统一校验为 `InvestmentReasoningInput`。该合同必须拒绝未知字段和 `include_company=true`。为迁移现有本地 Schedule，可在一个兼容周期内接受包含明确“最近 N 小时”的旧中文 message；不得静默使用另一个隐藏时间窗。`decision_at`、检索预算、分页批量、运行安全上限和最多五跳由确定性代码控制，不接受 Schedule 覆盖。产业链候选必须分页读完当前 Signal 根所命中的全部真实链，禁止按某次报告的条数静默截断。`event_window_hours` 最大支持 8760 小时，便于对同一历史 Event 范围做确定性重放；生产 Schedule 仍由 Control Panel 显式保持 48 小时等日常窗口。
 
-## 固定五步
+## 固定六步
 
 ```text
 Schedule Payload
@@ -44,6 +44,8 @@ analyze-macro-impact
 analyze-industry-impact
         ↓
 review-and-finalize
+        ↓
+generate-investment-report
 ```
 
 ### 1. prepare-investment-context
@@ -68,15 +70,15 @@ review-and-finalize
 
 1. 使用 Event、直接 Signal 和标准锚点执行 Graphiti 原生召回；
 2. 加载命中的地缘政治锚点和当前有效普通 Fact；
-3. Reasoner 形成初步判断；
+3. Reasoner 根据本体语义解读检索实例，形成锚点评估；
 4. 如确有缺口，只允许提交有界补充查询，由代码执行 Graphiti 检索；
-5. 形成地缘政治层结论并通过确定性根谱门禁。
+5. Workflow 自动绑定当前锚点的全部直接 Signal Fact 和 Event 引用。
 
-第一层没有上游结论。方向性地缘政治判断必须具有当前有效的直接 Signal 根；只有 Event、MENTIONS 或普通 Fact 时只能输出 `INSUFFICIENT_EVIDENCE`，不能强行给出方向。
+第一层没有上游结论。方向性地缘政治评估必须具有当前有效的直接 Signal；只有 Event、MENTIONS 或普通 Fact 时不形成直接方向。Signal 是图谱事实，不再由模型转录为另一份 Claim。
 
 ### 3. analyze-macro-impact
 
-输入必须包含完整、已校验的地缘政治层结果，并在已初始化的 `MacroEconomic` 标准锚点范围内分析：
+输入包含完整的地缘政治层评估，并在已初始化的 `MacroEconomic` 标准锚点范围内分析：
 
 ```text
 地缘政治层结论
@@ -85,7 +87,7 @@ review-and-finalize
 → 宏观经济层结论
 ```
 
-即使没有宏观经济直接 Signal，本 Step 仍必须执行。只有当有效地缘政治结论和明确机制 Fact 同时存在时，才可形成跨层派生结论；派生结论必须继承上层 Event/Signal 根，记录父结论与机制 Fact，并降低或保持置信度。缺少任一项时输出 `NO_MATERIAL_CHANGE` 或 `INSUFFICIENT_EVIDENCE`，不得发明传导机制。
+即使没有宏观经济直接 Signal，本 Step 仍必须执行。本层直接评估仅来自宏观锚点上已检索的 Signal Fact；地缘到宏观的影响另行记录为跨层传导。有普通 Fact 时可形成闭环机制；仅为同一 Event 在两层同时产生 Signal 时标记为同源影响；无足够机制时保留为低置信度待验证传导，不伪造图谱 Fact。跨层传导在交给下一层前逐条执行局部语义审核；有矛盾的路径只允许在同一冻结锚点配对和 Fact 上修复一次，复审仍不一致则剔除，不影响同批其他路径。
 
 ### 4. analyze-industry-impact
 
@@ -93,18 +95,22 @@ review-and-finalize
 
 该 Step 才执行产业链检索与拓扑加载：
 
-1. 根据直接节点 Signal 所属真实产业链、上层结论及机制 Fact 召回候选 `IndustryChain`；
-2. 每条候选链独立加载全部标准 `ChainNode` 和真实拓扑边；
-3. 找到直接 Signal 根节点，或通过“上层结论 + 机制 Fact”建立受控节点落点；
-4. 沿真实拓扑最多执行三轮传导；
-5. 覆盖该链每个标准节点，分别生成短、中、长期趋势；
-6. 汇总产业链整体升温、降温、分化、无显著变化或证据不足。
+1. 从本次 Event 时间窗内有效的 `SIGNAL_ON → ChainNode` 精确确定 Signal 根节点；
+2. 只用这些 Signal 和与根节点直接相关的本次 Event Fact 形成节点评估，不执行宽泛产业锚点向量召回，也不批量加载候选锚点的全部 Fact；
+3. 通过真实 `ChainNodeBelongsToIndustryChain` 关系分页解析根节点所属的全部 `IndustryChain`；
+4. 每条候选链独立加载全部标准 `ChainNode` 和真实拓扑边；
+5. 程序从每个 Signal 根枚举全部真实相邻边，Reasoner 只评估固定候选，不得自行挑选节点或边；
+6. 路径分数达到 `0.40` 才保留为推理假设，达到 `0.65` 的单条路径才继续下一跳，最多五跳；
+7. 每条路径独立停止，某条低置信度路径不得阻断其他分支；
+8. 每轮新路径进入下一跳前逐条执行局部语义审核；只在冻结 Candidate 上修复一次，复审仍矛盾的路径剔除，后续跳数只能使用清理后的路径；
+9. 单层直接 Signal 根按固定批量分批交给 Reasoner，合并后必须覆盖该链每个标准节点，分别生成短、中、长期趋势；
+10. 由程序根据真实节点结果汇总产业链整体升温、降温、分化、无显著变化或证据不足。
 
-语义相关只能用于候选召回，不能单独启动方向判断。产业链结论必须由其真实成员节点的直接或受控传导结果汇总，不得使用链级 Signal 启动方向。交叉出现在多条产业链中的节点必须按 `(industry_chain_id, chain_node_id)` 分析，禁止跨链污染。
+Event 语义相关不能单独选择产业链或启动方向判断。产业链结论必须由其真实成员节点的直接或受控传导结果汇总，不得使用链级 Signal 启动方向。交叉出现在多条产业链中的节点必须按 `(industry_chain_id, chain_node_id)` 分析，禁止跨链污染。全历史重放与日常时间窗使用同一数据准备顺序；扩大 Event 时间窗不得退化为“候选锚点全部 Fact”查询。
 
 ### 5. review-and-finalize
 
-确定性门禁先检查全部层级和产业链节点结论，Reviewer 再做语义审核。该 Step 不创造新的因果方向，只负责审核、一次有界修正和安全降级。
+确定性门禁检查必需 Step 和检索动作是否执行、输出结构是否符合合同、所有 ID 是否来自本次检索上下文。跨层和节点 Transmission 已在各自推理轮内完成局部审核、修复或剔除；最终 Reviewer 只审核直接/推理边界、节点结论、链级聚合与报告摘要的整体一致性，不重新校验 Graphiti 已返回数据的业务真伪，也不因单条低置信度或待验证路径否决其他有效结果。若保留结果仍存在可修复的整体聚合矛盾，允许在同一冻结上下文上返工一次并复审；第二次仍不通过则不生成报告。
 
 最终结果包括：
 
@@ -122,42 +128,43 @@ data/investment/conclusions/<workflow_run_id>.json
 
 该 JSON 是 Workflow 的产品输出，同时作为最终 Step `content`返回。它包含命题、决策时间、一句话结论、分层结论、节点趋势、推理树、Reviewer 结果、限制和上下文指纹；不包含 Agno `step_results`、重复的全量上下文或隐藏思维链。同一 `workflow_run_id` 重试只能接受完全相同的 Artifact，内容冲突必须失败，不得覆盖。Data Service 发布留待后续独立工序。
 
-## 分层结论与根谱
+### 6. generate-investment-report
+
+将已审核的结果投影为已冻结的固定报告模板，原子写入 `data/investment/reports/<workflow_run_id>.json`。该 Step 不修改推理结论，不调用 Data Service；展示所需 Evidence ID 优先使用 Event Episode 内已冻结的 `evidence_ids`，本地 Event Artifact 仅作兼容回退，不再是报告生成的必要依赖。
+
+## 分层评估、检索回执与传导
 
 分层中间结果只保存在本次 Workflow 状态中。核心合同包括：
 
 - `InvestmentReasoningInput`：Schedule 命题和时间窗；
 - `AnalysisAnchorSnapshot`：标准锚点身份；
-- `ImpactClaimProposal` / `AcceptedImpactClaim`：待校验和已接受的分层影响结论；
-- `LayerImpactBatch` / `LayerAnalysisContext` / `LayerAnalysisResult`：单层上下文与输出；
+- `ReasoningOntologyContext`：随每个推理 Step 传入的精简本体语义；
+- `RetrievalReceipt`：记录每层必需 Graphiti 检索动作、查询和返回 ID；
+- `LayerAssessmentProposal` / `LayerAssessment`：对已检索直接 Signal 锚点的语义解读与审计引用；
+- `LayerAssessmentBatch` / `LayerAnalysisContext` / `LayerAnalysisResult`：单层上下文与输出；
 - `GeopoliticalAnalysisState`、`MacroAnalysisState`、`IndustryAnalysisState`：逐层继承的 Workflow 状态。
 
-模型只能在 `ImpactClaimProposal` 中提交标准锚点业务 ID、Variable ID、方向、周期、置信度、摘要、机制，以及可验证的 `source_fact_ids`、`mechanism_fact_ids` 和 `parent_claim_ids`。模型不得自行声明 Event/Signal 根谱，也不得生成 `claim_id` 或层级。
+模型仅提交锚点评估的结果、摘要、推理说明、假设和风险。Workflow 按锚点自动绑定本次检索到的全部直接 Signal Fact，并从 Signal 解析 Event、周期与锚点身份。模型输出的 Signal ID 不是权威数据，不用于重新校验或改写图谱结果。
 
-确定性门禁接受 Proposal 后生成 `AcceptedImpactClaim`，并补充：
+工作流确定性校验仅覆盖：
 
-- 稳定 `claim_id`、所属层级、标准锚点名称和类型；
-- 从 `source_fact_ids` 或父结论解析出的 `root_event_ids` 与仍有效的 `root_signal_fact_ids`；
-- `DIRECT_SIGNAL` 或 `CROSS_LAYER` derivation；
-- 已验证的机制 Fact、假设、风险和失效条件。
+1. 必需 Step 与每层 `RetrievalReceipt.required_actions` 已全部执行。
+2. 锚点评估、跨层传导和节点传导中的 ID 均属于本次检索上下文。
+3. 直接 Signal、普通 Fact、跨层传导假设和产业链拓扑传导保持不同语义类型。
+4. 无直接 Signal 或可追溯传导支持的节点不得形成方向结论。
+5. 产业链方向必须由其节点方向确定性聚合，升温与降温并存时必须为分化。
+6. 单条假设证据弱时标记低置信度、待验证或 issue，不全局否决其他直接 Signal 支持的评估。
+7. 每条 Transmission 的局部语义审核只检查“源变量及方向 → 经济机制 → 目标变量及方向”；拓扑遍历方向不等于变量方向，复审仍矛盾的路径不得进入下一轮或最终报告。
 
-门禁规则：
-
-1. 直接结论必须引用作用于同一标准锚点的有效 Signal Fact。
-2. 跨层结论必须引用已接受的前序层父结论和真实机制 Fact；同一条机制 Fact 必须同时连接父结论锚点和当前锚点，再由代码继承父结论的全部根谱。
-3. 后序层不能引用同层或未来层结论，不能形成循环谱系。
-4. 派生结论的影响周期不能超出根 Signal/父结论支持范围。
-5. 派生结论置信度不得高于其最弱父结论和机制证据。
-6. 普通 Fact 可以解释机制，但不能作为方向根；MENTIONS 只表示相关。
-7. `NO_MATERIAL_CHANGE` 也需要充分证据；单纯缺少证据时必须使用 `INSUFFICIENT_EVIDENCE`。
+报告只展示直接 Signal 节点、通过路径门槛的推理节点，以及最多三个与这些节点直接相邻的 Evidence Gap；其余全量拓扑仍保留在审计上下文中，不写入产品报告。
 
 ## Graphiti 检索原则
 
 - 语义召回使用 Graphiti 原生 `search` / `search_`，不引入额外向量中间件或 Graphiti 源码分叉。
 - Event 时间窗、`group_id`、标准锚点身份、Fact 有效期、节点和拓扑使用 Graphiti 已配置 Neo4j driver 精确读取。
-- `prepare` 只获得共享基础数据；geo、macro、industry 各自按前序已接受结论主动补充本层数据。
+- `prepare` 只获得共享基础数据；geo、macro、industry 各自按前序评估主动补充本层数据。
 - Agent 不获得无限制 Neo4j Tool。补充检索请求必须满足允许的锚点类型、数量、文本长度、并发和结果上限。
-- Graphiti 原生语义命中只产生候选；方向结论仍必须通过根谱门禁。
+- Graphiti 原生语义命中产生候选并按锚点身份精确加载 Fact；返回的图谱数据直接作为推理实例，不再经过第二套业务真伪门禁。
 
 ## 运行与迁移
 

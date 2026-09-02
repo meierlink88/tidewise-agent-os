@@ -13,51 +13,63 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from agno.agent import Agent
 from agno.run import RunContext
-from agno.workflow import Step, StepInput, StepOutput, Workflow
+from agno.workflow import Step, StepInput, Workflow
 from pydantic import ValidationError
 
 from agents.investment_reasoner import (
     INVESTMENT_REASONER_CONTRACT_VERSION,
     ensure_investment_reasoner_agent,
 )
+from agents.investment_report_writer import (
+    INVESTMENT_REPORT_WRITER_CONTRACT_VERSION,
+    ensure_investment_report_writer_agent,
+)
 from agents.investment_reviewer import (
     INVESTMENT_REVIEWER_CONTRACT_VERSION,
     ensure_investment_reviewer_agent,
 )
-from app.registry import TidewiseRegistry
+from app.registry import TidewiseRegistry, registry
 from capabilities.investment import (
-    AcceptedImpactClaim,
     AcceptedTransmission,
     AnalysisAnchorSnapshot,
     AnalysisDraft,
     ChainNodeSnapshot,
     ChainTrendView,
     Confidence,
+    CrossLayerTransmissionBatch,
+    CrossLayerTransmissionProposal,
     Direction,
     EventSnapshot,
     FactSnapshot,
     GeopoliticalAnalysisState,
     Horizon,
-    ImpactClaimProposal,
     ImpactLayer,
     IndustryAnalysisState,
     IndustryChainSnapshot,
     InvestmentAnalysisContext,
     InvestmentAnalysisRequest,
-    InvestmentAnalysisResult,
     InvestmentAssessment,
     InvestmentConclusionArtifact,
     InvestmentReasoningInput,
     LayerAnalysisContext,
     LayerAnalysisResult,
-    LayerImpactBatch,
+    LayerAssessment,
+    LayerAssessmentBatch,
+    LayerAssessmentProposal,
     MacroAnalysisState,
+    NodeAnalysisBatch,
     NodeTrendView,
     PreparedInvestmentContext,
+    ReasoningOntologyContext,
+    RetrievalReceipt,
+    ReviewedInvestmentState,
     ReviewResult,
     TopologyEdgeSnapshot,
     TransmissionBatch,
+    TransmissionCandidate,
     TransmissionProposal,
+    TransmissionSemanticIssue,
+    TransmissionSemanticReview,
     Trend,
     configure_investment_workflow_runtime,
 )
@@ -65,12 +77,14 @@ from capabilities.investment.functions import (
     analyze_geopolitical_impact,
     analyze_industry_impact,
     analyze_macro_impact,
+    generate_investment_report,
     prepare_investment_context,
+    publish_investment_report,
     review_and_finalize,
 )
 from capabilities.investment.internal.context import InvestmentContextBuilder
 from capabilities.investment.internal.engine import InvestmentReasoningEngine
-from capabilities.investment.internal.local_runtime import LocalInvestmentWorkflowRuntime
+from capabilities.investment.internal.local_runtime import LocalInvestmentWorkflowRuntime, _bounded_text, _payload
 from capabilities.investment.internal.storage import write_conclusion_artifact
 from sematica.graphiti.investment import GraphitiInvestmentReader
 from workflows.investment_reasoning import (
@@ -98,6 +112,19 @@ class InvestmentReasoningGateTest(unittest.TestCase):
                 )
             ],
             facts=[fact],
+            ontology=LayerAssessmentContractTest._ontology(),
+            retrieval_receipts=[
+                RetrievalReceipt(
+                    stage=stage,
+                    layer=ImpactLayer(stage) if stage != "PREPARE" else None,
+                    required_actions=["load_test_context"],
+                    completed_actions=["load_test_context"],
+                    event_ids=["event-1"],
+                    fact_ids=[fact.uuid],
+                    direct_signal_fact_ids=[fact.uuid] if fact.kind == "SIGNAL" else [],
+                )
+                for stage in ["PREPARE", "GEOPOLITICAL", "MACRO_ECONOMIC", "INDUSTRY"]
+            ],
             chains=[
                 IndustryChainSnapshot(
                     uuid="chain-uuid",
@@ -198,6 +225,99 @@ class InvestmentReasoningGateTest(unittest.TestCase):
         self.assertEqual(accepted[0].root_signal_fact_ids, [fact.uuid])
         self.assertEqual(accepted[0].confidence, Confidence.MEDIUM)
 
+    def test_candidate_enumeration_covers_every_real_adjacent_edge(self) -> None:
+        fact = self._active_signal()
+        context = self._context(fact)
+        chain = context.chains[0]
+        extended = chain.model_copy(
+            update={
+                "nodes": [
+                    *chain.nodes,
+                    ChainNodeSnapshot(uuid="node-c-uuid", business_id="node-c", name="另一邻点"),
+                ],
+                "edges": [
+                    *chain.edges,
+                    TopologyEdgeSnapshot(
+                        uuid="edge-2-uuid",
+                        business_id="edge-2",
+                        name="ChainNodeDependsOn",
+                        source_node_id="node-c",
+                        source_name="另一邻点",
+                        target_node_id="node-a",
+                        target_name="上游",
+                        fact="另一邻点依赖上游",
+                    ),
+                ],
+            }
+        )
+        context = context.model_copy(update={"chains": [extended]})
+
+        candidates = InvestmentReasoningEngine.enumerate_transmission_candidates(context, [], round_number=1)
+
+        self.assertEqual({item.target_node_id for item in candidates}, {"node-b", "node-c"})
+        self.assertEqual({item.flow for item in candidates}, {"ALONG_EDGE", "AGAINST_EDGE"})
+
+    def test_medium_root_uses_path_score_to_continue_even_when_enum_confidence_is_low(self) -> None:
+        fact = self._active_signal().model_copy(update={"confidence": Confidence.MEDIUM})
+        context = self._context(fact)
+        chain = context.chains[0]
+        chain = chain.model_copy(
+            update={
+                "nodes": [
+                    *chain.nodes,
+                    ChainNodeSnapshot(uuid="node-c-uuid", business_id="node-c", name="终端"),
+                ],
+                "edges": [
+                    *chain.edges,
+                    TopologyEdgeSnapshot(
+                        uuid="edge-2-uuid",
+                        business_id="edge-2",
+                        name="ChainNodeInputTo",
+                        source_node_id="node-b",
+                        source_name="下游",
+                        target_node_id="node-c",
+                        target_name="终端",
+                        fact="下游向终端提供投入品",
+                    ),
+                ],
+            }
+        )
+        context = context.model_copy(update={"chains": [chain]})
+        first_candidate = InvestmentReasoningEngine.enumerate_transmission_candidates(context, [], round_number=1)[0]
+        proposal = (
+            self._proposal(fact.uuid)
+            .proposals[0]
+            .model_copy(update={"candidate_id": first_candidate.candidate_id, "confidence": Confidence.MEDIUM})
+        )
+        first = InvestmentReasoningEngine.validate_round(
+            context,
+            [],
+            TransmissionBatch(proposals=[proposal]),
+            round_number=1,
+            candidates=[first_candidate],
+        )[0]
+
+        second_candidates = InvestmentReasoningEngine.enumerate_transmission_candidates(
+            context, [first], round_number=2
+        )
+
+        self.assertEqual(first.confidence, Confidence.LOW)
+        self.assertEqual(first.path_score, 0.7)
+        self.assertEqual([item.target_node_id for item in second_candidates], ["node-c"])
+
+    def test_chain_trend_aggregation_preserves_mixed_node_directions(self) -> None:
+        self.assertEqual(
+            InvestmentReasoningEngine._reduce_trend([Trend.WARMING, Trend.COOLING]),
+            Trend.DIVERGENT,
+        )
+
+    def test_run_level_batch_can_merge_more_than_one_hundred_chain_results(self) -> None:
+        proposal = self._proposal(self._active_signal().uuid).proposals[0]
+
+        batch = TransmissionBatch(proposals=[proposal] * 134)
+
+        self.assertEqual(len(batch.proposals), 134)
+
     def test_industry_chain_signal_cannot_start_directional_reasoning(self) -> None:
         fact = self._active_signal().model_copy(
             update={
@@ -224,7 +344,7 @@ class InvestmentReasoningGateTest(unittest.TestCase):
             [],
         )
 
-    def test_first_hop_cannot_escape_signal_horizon(self) -> None:
+    def test_first_hop_may_express_an_inferred_horizon_without_rewriting_the_signal(self) -> None:
         fact = self._active_signal()
         proposal = self._proposal(fact.uuid).proposals[0].model_copy(update={"horizon": Horizon.LONG})
 
@@ -232,7 +352,9 @@ class InvestmentReasoningGateTest(unittest.TestCase):
             self._context(fact), [], TransmissionBatch(proposals=[proposal]), round_number=1
         )
 
-        self.assertEqual(accepted, [])
+        self.assertEqual(len(accepted), 1)
+        self.assertEqual(accepted[0].horizon, Horizon.LONG)
+        self.assertEqual(accepted[0].root_signal_fact_ids, [fact.uuid])
 
     def test_topology_flow_must_match_the_real_edge_direction(self) -> None:
         fact = self._active_signal()
@@ -350,7 +472,7 @@ class InvestmentReasoningGateTest(unittest.TestCase):
             update={"topology_edge_id": "edge-does-not-exist", "transmission_id": "ignored"}
         )
         fabricated_proposal = TransmissionProposal.model_validate(
-            fabricated.model_dump(exclude={"transmission_id", "hop", "root_signal_fact_ids"})
+            fabricated.model_dump(exclude={"transmission_id", "hop", "root_signal_fact_ids", "path_score"})
         )
         rejected = InvestmentReasoningEngine.validate_round(
             context, accepted[:-1], TransmissionBatch(proposals=[fabricated_proposal]), round_number=3
@@ -360,7 +482,7 @@ class InvestmentReasoningGateTest(unittest.TestCase):
         self.assertTrue(all(item.root_signal_fact_ids == [fact.uuid] for item in accepted))
         self.assertEqual(rejected, [])
 
-    def test_uncited_directional_node_claim_is_normalized_to_insufficient(self) -> None:
+    def test_direct_node_signal_is_bound_even_when_the_model_omits_its_id(self) -> None:
         fact = self._active_signal()
         context = self._context(fact)
         node = NodeTrendView(
@@ -377,8 +499,8 @@ class InvestmentReasoningGateTest(unittest.TestCase):
 
         normalized = InvestmentReasoningEngine._normalize_node(context, [], "chain-1", "node-a", node)
 
-        self.assertEqual(normalized.short, Trend.INSUFFICIENT_EVIDENCE)
-        self.assertEqual(normalized.investment_assessment, InvestmentAssessment.INSUFFICIENT_EVIDENCE)
+        self.assertEqual(normalized.short, Trend.WARMING)
+        self.assertEqual(normalized.supporting_fact_ids, [fact.uuid])
 
     def test_unscoped_event_signals_cannot_preserve_directional_node_trends(self) -> None:
         for label, context, signal in self._unscoped_signal_contexts():
@@ -511,7 +633,7 @@ class InvestmentReasoningGateTest(unittest.TestCase):
         )
 
 
-class LayeredImpactLineageGateTest(unittest.TestCase):
+class LayerAssessmentContractTest(unittest.TestCase):
     def setUp(self) -> None:
         self.decision_at = datetime(2026, 8, 29, 0, 0, tzinfo=UTC)
         self.event = EventSnapshot(
@@ -571,12 +693,26 @@ class LayeredImpactLineageGateTest(unittest.TestCase):
             target_labels=["Entity", "MacroEconomic"],
         )
 
-    def _layer_context(
-        self,
-        layer: ImpactLayer,
-        *,
-        parent_claims: list[AcceptedImpactClaim] | None = None,
-    ) -> LayerAnalysisContext:
+    @staticmethod
+    def _ontology() -> ReasoningOntologyContext:
+        return ReasoningOntologyContext(
+            entity_types={"Event": "事件", "Variable": "变量", "GeopoliticRivalry": "地缘锚点"},
+            fact_types={"SIGNAL_ON": "直接变量信号", "ORDINARY": "普通事实"},
+            relationship_types={"MENTIONS": "提及"},
+            usage_rules=["直接 Signal 不转换为 Claim。"],
+        )
+
+    def _layer_context(self, layer: ImpactLayer) -> LayerAnalysisContext:
+        receipt = RetrievalReceipt(
+            stage=layer.value,
+            layer=layer,
+            required_actions=["search_anchor_nodes", "load_anchor_facts"],
+            completed_actions=["search_anchor_nodes", "load_anchor_facts"],
+            event_ids=[self.event.event_id],
+            anchor_ids=[self.geo_anchor.business_id, self.macro_anchor.business_id],
+            fact_ids=[self.signal.uuid, self.mechanism.uuid],
+            direct_signal_fact_ids=[self.signal.uuid],
+        )
         return LayerAnalysisContext(
             layer=layer,
             decision_at=self.decision_at,
@@ -584,43 +720,48 @@ class LayeredImpactLineageGateTest(unittest.TestCase):
             events=[self.event],
             anchors=[self.geo_anchor, self.macro_anchor],
             facts=[self.signal, self.mechanism],
-            parent_claims=parent_claims or [],
+            parent_assessments=[],
             direct_signal_fact_ids=[self.signal.uuid],
+            ontology=self._ontology(),
+            retrieval_receipt=receipt,
         )
 
-    def _geo_batch(self, *, source_fact_ids: list[str] | None = None) -> LayerImpactBatch:
-        return LayerImpactBatch(
+    def _geo_batch(self) -> LayerAssessmentBatch:
+        return LayerAssessmentBatch(
             proposals=[
-                ImpactClaimProposal(
+                LayerAssessmentProposal(
                     anchor_id=self.geo_anchor.business_id,
-                    variable_id="geopolitical_risk",
-                    direction=Direction.UP,
-                    horizons=[Horizon.SHORT],
+                    result=Trend.WARMING,
                     confidence=Confidence.MEDIUM,
                     summary="美伊冲突的短期地缘政治风险上升。",
-                    mechanism="军事冲突概率上升提高区域不确定性。",
-                    source_fact_ids=source_fact_ids or [self.signal.uuid],
+                    reasoning="军事冲突概率上升提高区域不确定性。",
                 )
             ],
             summary="地缘政治风险上升。",
         )
 
-    def test_direct_geo_claim_gets_root_lineage_from_the_cited_signal(self) -> None:
-        accepted = InvestmentReasoningEngine.validate_layer_batch(
+    def test_direct_signal_becomes_an_assessment_reference_without_claim_conversion(self) -> None:
+        accepted = InvestmentReasoningEngine.build_layer_assessments(
             self._layer_context(ImpactLayer.GEOPOLITICAL),
-            [],
             self._geo_batch(),
             layer=ImpactLayer.GEOPOLITICAL,
         )
 
         self.assertEqual(len(accepted), 1)
-        self.assertIsInstance(accepted[0], AcceptedImpactClaim)
-        self.assertEqual(accepted[0].derivation, "DIRECT_SIGNAL")
+        self.assertIsInstance(accepted[0], LayerAssessment)
         self.assertEqual(accepted[0].root_event_ids, ["event-1"])
-        self.assertEqual(accepted[0].root_signal_fact_ids, [self.signal.uuid])
+        self.assertEqual(accepted[0].direct_signal_fact_ids, [self.signal.uuid])
         self.assertEqual(accepted[0].layer, ImpactLayer.GEOPOLITICAL)
+        self.assertEqual(accepted[0].result, Trend.WARMING)
 
-    def test_merged_signal_claim_keeps_only_current_event_roots(self) -> None:
+    def test_model_cannot_self_declare_signal_references(self) -> None:
+        payload = self._geo_batch().proposals[0].model_dump(mode="json")
+        payload["direct_signal_fact_ids"] = ["invented-signal"]
+
+        with self.assertRaises(ValidationError):
+            LayerAssessmentProposal.model_validate(payload)
+
+    def test_merged_signal_keeps_only_current_event_roots(self) -> None:
         merged_signal = self.signal.model_copy(
             update={"source_event_ids": [self.event.event_id, "event-before-current-window"]}
         )
@@ -628,9 +769,8 @@ class LayeredImpactLineageGateTest(unittest.TestCase):
             update={"facts": [merged_signal, self.mechanism]}
         )
 
-        accepted = InvestmentReasoningEngine.validate_layer_batch(
+        accepted = InvestmentReasoningEngine.build_layer_assessments(
             context,
-            [],
             self._geo_batch(),
             layer=ImpactLayer.GEOPOLITICAL,
         )
@@ -639,227 +779,283 @@ class LayeredImpactLineageGateTest(unittest.TestCase):
         self.assertEqual(accepted[0].root_event_ids, [self.event.event_id])
         self.assertNotIn("event-before-current-window", accepted[0].root_event_ids)
 
-    def test_model_proposal_cannot_self_declare_accepted_lineage(self) -> None:
+    def test_model_proposal_cannot_self_declare_root_lineage(self) -> None:
         with self.assertRaises(ValidationError):
-            ImpactClaimProposal.model_validate(
+            LayerAssessmentProposal.model_validate(
                 {
                     "anchor_id": self.geo_anchor.business_id,
-                    "variable_id": "geopolitical_risk",
-                    "direction": "UP",
-                    "horizons": ["SHORT"],
+                    "result": "WARMING",
                     "confidence": "MEDIUM",
                     "summary": "模型试图自报根谱。",
-                    "mechanism": "根谱只能由代码解析。",
-                    "source_fact_ids": [self.signal.uuid],
+                    "reasoning": "根谱只能由工作流绑定。",
                     "root_event_ids": ["event-1"],
-                    "root_signal_fact_ids": [self.signal.uuid],
                 }
             )
 
-    def test_ordinary_fact_cannot_be_declared_as_a_direct_layer_root(self) -> None:
-        accepted = InvestmentReasoningEngine.validate_layer_batch(
-            self._layer_context(ImpactLayer.GEOPOLITICAL),
-            [],
-            self._geo_batch(source_fact_ids=[self.mechanism.uuid]),
+    def test_ordinary_fact_alone_cannot_create_a_layer_assessment(self) -> None:
+        context = self._layer_context(ImpactLayer.GEOPOLITICAL).model_copy(
+            update={"direct_signal_fact_ids": [], "facts": [self.mechanism]}
+        )
+        accepted = InvestmentReasoningEngine.build_layer_assessments(
+            context,
+            self._geo_batch(),
             layer=ImpactLayer.GEOPOLITICAL,
         )
 
         self.assertEqual(accepted, [])
 
-    def test_macro_cross_layer_claim_inherits_roots_and_caps_confidence(self) -> None:
-        parent = InvestmentReasoningEngine.validate_layer_batch(
-            self._layer_context(ImpactLayer.GEOPOLITICAL),
+
+class LocalTransmissionSemanticReviewTest(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def _node_fixture() -> tuple[
+        InvestmentAnalysisContext,
+        list[TransmissionCandidate],
+        list[AcceptedTransmission],
+        TransmissionProposal,
+    ]:
+        gate = InvestmentReasoningGateTest()
+        fact = gate._active_signal()
+        context = gate._context(fact)
+        candidates = InvestmentReasoningEngine.enumerate_transmission_candidates(
+            context,
             [],
-            self._geo_batch(),
-            layer=ImpactLayer.GEOPOLITICAL,
-        )[0]
-        batch = LayerImpactBatch(
-            proposals=[
-                ImpactClaimProposal(
-                    anchor_id=self.macro_anchor.business_id,
-                    variable_id="inflation_expectation",
-                    direction=Direction.UP,
-                    horizons=[Horizon.SHORT],
-                    confidence=Confidence.HIGH,
-                    summary="能源风险使短期通胀预期上升。",
-                    mechanism="能源供给风险经油价传导至通胀。",
-                    mechanism_fact_ids=[self.mechanism.uuid],
-                    parent_claim_ids=[parent.claim_id],
-                )
-            ],
-            summary="通胀预期受到上行压力。",
+            round_number=1,
         )
-
-        accepted = InvestmentReasoningEngine.validate_layer_batch(
-            self._layer_context(ImpactLayer.MACRO_ECONOMIC, parent_claims=[parent]),
-            [parent],
-            batch,
-            layer=ImpactLayer.MACRO_ECONOMIC,
-        )
-
-        self.assertEqual(len(accepted), 1)
-        self.assertEqual(accepted[0].derivation, "CROSS_LAYER")
-        self.assertEqual(accepted[0].root_event_ids, parent.root_event_ids)
-        self.assertEqual(accepted[0].root_signal_fact_ids, parent.root_signal_fact_ids)
-        self.assertEqual(accepted[0].parent_claim_ids, [parent.claim_id])
-        self.assertEqual(accepted[0].mechanism_fact_ids, [self.mechanism.uuid])
-        self.assertNotEqual(accepted[0].confidence, Confidence.HIGH)
-
-    def test_macro_cross_layer_claim_without_a_mechanism_fact_is_rejected(self) -> None:
-        parent = InvestmentReasoningEngine.validate_layer_batch(
-            self._layer_context(ImpactLayer.GEOPOLITICAL),
+        candidate = candidates[0]
+        proposal = gate._proposal(fact.uuid).proposals[0].model_copy(update={"candidate_id": candidate.candidate_id})
+        accepted = InvestmentReasoningEngine.validate_round(
+            context,
             [],
-            self._geo_batch(),
-            layer=ImpactLayer.GEOPOLITICAL,
-        )[0]
-        batch = LayerImpactBatch(
-            proposals=[
-                ImpactClaimProposal(
-                    anchor_id=self.macro_anchor.business_id,
-                    variable_id="inflation_expectation",
-                    direction=Direction.UP,
-                    horizons=[Horizon.SHORT],
-                    confidence=Confidence.MEDIUM,
-                    summary="通胀预期上升。",
-                    mechanism="缺少图谱机制事实。",
-                    parent_claim_ids=[parent.claim_id],
-                )
-            ],
-            summary="宏观层候选结论。",
+            TransmissionBatch(proposals=[proposal]),
+            round_number=1,
+            candidates=[candidate],
         )
+        return context, [candidate], accepted, proposal
 
-        accepted = InvestmentReasoningEngine.validate_layer_batch(
-            self._layer_context(ImpactLayer.MACRO_ECONOMIC, parent_claims=[parent]),
-            [parent],
-            batch,
-            layer=ImpactLayer.MACRO_ECONOMIC,
+    async def test_node_transmission_is_repaired_before_it_enters_the_next_round(self) -> None:
+        context, candidates, accepted, proposal = self._node_fixture()
+        issue = TransmissionSemanticIssue(
+            transmission_id=accepted[0].transmission_id,
+            issue_code="VARIABLE_TRANSITION_INCONSISTENT",
+            critique="机制描述的是需求扩张，但目标变量和方向写成供给下降。",
+            repair_instruction="将目标变量改为需求并使用上升方向。",
         )
-
-        self.assertEqual(accepted, [])
-
-    def test_cross_layer_mechanism_must_connect_parent_and_current_anchors(self) -> None:
-        parent = InvestmentReasoningEngine.validate_layer_batch(
-            self._layer_context(ImpactLayer.GEOPOLITICAL),
-            [],
-            self._geo_batch(),
-            layer=ImpactLayer.GEOPOLITICAL,
-        )[0]
-        one_sided_mechanism = self.mechanism.model_copy(
+        repaired_proposal = proposal.model_copy(
             update={
-                "uuid": "only-touches-current-anchor",
-                "source_uuid": "unrelated-uuid",
-                "source_name": "无关锚点",
-                "source_business_id": "unrelated-anchor",
-                "source_labels": ["Entity", "MacroEconomic"],
+                "target_variable": "下游需求",
+                "direction": Direction.UP,
+                "mechanism": "上游供给改善降低投入约束，从而释放下游需求。",
             }
         )
-        context = self._layer_context(ImpactLayer.MACRO_ECONOMIC, parent_claims=[parent]).model_copy(
-            update={"facts": [self.signal, one_sided_mechanism]}
-        )
-        batch = LayerImpactBatch(
-            proposals=[
-                ImpactClaimProposal(
-                    anchor_id=self.macro_anchor.business_id,
-                    variable_id="inflation_expectation",
-                    direction=Direction.UP,
-                    horizons=[Horizon.SHORT],
-                    confidence=Confidence.MEDIUM,
-                    summary="单边触及当前锚点不足以证明跨层传导。",
-                    mechanism="该 Fact 没有连接地缘政治父结论锚点。",
-                    mechanism_fact_ids=[one_sided_mechanism.uuid],
-                    parent_claim_ids=[parent.claim_id],
-                )
-            ],
-            summary="应拒绝单边机制 Fact。",
+        runtime = LocalInvestmentWorkflowRuntime(cast(Any, None), cast(Agent, object()), cast(Agent, object()))
+        runtime._run = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[
+                TransmissionSemanticReview(issues=[issue]),
+                TransmissionBatch(proposals=[repaired_proposal]),
+                TransmissionSemanticReview(),
+            ]
         )
 
-        accepted = InvestmentReasoningEngine.validate_layer_batch(
+        clean, issue_count, repaired_count, dropped_count = await runtime._review_and_repair_node_round(
             context,
-            [parent],
-            batch,
-            layer=ImpactLayer.MACRO_ECONOMIC,
+            [],
+            [],
+            candidates,
+            accepted,
+            round_number=1,
         )
 
-        self.assertEqual(accepted, [])
+        self.assertEqual((issue_count, repaired_count, dropped_count), (1, 1, 0))
+        self.assertEqual(len(clean), 1)
+        self.assertEqual(clean[0].target_variable, "下游需求")
+        self.assertEqual(clean[0].direction, Direction.UP)
+        self.assertNotEqual(clean[0].transmission_id, accepted[0].transmission_id)
 
-    def test_future_mechanism_fact_cannot_support_a_cross_layer_claim(self) -> None:
-        parent = InvestmentReasoningEngine.validate_layer_batch(
-            self._layer_context(ImpactLayer.GEOPOLITICAL),
+    async def test_semantic_review_prompt_enforces_causal_asymmetry_and_hop_continuity(self) -> None:
+        _, _, accepted, _ = self._node_fixture()
+        runtime = LocalInvestmentWorkflowRuntime(cast(Any, None), cast(Agent, object()), cast(Agent, object()))
+        runtime._run = AsyncMock(return_value=TransmissionSemanticReview())  # type: ignore[method-assign]
+
+        await runtime._review_transmission_semantics(
+            transmission_kind="INDUSTRY_TOPOLOGY",
+            transmissions=accepted,
+            context_payload={},
+        )
+
+        call = runtime._run.await_args
+        self.assertIsNotNone(call)
+        assert call is not None
+        prompt = call.args[1]
+        self.assertIn("上游组件需求上升不能反向证明下游终端需求上升", prompt)
+        self.assertIn("上游价格或利润改善不等于下游利润改善", prompt)
+        self.assertIn("多跳传导必须从上一跳的目标变量出发", prompt)
+
+    async def test_node_transmission_still_inconsistent_after_repair_is_dropped(self) -> None:
+        context, candidates, accepted, proposal = self._node_fixture()
+        first_issue = TransmissionSemanticIssue(
+            transmission_id=accepted[0].transmission_id,
+            issue_code="MECHANISM_DIRECTION_INCONSISTENT",
+            critique="机制与方向相反。",
+            repair_instruction="统一机制与方向。",
+        )
+        repaired_proposal = proposal.model_copy(update={"mechanism": "仍然无法解释目标方向。"})
+        repaired = InvestmentReasoningEngine.validate_round(
+            context,
             [],
-            self._geo_batch(),
+            TransmissionBatch(proposals=[repaired_proposal]),
+            round_number=1,
+            candidates=candidates,
+        )[0]
+        second_issue = first_issue.model_copy(update={"transmission_id": repaired.transmission_id})
+        runtime = LocalInvestmentWorkflowRuntime(cast(Any, None), cast(Agent, object()), cast(Agent, object()))
+        runtime._run = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[
+                TransmissionSemanticReview(issues=[first_issue]),
+                TransmissionBatch(proposals=[repaired_proposal]),
+                TransmissionSemanticReview(issues=[second_issue]),
+            ]
+        )
+
+        clean, issue_count, repaired_count, dropped_count = await runtime._review_and_repair_node_round(
+            context,
+            [],
+            [],
+            candidates,
+            accepted,
+            round_number=1,
+        )
+
+        self.assertEqual(clean, [])
+        self.assertEqual((issue_count, repaired_count, dropped_count), (1, 0, 1))
+
+    async def test_cross_layer_transmission_is_locally_repaired_before_downstream_use(self) -> None:
+        fixture = LayerAssessmentContractTest()
+        fixture.setUp()
+        context = fixture._layer_context(ImpactLayer.MACRO_ECONOMIC)
+        source = InvestmentReasoningEngine.build_layer_assessments(
+            fixture._layer_context(ImpactLayer.GEOPOLITICAL),
+            fixture._geo_batch(),
             layer=ImpactLayer.GEOPOLITICAL,
         )[0]
-        future_mechanism = self.mechanism.model_copy(
+        target = source.model_copy(
             update={
-                "uuid": "future-mechanism",
-                "valid_at": datetime(2026, 8, 30, 0, 0, tzinfo=UTC),
+                "assessment_id": "assessment-macro",
+                "layer": ImpactLayer.MACRO_ECONOMIC,
+                "anchor_id": fixture.macro_anchor.business_id,
+                "anchor_name": fixture.macro_anchor.name,
+                "anchor_type": "MacroEconomic",
+                "summary": "通胀预期上升。",
             }
         )
-        context = self._layer_context(ImpactLayer.MACRO_ECONOMIC, parent_claims=[parent]).model_copy(
-            update={"facts": [self.signal, future_mechanism]}
+        original = CrossLayerTransmissionProposal(
+            source_assessment_id=source.assessment_id,
+            target_assessment_id=target.assessment_id,
+            mechanism_fact_ids=[fixture.mechanism.uuid],
+            logic="能源风险下降会推高通胀，方向表述矛盾。",
+            confidence=Confidence.MEDIUM,
+            status="已闭合",
         )
-        batch = LayerImpactBatch(
-            proposals=[
-                ImpactClaimProposal(
-                    anchor_id=self.macro_anchor.business_id,
-                    variable_id="inflation_expectation",
-                    direction=Direction.UP,
-                    horizons=[Horizon.SHORT],
-                    confidence=Confidence.MEDIUM,
-                    summary="未生效的机制 Fact 不能支撑当前结论。",
-                    mechanism="机制关系晚于本次决策时点才生效。",
-                    mechanism_fact_ids=[future_mechanism.uuid],
-                    parent_claim_ids=[parent.claim_id],
-                )
-            ],
-            summary="应拒绝未生效的机制 Fact。",
-        )
-
-        accepted = InvestmentReasoningEngine.validate_layer_batch(
+        result = InvestmentReasoningEngine.validate_cross_layer_batch(
             context,
-            [parent],
-            batch,
-            layer=ImpactLayer.MACRO_ECONOMIC,
+            [source],
+            [target],
+            CrossLayerTransmissionBatch(proposals=[original]),
+        )
+        issue = TransmissionSemanticIssue(
+            transmission_id=result.accepted[0].transmission_id,
+            issue_code="MECHANISM_DIRECTION_INCONSISTENT",
+            critique="能源风险方向和通胀方向之间的逻辑相反。",
+            repair_instruction="改为能源风险上升通过油价推高通胀。",
+        )
+        repaired = original.model_copy(update={"logic": "能源供应风险上升通过油价推高通胀预期。"})
+        runtime = LocalInvestmentWorkflowRuntime(cast(Any, None), cast(Agent, object()), cast(Agent, object()))
+        runtime._run = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[
+                TransmissionSemanticReview(issues=[issue]),
+                CrossLayerTransmissionBatch(proposals=[repaired]),
+                TransmissionSemanticReview(),
+            ]
         )
 
-        self.assertEqual(accepted, [])
+        reviewed = await runtime._review_and_repair_cross_layer(context, [source], [target], result)
 
-    def test_a_layer_cannot_use_a_same_layer_claim_as_its_parent(self) -> None:
-        geo_parent = InvestmentReasoningEngine.validate_layer_batch(
-            self._layer_context(ImpactLayer.GEOPOLITICAL),
-            [],
-            self._geo_batch(),
-            layer=ImpactLayer.GEOPOLITICAL,
-        )[0]
-        same_layer_parent = geo_parent.model_copy(update={"layer": ImpactLayer.MACRO_ECONOMIC})
-        batch = LayerImpactBatch(
-            proposals=[
-                ImpactClaimProposal(
-                    anchor_id=self.macro_anchor.business_id,
-                    variable_id="inflation_expectation",
-                    direction=Direction.UP,
-                    horizons=[Horizon.SHORT],
-                    confidence=Confidence.LOW,
-                    summary="同层结论不应成为自己的上游依据。",
-                    mechanism="宏观同层循环引用。",
-                    mechanism_fact_ids=[self.mechanism.uuid],
-                    parent_claim_ids=[same_layer_parent.claim_id],
-                )
-            ],
-            summary="非法同层传导。",
+        self.assertEqual(len(reviewed.accepted), 1)
+        self.assertEqual(reviewed.accepted[0].logic, repaired.logic)
+        self.assertIn("LOCAL_SEMANTIC_REPAIRED:1", reviewed.limitations)
+
+    async def test_invalid_layer_summary_degrades_to_deterministic_assessment_distribution(self) -> None:
+        fixture = LayerAssessmentContractTest()
+        fixture.setUp()
+        layer_context = fixture._layer_context(ImpactLayer.GEOPOLITICAL)
+        base = InvestmentReasoningGateTest()._context(InvestmentReasoningGateTest()._active_signal())
+        prepared = PreparedInvestmentContext(
+            context=base,
+            context_fingerprint=InvestmentReasoningEngine.context_fingerprint(base),
+        )
+        runtime = LocalInvestmentWorkflowRuntime(cast(Any, None), cast(Agent, object()), cast(Agent, object()))
+        runtime._provider = SimpleNamespace(  # type: ignore[assignment]
+            build_layer_context=AsyncMock(return_value=layer_context)
+        )
+        runtime._reason_layer = AsyncMock(  # type: ignore[method-assign]
+            return_value=fixture._geo_batch().model_copy(
+                update={"summary": "模型输出不完整，仅保留通过合同校验的候选。"}
+            )
         )
 
-        accepted = InvestmentReasoningEngine.validate_layer_batch(
-            self._layer_context(ImpactLayer.MACRO_ECONOMIC, parent_claims=[same_layer_parent]),
-            [same_layer_parent],
-            batch,
-            layer=ImpactLayer.MACRO_ECONOMIC,
-        )
+        result, _ = await runtime._analyze_layer(prepared, ImpactLayer.GEOPOLITICAL, [])
 
-        self.assertEqual(accepted, [])
+        self.assertEqual(len(result.assessments), 1)
+        self.assertIn("形成 1 个直接 Signal 锚点评估", result.summary)
+        self.assertIn("升温1个", result.summary)
 
 
 class InvestmentWorkflowShapeTest(unittest.TestCase):
+    def test_malformed_node_trend_is_normalized_without_aborting_the_workflow(self) -> None:
+        raw = SimpleNamespace(
+            content=json.dumps(
+                {
+                    "nodes": [
+                        {
+                            "chain_id": "chain-1",
+                            "node_id": "node-1",
+                            "node_name": "刻蚀设备",
+                            "short": {"WARMING": "订单增加"},
+                            "medium": {"WARMING": "产能扩张"},
+                            "long": {"INSUFFICIENT_EVIDENCE": "无长期信号"},
+                            "confidence": "MEDIUM",
+                            "investment_assessment": "OPPORTUNITY_CANDIDATE",
+                            "rationale": "直接订单 Signal 支持短中期升温。",
+                            "supporting_fact_ids": ["fact-1"],
+                        },
+                        {"node_id": "invalid-node"},
+                    ]
+                },
+                ensure_ascii=False,
+            )
+        )
+
+        result = _payload(raw, NodeAnalysisBatch)
+
+        self.assertEqual(len(result.nodes), 1)
+        self.assertEqual(result.nodes[0].short, Trend.WARMING)
+        self.assertEqual(result.nodes[0].long, Trend.INSUFFICIENT_EVIDENCE)
+
+    def test_application_registry_can_rehydrate_every_workflow_function(self) -> None:
+        functions = [
+            prepare_investment_context,
+            analyze_geopolitical_impact,
+            analyze_macro_impact,
+            analyze_industry_impact,
+            review_and_finalize,
+            generate_investment_report,
+            publish_investment_report,
+        ]
+
+        self.assertEqual(
+            {function.__name__ for function in functions},
+            {function.__name__ for function in functions if registry.get_function(function.__name__) is not None},
+        )
+
     def test_schedule_natural_language_is_a_first_class_reasoning_input(self) -> None:
         message = "获取最近72小时全部Event，逐层分析对产业链的投研影响。"
 
@@ -869,7 +1065,27 @@ class InvestmentWorkflowShapeTest(unittest.TestCase):
         self.assertEqual(parsed.event_window_hours, 72)
         self.assertFalse(parsed.include_company)
 
-    def test_workflow_has_five_fixed_business_stages(self) -> None:
+    def test_validation_run_can_request_one_year_of_event_history(self) -> None:
+        parsed = InvestmentReasoningInput.model_validate(
+            {
+                "question": "重放历史 Event 并验证投研推理。",
+                "event_window_hours": 24 * 365,
+                "include_company": False,
+            }
+        )
+
+        self.assertEqual(parsed.event_window_hours, 8760)
+
+    def test_overlong_transmission_stop_reason_is_tolerantly_truncated(self) -> None:
+        parsed = _payload(
+            SimpleNamespace(content={"proposals": [], "stopped_reason": "证据不足" * 200}),
+            TransmissionBatch,
+        )
+
+        self.assertEqual(len(parsed.stopped_reason or ""), 500)
+        self.assertEqual(len(_bounded_text("A" * 900, limit=500) or ""), 500)
+
+    def test_workflow_has_six_fixed_business_stages(self) -> None:
         workflow = _seed_workflow(cast(Agent, object()), cast(Agent, object()))
         steps = cast(list[Step], workflow.steps)
         self.assertEqual(
@@ -880,26 +1096,29 @@ class InvestmentWorkflowShapeTest(unittest.TestCase):
                 "analyze-macro-impact",
                 "analyze-industry-impact",
                 "review-and-finalize",
+                "generate-investment-report",
             ],
         )
 
     def test_http_natural_language_contract_is_owned_by_prepare_not_workflow_input_schema(self) -> None:
         workflow = _seed_workflow(cast(Agent, object()), cast(Agent, object()))
 
-        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 4)
+        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 11)
         self.assertIsNone(workflow.input_schema)
         self.assertIs(cast(list[Step], workflow.steps)[0].executor, prepare_investment_context)
 
     def test_workflow_has_no_planner_or_company_dependency(self) -> None:
         reasoner = Agent(id="investment-reasoner")
+        report_writer = Agent(id="investment-report-writer")
         reviewer = Agent(id="investment-reviewer")
 
-        workflow = _seed_workflow(reasoner, reviewer)
+        workflow = _seed_workflow(reasoner, reviewer, report_writer)
 
         self.assertEqual(
             workflow.dependencies,
             {
                 "reasoner_agent_id": "investment-reasoner",
+                "report_writer_agent_id": "investment-report-writer",
                 "reviewer_agent_id": "investment-reviewer",
             },
         )
@@ -917,6 +1136,13 @@ class InvestmentComponentLifecycleTest(unittest.TestCase):
                 "investment_reasoner_contract_version",
                 INVESTMENT_REASONER_CONTRACT_VERSION,
                 "Investment Reasoner",
+            ),
+            (
+                "agents.investment_report_writer",
+                ensure_investment_report_writer_agent,
+                "investment_report_writer_contract_version",
+                INVESTMENT_REPORT_WRITER_CONTRACT_VERSION,
+                "Investment Report Writer",
             ),
             (
                 "agents.investment_reviewer",
@@ -947,15 +1173,18 @@ class InvestmentComponentLifecycleTest(unittest.TestCase):
                     notes=f"{name} contract migration {contract_version}",
                 )
 
-    def test_registry_resolves_only_the_two_runtime_investment_agents(self) -> None:
+    def test_registry_resolves_only_the_three_runtime_investment_agents(self) -> None:
         registry = TidewiseRegistry(name="Investment Registry Test")
         reasoner = Agent(id="investment-reasoner")
+        report_writer = Agent(id="investment-report-writer")
         reviewer = Agent(id="investment-reviewer")
         with (
             patch("app.registry.load_investment_reasoner_agent", return_value=reasoner),
+            patch("app.registry.load_investment_report_writer_agent", return_value=report_writer),
             patch("app.registry.load_investment_reviewer_agent", return_value=reviewer),
         ):
             self.assertIs(registry.get_agent("investment-reasoner"), reasoner)
+            self.assertIs(registry.get_agent("investment-report-writer"), report_writer)
             self.assertIs(registry.get_agent("investment-reviewer"), reviewer)
             self.assertIsNone(registry.get_agent("investment-planner"))
 
@@ -970,10 +1199,15 @@ class InvestmentComponentLifecycleTest(unittest.TestCase):
             }
         }
         reasoner = Agent(id="investment-reasoner", db=None)
+        report_writer = Agent(id="investment-report-writer", db=None)
         reviewer = Agent(id="investment-reviewer", db=None)
         with (
             patch("workflows.investment_reasoning.get_postgres_db", return_value=db),
             patch("workflows.investment_reasoning.load_investment_reasoner_agent", return_value=reasoner),
+            patch(
+                "workflows.investment_reasoning.load_investment_report_writer_agent",
+                return_value=report_writer,
+            ),
             patch("workflows.investment_reasoning.load_investment_reviewer_agent", return_value=reviewer),
             patch.object(Workflow, "save", autospec=True, return_value=8) as saved,
         ):
@@ -989,6 +1223,7 @@ class InvestmentComponentLifecycleTest(unittest.TestCase):
             migrated.dependencies,
             {
                 "reasoner_agent_id": "investment-reasoner",
+                "report_writer_agent_id": "investment-report-writer",
                 "reviewer_agent_id": "investment-reviewer",
             },
         )
@@ -1002,19 +1237,19 @@ class _LayeredRuntime:
         self.calls: list[tuple[str, tuple[object, ...]]] = []
         self.geopolitical = LayerAnalysisResult(
             layer=ImpactLayer.GEOPOLITICAL,
-            claims=[],
+            assessments=[],
             summary="地缘政治层未形成方向结论。",
             limitations=["NO_GEOPOLITICAL_SIGNAL"],
         )
         self.macro = LayerAnalysisResult(
             layer=ImpactLayer.MACRO_ECONOMIC,
-            claims=[],
+            assessments=[],
             summary="宏观经济层未形成方向结论。",
             limitations=["NO_MACRO_TRANSMISSION"],
         )
         self.industry = LayerAnalysisResult(
             layer=ImpactLayer.INDUSTRY,
-            claims=[],
+            assessments=[],
             summary="产业链层证据不足。",
             limitations=["NO_INDUSTRY_SIGNAL"],
         )
@@ -1040,8 +1275,9 @@ class _LayeredRuntime:
         prepared: PreparedInvestmentContext,
         geopolitical: LayerAnalysisResult,
         macro: LayerAnalysisResult,
+        macro_transmission=None,
     ) -> IndustryAnalysisState:
-        self.calls.append(("industry", (prepared, geopolitical, macro)))
+        self.calls.append(("industry", (prepared, geopolitical, macro, macro_transmission)))
         return IndustryAnalysisState(
             prepared=prepared,
             geopolitical=geopolitical,
@@ -1091,49 +1327,46 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         return InvestmentReasoningGateTest()._context(ordinary).model_copy(update={"chains": []})
 
     @staticmethod
-    def _accepted_claim(layer: ImpactLayer, fact: FactSnapshot) -> AcceptedImpactClaim:
-        return AcceptedImpactClaim(
+    def _accepted_assessment(layer: ImpactLayer, fact: FactSnapshot) -> LayerAssessment:
+        return LayerAssessment(
             anchor_id="node-a",
-            variable_id="effective_capacity",
-            direction=Direction.DOWN,
-            horizons=[Horizon.SHORT],
+            result=Trend.COOLING,
             confidence=Confidence.MEDIUM,
-            summary=f"{layer.value} 层形成一条已接受结论。",
-            mechanism="当前有效 Signal 支持该结论。",
-            source_fact_ids=[fact.uuid],
-            claim_id=f"claim-{layer.value.lower()}",
+            summary=f"{layer.value} 层形成一条评估。",
+            reasoning="当前有效 Signal 支持该评估。",
+            direct_signal_fact_ids=[fact.uuid],
+            assessment_id=f"assessment-{layer.value.lower()}",
             layer=layer,
             anchor_name="上游",
             anchor_type="ChainNode",
-            derivation="DIRECT_SIGNAL",
+            horizons=[Horizon.SHORT],
             root_event_ids=["event-1"],
-            root_signal_fact_ids=[fact.uuid],
         )
 
     @classmethod
     def _finalization_state(
         cls,
         *,
-        claim_layers: tuple[ImpactLayer, ...] = (),
+        assessment_layers: tuple[ImpactLayer, ...] = (),
         include_transmission: bool = False,
         invalid_root: bool = False,
     ) -> IndustryAnalysisState:
         gate = InvestmentReasoningGateTest()
         fact = gate._active_signal()
         context = gate._context(fact)
-        claims = {layer: cls._accepted_claim(layer, fact) for layer in claim_layers}
-        if invalid_root and claims:
-            first_layer = claim_layers[0]
-            claims[first_layer] = claims[first_layer].model_copy(
-                update={"root_signal_fact_ids": ["missing-signal-root"]}
+        assessments = {layer: cls._accepted_assessment(layer, fact) for layer in assessment_layers}
+        if invalid_root and assessments:
+            first_layer = assessment_layers[0]
+            assessments[first_layer] = assessments[first_layer].model_copy(
+                update={"direct_signal_fact_ids": ["missing-signal-root"]}
             )
 
         def layer_result(layer: ImpactLayer) -> LayerAnalysisResult:
-            claim = claims.get(layer)
+            assessment = assessments.get(layer)
             return LayerAnalysisResult(
                 layer=layer,
-                claims=[claim] if claim is not None else [],
-                supporting_facts=[fact] if claim is not None else [],
+                assessments=[assessment] if assessment is not None else [],
+                supporting_facts=[fact] if assessment is not None else [],
                 summary=f"{layer.value} 层测试结果。",
             )
 
@@ -1196,17 +1429,11 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         )
         configure_investment_workflow_runtime(runtime)
         try:
-            geo_output = await analyze_geopolitical_impact(
-                StepInput(previous_step_outputs={"prepare-investment-context": StepOutput(content=prepared)})
-            )
+            geo_output = await analyze_geopolitical_impact(StepInput(previous_step_content=prepared))
             geo_state = cast(GeopoliticalAnalysisState, geo_output.content)
-            macro_output = await analyze_macro_impact(
-                StepInput(previous_step_outputs={"analyze-geopolitical-impact": StepOutput(content=geo_state)})
-            )
+            macro_output = await analyze_macro_impact(StepInput(previous_step_content=geo_state))
             macro_state = cast(MacroAnalysisState, macro_output.content)
-            industry_output = await analyze_industry_impact(
-                StepInput(previous_step_outputs={"analyze-macro-impact": StepOutput(content=macro_state)})
-            )
+            industry_output = await analyze_industry_impact(StepInput(previous_step_content=macro_state))
             industry_state = cast(IndustryAnalysisState, industry_output.content)
         finally:
             configure_investment_workflow_runtime(None)
@@ -1226,9 +1453,9 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(runtime.calls[2][1][1], runtime.geopolitical)
         self.assertIs(runtime.calls[2][1][2], runtime.macro)
 
-    async def test_hard_gate_safe_fallback_clears_all_claims_facts_and_transmissions(self) -> None:
+    async def test_missing_retrieved_reference_blocks_report_without_erasing_audit_data(self) -> None:
         state = self._finalization_state(
-            claim_layers=(ImpactLayer.GEOPOLITICAL, ImpactLayer.MACRO_ECONOMIC, ImpactLayer.INDUSTRY),
+            assessment_layers=(ImpactLayer.GEOPOLITICAL, ImpactLayer.MACRO_ECONOMIC, ImpactLayer.INDUSTRY),
             include_transmission=True,
             invalid_root=True,
         )
@@ -1236,23 +1463,22 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         configure_investment_workflow_runtime(SimpleNamespace(review=reviewer))
         try:
             output = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                StepInput(previous_step_content=state),
                 self._run_context("run-hard-gate"),
             )
         finally:
             configure_investment_workflow_runtime(None)
 
-        result = cast(InvestmentAnalysisResult, output.content)
+        result = cast(ReviewedInvestmentState, output.content).analysis
         reviewer.assert_not_awaited()
         for layer in (result.geopolitical, result.macro, result.industry):
-            self.assertEqual(layer.claims, [])
-            self.assertEqual(layer.supporting_facts, [])
-        self.assertEqual(result.transmissions, [])
-        self.assertFalse({"LAYER_CLAIM", "TRANSMISSION"}.intersection(item.node_type for item in result.reasoning_tree))
+            self.assertTrue(layer.assessments)
+        self.assertFalse(result.review.accepted)
+        self.assertIn("ASSESSMENT_REFERENCE_OUTSIDE_CONTEXT", ";".join(result.review.issue_codes))
 
-    async def test_reviewer_rejection_clears_all_claims_facts_and_transmissions(self) -> None:
+    async def test_reviewer_rejection_blocks_when_runtime_cannot_repair(self) -> None:
         state = self._finalization_state(
-            claim_layers=(ImpactLayer.GEOPOLITICAL, ImpactLayer.MACRO_ECONOMIC, ImpactLayer.INDUSTRY),
+            assessment_layers=(ImpactLayer.GEOPOLITICAL, ImpactLayer.MACRO_ECONOMIC, ImpactLayer.INDUSTRY),
             include_transmission=True,
         )
         reviewer = AsyncMock(
@@ -1266,31 +1492,94 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         configure_investment_workflow_runtime(SimpleNamespace(review=reviewer))
         try:
             output = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                StepInput(previous_step_content=state),
                 self._run_context("run-review-rejection"),
             )
         finally:
             configure_investment_workflow_runtime(None)
 
-        result = cast(InvestmentAnalysisResult, output.content)
+        result = cast(ReviewedInvestmentState, output.content).analysis
         reviewer.assert_awaited_once_with(state)
-        for layer in (result.geopolitical, result.macro, result.industry):
-            self.assertEqual(layer.claims, [])
-            self.assertEqual(layer.supporting_facts, [])
-        self.assertEqual(result.transmissions, [])
-        self.assertFalse({"LAYER_CLAIM", "TRANSMISSION"}.intersection(item.node_type for item in result.reasoning_tree))
+        self.assertEqual(result.status, "NEEDS_REVIEW")
+        self.assertFalse(result.review.accepted)
+        self.assertTrue(result.geopolitical.assessments)
+        self.assertTrue(result.macro.assessments)
+        self.assertTrue(result.industry.assessments)
+        self.assertTrue(result.transmissions)
+        self.assertTrue(
+            {"LAYER_ASSESSMENT", "TRANSMISSION"}.intersection(item.node_type for item in result.reasoning_tree)
+        )
 
-    async def test_any_layer_claim_or_transmission_requires_semantic_review(self) -> None:
+    async def test_reviewer_runs_one_repair_and_rechecks_the_same_frozen_state(self) -> None:
+        state = self._finalization_state(
+            assessment_layers=(ImpactLayer.GEOPOLITICAL, ImpactLayer.MACRO_ECONOMIC, ImpactLayer.INDUSTRY),
+            include_transmission=True,
+        )
+        first = ReviewResult(
+            accepted=False,
+            confidence=Confidence.LOW,
+            issue_codes=["REASONING_INCONSISTENCY"],
+            review_summary="节点与链级方向冲突。",
+        )
+        second = ReviewResult(
+            accepted=True,
+            confidence=Confidence.MEDIUM,
+            issue_codes=[],
+            review_summary="返工后方向一致。",
+        )
+        runtime = SimpleNamespace(
+            review=AsyncMock(side_effect=[first, second]),
+            repair=AsyncMock(return_value=state),
+        )
+        configure_investment_workflow_runtime(runtime)
+        try:
+            output = await review_and_finalize(
+                StepInput(previous_step_content=state),
+                self._run_context("run-review-repair"),
+            )
+        finally:
+            configure_investment_workflow_runtime(None)
+
+        result = cast(ReviewedInvestmentState, output.content).analysis
+        self.assertEqual(runtime.review.await_count, 2)
+        runtime.repair.assert_awaited_once_with(state, first)
+        self.assertEqual(result.status, "SUCCEEDED")
+        self.assertTrue(result.review.accepted)
+
+    async def test_invalid_reviewer_output_blocks_report_generation(self) -> None:
+        state = self._finalization_state(assessment_layers=(ImpactLayer.GEOPOLITICAL,))
+        reviewer = AsyncMock(
+            return_value=ReviewResult(
+                accepted=False,
+                confidence=Confidence.LOW,
+                issue_codes=["REVIEW_OUTPUT_INVALID"],
+                review_summary="Reviewer 输出无法解析。",
+            )
+        )
+        configure_investment_workflow_runtime(SimpleNamespace(review=reviewer))
+        try:
+            output = await review_and_finalize(
+                StepInput(previous_step_content=state),
+                self._run_context("run-invalid-review-output"),
+            )
+        finally:
+            configure_investment_workflow_runtime(None)
+
+        result = cast(ReviewedInvestmentState, output.content).analysis
+        self.assertFalse(result.review.accepted)
+        self.assertEqual(result.status, "NEEDS_REVIEW")
+
+    async def test_any_layer_assessment_or_transmission_requires_semantic_review(self) -> None:
         cases = [
             ("GEOPOLITICAL_CLAIM", (ImpactLayer.GEOPOLITICAL,), False),
             ("MACRO_CLAIM", (ImpactLayer.MACRO_ECONOMIC,), False),
             ("INDUSTRY_CLAIM", (ImpactLayer.INDUSTRY,), False),
             ("TRANSMISSION", (), True),
         ]
-        for label, claim_layers, include_transmission in cases:
+        for label, assessment_layers, include_transmission in cases:
             with self.subTest(material_result=label):
                 state = self._finalization_state(
-                    claim_layers=claim_layers,
+                    assessment_layers=assessment_layers,
                     include_transmission=include_transmission,
                 )
                 reviewer = AsyncMock(
@@ -1304,7 +1593,7 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
                 configure_investment_workflow_runtime(SimpleNamespace(review=reviewer))
                 try:
                     await review_and_finalize(
-                        StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                        StepInput(previous_step_content=state),
                         self._run_context(f"run-{label.lower()}"),
                     )
                 finally:
@@ -1312,45 +1601,42 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
 
                 reviewer.assert_awaited_once_with(state)
 
-    async def test_upper_layer_mechanism_facts_survive_into_industry_review_and_reasoning_tree(self) -> None:
-        fixture = LayeredImpactLineageGateTest()
+    async def test_upper_layer_mechanism_facts_survive_into_industry_review_context(self) -> None:
+        fixture = LayerAssessmentContractTest()
         fixture.setUp()
-        geo_claim = InvestmentReasoningEngine.validate_layer_batch(
+        geo_assessment = InvestmentReasoningEngine.build_layer_assessments(
             fixture._layer_context(ImpactLayer.GEOPOLITICAL),
-            [],
             fixture._geo_batch(),
             layer=ImpactLayer.GEOPOLITICAL,
         )[0]
-        macro_batch = LayerImpactBatch(
-            proposals=[
-                ImpactClaimProposal(
-                    anchor_id=fixture.macro_anchor.business_id,
-                    variable_id="inflation_expectation",
-                    direction=Direction.UP,
-                    horizons=[Horizon.SHORT],
-                    confidence=Confidence.MEDIUM,
-                    summary="能源供给风险把地缘影响传导至通胀预期。",
-                    mechanism="中东能源供给风险通过油价传导至通胀预期。",
-                    mechanism_fact_ids=[fixture.mechanism.uuid],
-                    parent_claim_ids=[geo_claim.claim_id],
-                )
-            ],
-            summary="宏观层形成一条可审计的跨层结论。",
+        macro_assessment = geo_assessment.model_copy(
+            update={
+                "assessment_id": "assessment-macro",
+                "layer": ImpactLayer.MACRO_ECONOMIC,
+                "anchor_id": fixture.macro_anchor.business_id,
+                "anchor_name": fixture.macro_anchor.name,
+                "anchor_type": "MacroEconomic",
+                "summary": "能源供给风险影响通胀预期。",
+            }
         )
-        macro_claim = InvestmentReasoningEngine.validate_layer_batch(
-            fixture._layer_context(ImpactLayer.MACRO_ECONOMIC, parent_claims=[geo_claim]),
-            [geo_claim],
-            macro_batch,
-            layer=ImpactLayer.MACRO_ECONOMIC,
-        )[0]
-        base = InvestmentAnalysisContext(
-            request=InvestmentAnalysisRequest(
-                question="逐层分析最近48小时事件",
-                decision_at=fixture.decision_at,
-            ),
-            events=[fixture.event],
-            facts=[fixture.signal],
-            anchors=[fixture.geo_anchor, fixture.macro_anchor],
+        base = self._finalization_state().industry_context.model_copy(
+            update={
+                "facts": [fixture.signal, fixture.mechanism],
+                "anchors": [fixture.geo_anchor, fixture.macro_anchor],
+            }
+        )
+        base = base.model_copy(
+            update={
+                "retrieval_receipts": [
+                    receipt.model_copy(
+                        update={
+                            "fact_ids": [fixture.signal.uuid, fixture.mechanism.uuid],
+                            "direct_signal_fact_ids": [fixture.signal.uuid],
+                        }
+                    )
+                    for receipt in base.retrieval_receipts
+                ]
+            }
         )
         prepared = PreparedInvestmentContext(
             context=base,
@@ -1358,19 +1644,19 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         )
         geopolitical = LayerAnalysisResult(
             layer=ImpactLayer.GEOPOLITICAL,
-            claims=[geo_claim],
+            assessments=[geo_assessment],
             supporting_facts=[fixture.signal],
             summary="地缘政治结论。",
         )
         macro = LayerAnalysisResult(
             layer=ImpactLayer.MACRO_ECONOMIC,
-            claims=[macro_claim],
+            assessments=[macro_assessment],
             supporting_facts=[fixture.signal, fixture.mechanism],
             summary="宏观经济结论。",
         )
         industry = LayerAnalysisResult(
             layer=ImpactLayer.INDUSTRY,
-            claims=[],
+            assessments=[],
             supporting_facts=[],
             summary="产业层未形成方向结论。",
         )
@@ -1381,7 +1667,17 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
             events=base.events,
             anchors=[],
             facts=[fixture.signal],
-            parent_claims=[geo_claim, macro_claim],
+            parent_assessments=[geo_assessment, macro_assessment],
+            ontology=fixture._ontology(),
+            retrieval_receipt=RetrievalReceipt(
+                stage="INDUSTRY",
+                layer=ImpactLayer.INDUSTRY,
+                required_actions=["search_anchor_nodes", "load_anchor_facts"],
+                completed_actions=["search_anchor_nodes", "load_anchor_facts"],
+                event_ids=[fixture.event.event_id],
+                fact_ids=[fixture.signal.uuid],
+                direct_signal_fact_ids=[fixture.signal.uuid],
+            ),
         )
         runtime = LocalInvestmentWorkflowRuntime(
             cast(Any, None),
@@ -1400,6 +1696,9 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
                 limitations=["NO_INDUSTRY_SIGNAL"],
             )
         )
+        runtime._propagate = AsyncMock(  # type: ignore[method-assign]
+            return_value=TransmissionBatch(proposals=[])
+        )
         reviewer = AsyncMock(
             return_value=ReviewResult(
                 accepted=True,
@@ -1416,22 +1715,19 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         configure_investment_workflow_runtime(runtime)
         try:
             output = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                StepInput(previous_step_content=state),
                 self._run_context("run-upper-layer-mechanism"),
             )
         finally:
             configure_investment_workflow_runtime(None)
 
-        result = cast(InvestmentAnalysisResult, output.content)
+        result = cast(ReviewedInvestmentState, output.content).analysis
         reviewer.assert_awaited_once()
         await_args = reviewer.await_args
         assert await_args is not None
         reviewed_state = await_args.args[0]
         self.assertIn(fixture.mechanism.uuid, {fact.uuid for fact in reviewed_state.industry_context.facts})
-        fact_nodes = {node.node_id: node for node in result.reasoning_tree if node.node_type == "FACT"}
-        self.assertIn(fixture.mechanism.uuid, fact_nodes)
-        macro_node = next(node for node in result.reasoning_tree if node.node_id == macro_claim.claim_id)
-        self.assertIn(fixture.mechanism.uuid, macro_node.parent_ids)
+        self.assertTrue(result.review.accepted)
 
     async def test_final_result_is_an_idempotent_standalone_artifact(self) -> None:
         state = self._finalization_state()
@@ -1439,18 +1735,19 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         configure_investment_workflow_runtime(SimpleNamespace(review=AsyncMock()))
         try:
             first = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                StepInput(previous_step_content=state),
                 context,
             )
             second = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                StepInput(previous_step_content=state),
                 context,
             )
         finally:
             configure_investment_workflow_runtime(None)
 
-        artifact = cast(InvestmentConclusionArtifact, first.content)
-        self.assertEqual(second.content, artifact)
+        reviewed = cast(ReviewedInvestmentState, first.content)
+        artifact = reviewed.analysis
+        self.assertEqual(second.content, reviewed)
         self.assertEqual(artifact.schema_version, "investment-conclusion-artifact/v1")
         self.assertEqual(artifact.workflow_run_id, context.run_id)
         self.assertEqual(artifact.conclusion_status, "INSUFFICIENT_EVIDENCE")
@@ -1481,6 +1778,215 @@ class _SearchOnlyGraphiti:
 
 
 class GraphitiInvestmentRetrievalTest(unittest.IsolatedAsyncioTestCase):
+    async def test_industry_layer_is_signal_rooted_and_skips_broad_anchor_fact_loading(self) -> None:
+        gate = InvestmentReasoningGateTest()
+        signal = gate._active_signal().model_copy(update={"anchor_type": "ChainNode"})
+        node_anchor = AnalysisAnchorSnapshot(
+            uuid="node-a-uuid",
+            business_id="node-a",
+            name="上游",
+            entity_type="ChainNode",
+            source_event_ids=["event-1"],
+        )
+        relevant = FactSnapshot(
+            uuid="mechanism-1",
+            kind="ORDINARY",
+            name="AFFECTS",
+            fact="上层风险通过投入成本作用于上游节点",
+            source_uuid="macro-uuid",
+            source_name="投入成本",
+            source_business_id="macro-1",
+            source_labels=["Entity", "MacroEconomic"],
+            target_uuid="node-a-uuid",
+            target_name="上游",
+            target_business_id="node-a",
+            target_labels=["Entity", "ChainNode"],
+            source_event_ids=["event-1"],
+        )
+        unrelated = FactSnapshot(
+            uuid="unrelated-1",
+            kind="ORDINARY",
+            name="AFFECTS",
+            fact="其他事件作用于其他节点",
+            source_uuid="other-source-uuid",
+            source_name="其他主体",
+            source_business_id="other-source",
+            source_labels=["Entity"],
+            target_uuid="other-node-uuid",
+            target_name="其他节点",
+            target_business_id="other-node",
+            target_labels=["Entity", "ChainNode"],
+            source_event_ids=["event-1"],
+        )
+        base = gate._context(signal).model_copy(
+            update={"facts": [signal, relevant, unrelated], "anchors": [node_anchor], "chains": []}
+        )
+        reader = MagicMock()
+        reader.search_anchor_nodes = AsyncMock(side_effect=AssertionError("industry must not use broad anchor search"))
+        reader.load_anchor_facts = AsyncMock(side_effect=AssertionError("industry must not bulk-load anchor facts"))
+        builder = InvestmentContextBuilder(cast(Any, reader))
+
+        context = await builder.build_layer_context(base, ImpactLayer.INDUSTRY, [])
+
+        self.assertEqual([item.business_id for item in context.anchors], ["node-a"])
+        self.assertEqual(context.direct_signal_fact_ids, [signal.uuid])
+        self.assertEqual([item.uuid for item in context.facts], [signal.uuid, relevant.uuid])
+        self.assertEqual(
+            context.retrieval_receipt.required_actions,
+            ["select_signal_root_anchors", "select_signal_scoped_facts"],
+        )
+        reader.search_anchor_nodes.assert_not_awaited()
+        reader.load_anchor_facts.assert_not_awaited()
+
+    async def test_chainnode_label_is_sufficient_to_expand_signal_rooted_chains(self) -> None:
+        gate = InvestmentReasoningGateTest()
+        signal = gate._active_signal().model_copy(update={"anchor_type": None})
+        node_anchor = AnalysisAnchorSnapshot(
+            uuid="node-a-uuid",
+            business_id="node-a",
+            name="上游",
+            entity_type="ChainNode",
+            source_event_ids=["event-1"],
+        )
+        base = gate._context(signal).model_copy(update={"anchors": [node_anchor], "chains": []})
+        reader = MagicMock()
+        reader.load_chain_candidates = AsyncMock(
+            return_value=[
+                {
+                    "uuid": "chain-uuid",
+                    "business_id": "chain-1",
+                    "name": "测试产业链",
+                    "matched_node_ids": ["node-a"],
+                }
+            ]
+        )
+        reader.load_chain_nodes = AsyncMock(
+            return_value=[
+                {
+                    "chain_id": "chain-1",
+                    "uuid": "node-a-uuid",
+                    "business_id": "node-a",
+                    "name": "上游",
+                    "stage": "UPSTREAM",
+                    "position": 1,
+                }
+            ]
+        )
+        reader.load_topology_edges = AsyncMock(return_value=[])
+        builder = InvestmentContextBuilder(cast(Any, reader))
+
+        layer_context = await builder.build_layer_context(base, ImpactLayer.INDUSTRY, [])
+        expanded = await builder.expand_industry_context(base, layer_context, [])
+
+        self.assertEqual([item.business_id for item in expanded.chains], ["chain-1"])
+        reader.load_chain_candidates.assert_awaited_once()
+
+    async def test_signal_rooted_chain_candidates_are_paged_without_total_truncation(self) -> None:
+        gate = InvestmentReasoningGateTest()
+        signal = gate._active_signal()
+        records = [
+            {
+                "uuid": f"chain-uuid-{index}",
+                "business_id": f"chain-{index:03d}",
+                "name": f"产业链 {index:03d}",
+                "matched_node_ids": ["node-a"],
+            }
+            for index in range(205)
+        ]
+
+        async def load_candidates(*args, limit: int, offset: int = 0, **kwargs):
+            del args, kwargs
+            return records[offset : offset + limit]
+
+        async def load_nodes(chain_ids: list[str], *, limit: int):
+            del limit
+            return [
+                {
+                    "chain_id": chain_id,
+                    "uuid": f"{chain_id}-node-uuid",
+                    "business_id": "node-a",
+                    "name": "上游",
+                    "stage": "UPSTREAM",
+                    "position": 1,
+                }
+                for chain_id in chain_ids
+            ]
+
+        reader = MagicMock()
+        reader.load_chain_candidates = AsyncMock(side_effect=load_candidates)
+        reader.load_chain_nodes = AsyncMock(side_effect=load_nodes)
+        reader.load_topology_edges = AsyncMock(return_value=[])
+        builder = InvestmentContextBuilder(cast(Any, reader))
+
+        chains = await builder._load_chains(
+            gate._context(signal).request,
+            {"node-a"},
+            set(),
+            [signal],
+            eligible_signal_fact_ids={signal.uuid},
+        )
+
+        self.assertEqual(len(chains), 205)
+        self.assertEqual(reader.load_chain_candidates.await_count, 3)
+
+    async def test_layer_reasoning_batches_more_than_one_hundred_signal_roots(self) -> None:
+        gate = InvestmentReasoningGateTest()
+        anchors = [
+            AnalysisAnchorSnapshot(
+                uuid=f"node-{index}-uuid",
+                business_id=f"node-{index}",
+                name=f"节点 {index}",
+                entity_type="ChainNode",
+            )
+            for index in range(205)
+        ]
+        context = LayerAnalysisContext(
+            layer=ImpactLayer.INDUSTRY,
+            decision_at=gate._context(gate._active_signal()).request.decision_at,
+            question="分析全部产业节点",
+            events=gate._context(gate._active_signal()).events,
+            anchors=anchors,
+            facts=[],
+            parent_assessments=[],
+            direct_signal_fact_ids=[],
+            ontology=LayerAssessmentContractTest._ontology(),
+            retrieval_receipt=RetrievalReceipt(
+                stage="INDUSTRY",
+                layer=ImpactLayer.INDUSTRY,
+                required_actions=["select_signal_root_anchors"],
+                completed_actions=["select_signal_root_anchors"],
+                anchor_ids=[item.business_id for item in anchors],
+            ),
+        )
+        runtime = object.__new__(LocalInvestmentWorkflowRuntime)
+        runtime._reasoner = MagicMock()
+        calls: list[int] = []
+
+        async def run(agent, prompt: str, model):
+            del agent, model
+            payload = json.loads(prompt.split("\n", 1)[1])
+            batch_anchors = payload["instances"]["anchors"]
+            calls.append(len(batch_anchors))
+            return LayerAssessmentBatch(
+                proposals=[
+                    LayerAssessmentProposal(
+                        anchor_id=item["business_id"],
+                        result=Trend.WARMING,
+                        confidence=Confidence.MEDIUM,
+                        summary=f"{item['name']}升温",
+                        reasoning="输入 Signal 支持该结论。",
+                    )
+                    for item in batch_anchors
+                ],
+                summary="批次分析完成。",
+            )
+
+        with patch.object(runtime, "_run", side_effect=run):
+            result = await runtime._reason_layer(context)
+
+        self.assertEqual(calls, [100, 100, 5])
+        self.assertEqual(len(result.proposals), 205)
+
     async def test_layer_queries_have_a_strict_budget_under_maximum_context(self) -> None:
         gate = InvestmentReasoningGateTest()
         base_signal = gate._active_signal()
@@ -1510,13 +2016,13 @@ class GraphitiInvestmentRetrievalTest(unittest.IsolatedAsyncioTestCase):
                 "chains": [],
             }
         )
-        parent = InvestmentWorkflowExecutionTest._accepted_claim(ImpactLayer.GEOPOLITICAL, base_signal)
+        parent = InvestmentWorkflowExecutionTest._accepted_assessment(ImpactLayer.GEOPOLITICAL, base_signal)
         parents = [
             parent.model_copy(
                 update={
-                    "claim_id": f"parent-claim-{index}",
+                    "assessment_id": f"parent-assessment-{index}",
                     "summary": f"父层结论 {index:03d} " + "传导背景" * 30,
-                    "mechanism": f"父层机制 {index:03d} " + "机制说明" * 30,
+                    "reasoning": f"父层机制 {index:03d} " + "机制说明" * 30,
                 }
             )
             for index in range(125)
@@ -1576,6 +2082,17 @@ class GraphitiInvestmentRetrievalTest(unittest.IsolatedAsyncioTestCase):
                     anchors=[node_anchor],
                     facts=[signal],
                     direct_signal_fact_ids=[signal.uuid],
+                    ontology=LayerAssessmentContractTest._ontology(),
+                    retrieval_receipt=RetrievalReceipt(
+                        stage="INDUSTRY",
+                        layer=ImpactLayer.INDUSTRY,
+                        required_actions=["search_anchor_nodes", "load_anchor_facts"],
+                        completed_actions=["search_anchor_nodes", "load_anchor_facts"],
+                        event_ids=[item.event_id for item in base.events],
+                        anchor_ids=[node_anchor.business_id],
+                        fact_ids=[signal.uuid],
+                        direct_signal_fact_ids=[signal.uuid],
+                    ),
                 )
                 reader = MagicMock()
                 reader.load_chain_candidates = AsyncMock(
@@ -1646,6 +2163,7 @@ class GraphitiInvestmentRetrievalTest(unittest.IsolatedAsyncioTestCase):
                             "summary": "事件提及一个标准产业链节点。",
                             "modality": "FACT",
                             "occurred_at": "2026-08-28T00:00:00Z",
+                            "evidence_ids": ["EVD11111111-1111-4111-8111-111111111111"],
                         }
                     ),
                     "valid_at": datetime(2026, 8, 28, 0, 0, tzinfo=UTC),
@@ -1680,6 +2198,7 @@ class GraphitiInvestmentRetrievalTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(context.chains, [])
         self.assertEqual([anchor.business_id for anchor in context.anchors], ["node-a"])
+        self.assertEqual(context.events[0].evidence_ids, ["EVD11111111-1111-4111-8111-111111111111"])
         reader.load_chain_candidates.assert_not_awaited()
         reader.load_chain_nodes.assert_not_awaited()
         reader.load_topology_edges.assert_not_awaited()
@@ -1754,6 +2273,7 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             "ensure_event_identity_agent",
             "ensure_event_signal_analyst_agent",
             "ensure_investment_reasoner_agent",
+            "ensure_investment_report_writer_agent",
             "ensure_investment_reviewer_agent",
             "ensure_raw_collection_workflow",
             "retire_collection_query_planner_agent",
@@ -1767,6 +2287,9 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             stack.enter_context(patch.object(main.registry, "get_model", return_value=object()))
             stack.enter_context(patch.object(main, "create_local_event_workflow_runtime", return_value=event_runtime))
             stack.enter_context(patch.object(main, "load_investment_reasoner_agent", return_value=Agent(id="reasoner")))
+            stack.enter_context(
+                patch.object(main, "load_investment_report_writer_agent", return_value=Agent(id="report-writer"))
+            )
             stack.enter_context(patch.object(main, "load_investment_reviewer_agent", return_value=Agent(id="reviewer")))
             stack.enter_context(
                 patch.object(
@@ -1794,6 +2317,7 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             "ensure_event_identity_agent",
             "ensure_event_signal_analyst_agent",
             "ensure_investment_reasoner_agent",
+            "ensure_investment_report_writer_agent",
             "ensure_investment_reviewer_agent",
             "ensure_raw_collection_workflow",
             "retire_collection_query_planner_agent",
@@ -1807,6 +2331,9 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             stack.enter_context(patch.object(main.registry, "get_model", return_value=object()))
             stack.enter_context(patch.object(main, "create_local_event_workflow_runtime", return_value=event_runtime))
             stack.enter_context(patch.object(main, "load_investment_reasoner_agent", return_value=Agent(id="reasoner")))
+            stack.enter_context(
+                patch.object(main, "load_investment_report_writer_agent", return_value=Agent(id="report-writer"))
+            )
             stack.enter_context(patch.object(main, "load_investment_reviewer_agent", return_value=Agent(id="reviewer")))
             stack.enter_context(
                 patch.object(main, "create_local_investment_workflow_runtime", return_value=investment_runtime)

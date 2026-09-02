@@ -39,9 +39,38 @@ A canonical quantitative observation supported by Evidence. It names the measure
 change plus any unit and period. Repeated equivalent observations may be merged deterministically, but their supported
 business meaning must not be discarded.
 
+### Signal Fact
+
+A Graphiti Fact recording the direction, horizon, magnitude and confidence of one predefined Variable on one real
+analysis anchor. It is authoritative retrieved graph data and remains a Signal Fact throughout reasoning; the
+Workflow must not ask an LLM to restate it as a second Claim before it can be used.
+
+### Layer Assessment
+
+A Workflow-local interpretation of the direct Signal Facts retrieved for one real geopolitical, macroeconomic or
+industry-chain-node anchor. It summarizes what those Signals imply for the layer while referencing, rather than
+copying or replacing, the Signal Facts and their root Events.
+
+### Transmission Hypothesis
+
+A Workflow-local inferred path between layer assessments or industry-chain nodes. It is distinct from a direct
+Signal Fact. An ordinary Fact may close its mechanism and a topology edge may constrain its path, but weak support is
+recorded as low confidence or pending verification instead of being promoted to graph fact.
+
+### Retrieval Receipt
+
+The auditable record that one reasoning stage executed its required Graphiti retrieval actions. It lists the required
+and completed actions, bounded queries, and retrieved Event, anchor, Fact and direct Signal identifiers. Finalization
+validates this execution contract and verifies that output references stay inside the retrieved context.
+
 ### Investment Conclusion Artifact
 
-One immutable, durable product result emitted after an `investment-reasoning` Workflow run has passed deterministic gates and Reviewer validation. It contains the proposition, final conclusion, layered and node-level assessments, support lineage, risks, limitations, and a context fingerprint. Its identity is the Agno `workflow_run_id`; an identical retry is allowed, while conflicting content must never overwrite it.
+One immutable, durable product result emitted after an `investment-reasoning` Workflow run has completed its required
+retrieval actions and passed output-schema and reference-boundary validation. Reviewer findings about weak individual
+hypotheses remain semantic audit notes and do not erase unrelated direct-Signal assessments. The Artifact contains the
+proposition, final conclusion, layered and node-level assessments, support lineage, risks, limitations, and a context
+fingerprint. Its identity is the Agno `workflow_run_id`; an identical retry is allowed, while conflicting content must
+never overwrite it.
 
 ### Workflow Run Record
 

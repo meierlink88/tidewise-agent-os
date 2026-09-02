@@ -10,6 +10,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+MAX_EVENT_WINDOW_HOURS = 24 * 365
+MAX_RUN_ANCHORS = 2000
+MAX_RUN_CHAINS = 2000
+MAX_RUN_PROPOSALS = 2000
+TRANSMISSION_INCLUSION_THRESHOLD = 0.4
+TRANSMISSION_CONTINUATION_THRESHOLD = 0.65
+
 
 class FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -55,7 +62,7 @@ class InvestmentReasoningInput(FrozenModel):
     """Schedule-owned proposition accepted directly by the Workflow."""
 
     question: str = Field(min_length=1, max_length=2000)
-    event_window_hours: int = Field(default=48, ge=1, le=720)
+    event_window_hours: int = Field(default=48, ge=1, le=MAX_EVENT_WINDOW_HOURS)
     include_company: Literal[False] = False
 
     @model_validator(mode="before")
@@ -97,8 +104,7 @@ class InvestmentAnalysisRequest(InvestmentReasoningInput):
 
     forward_horizon_days: int = Field(default=1095, ge=1, le=3650)
     min_anchor_matches: int = Field(default=1, ge=1, le=10)
-    max_chains: int = Field(default=10, ge=1, le=10)
-    max_hops: int = Field(default=3, ge=1, le=3)
+    max_hops: int = Field(default=5, ge=1, le=5)
     decision_at: datetime
 
     @field_validator("decision_at")
@@ -117,6 +123,7 @@ class EventSnapshot(FrozenModel):
     modality: Literal["FACT", "PLAN", "SPEC"]
     occurred_at: datetime
     effective_at: datetime | None = None
+    evidence_ids: list[str] = Field(default_factory=list, max_length=50)
 
 
 class FactSnapshot(FrozenModel):
@@ -179,35 +186,57 @@ class AnalysisAnchorSnapshot(FrozenModel):
     source_event_ids: list[str] = Field(default_factory=list, max_length=500)
 
 
-class ImpactClaimProposal(FrozenModel):
-    """One model-proposed layer conclusion before deterministic lineage gates."""
+class ReasoningOntologyContext(FrozenModel):
+    """Compact ontology semantics supplied beside graph instances to every reasoning step."""
+
+    ontology_version: Literal["investment-reasoning-ontology/v1"] = "investment-reasoning-ontology/v1"
+    entity_types: dict[str, str]
+    fact_types: dict[str, str]
+    relationship_types: dict[str, str]
+    usage_rules: list[str] = Field(min_length=1, max_length=30)
+
+
+class RetrievalReceipt(FrozenModel):
+    """Auditable proof that one layer executed its required Graphiti retrieval actions."""
+
+    stage: Literal["PREPARE", "GEOPOLITICAL", "MACRO_ECONOMIC", "INDUSTRY"]
+    layer: ImpactLayer | None = None
+    retrieval_round: int = Field(default=1, ge=1, le=2)
+    required_actions: list[str] = Field(min_length=1, max_length=20)
+    completed_actions: list[str] = Field(min_length=1, max_length=20)
+    queries: list[str] = Field(default_factory=list, max_length=25)
+    event_ids: list[str] = Field(default_factory=list, max_length=500)
+    anchor_ids: list[str] = Field(default_factory=list, max_length=MAX_RUN_ANCHORS)
+    fact_ids: list[str] = Field(default_factory=list, max_length=2000)
+    direct_signal_fact_ids: list[str] = Field(default_factory=list, max_length=2000)
+
+
+class LayerAssessmentProposal(FrozenModel):
+    """One Agent-produced interpretation of a retrieved, Signal-backed graph anchor."""
 
     anchor_id: str = Field(min_length=1)
-    variable_id: str = Field(min_length=1, max_length=100)
-    direction: Direction
-    horizons: list[Horizon] = Field(min_length=1, max_length=3)
+    result: Trend
     confidence: Confidence
     summary: str = Field(min_length=1, max_length=1200)
-    mechanism: str = Field(min_length=1, max_length=1600)
-    source_fact_ids: list[str] = Field(default_factory=list, max_length=20)
-    mechanism_fact_ids: list[str] = Field(default_factory=list, max_length=20)
-    parent_claim_ids: list[str] = Field(default_factory=list, max_length=20)
+    reasoning: str = Field(min_length=1, max_length=1600)
     assumptions: list[str] = Field(default_factory=list, max_length=8)
     risks: list[str] = Field(default_factory=list, max_length=8)
 
 
-class AcceptedImpactClaim(ImpactClaimProposal):
-    claim_id: str
+class LayerAssessment(LayerAssessmentProposal):
+    """Reviewed layer result; direct graph evidence remains referenced as Signal Facts."""
+
+    assessment_id: str
     layer: ImpactLayer
+    direct_signal_fact_ids: list[str] = Field(min_length=1, max_length=500)
     anchor_name: str
     anchor_type: Literal["GeopoliticRivalry", "MacroEconomic", "IndustryChain", "ChainNode"]
-    derivation: Literal["DIRECT_SIGNAL", "CROSS_LAYER"]
+    horizons: list[Horizon] = Field(min_length=1, max_length=3)
     root_event_ids: list[str] = Field(min_length=1, max_length=500)
-    root_signal_fact_ids: list[str] = Field(min_length=1, max_length=40)
 
 
-class LayerImpactBatch(FrozenModel):
-    proposals: list[ImpactClaimProposal] = Field(default_factory=list, max_length=50)
+class LayerAssessmentBatch(FrozenModel):
+    proposals: list[LayerAssessmentProposal] = Field(default_factory=list, max_length=MAX_RUN_PROPOSALS)
     supplemental_queries: list[str] = Field(default_factory=list, max_length=4)
     summary: str = Field(min_length=1, max_length=1600)
     limitations: list[str] = Field(default_factory=list, max_length=20)
@@ -218,20 +247,57 @@ class LayerAnalysisContext(FrozenModel):
     decision_at: datetime
     question: str = Field(min_length=1, max_length=2000)
     events: list[EventSnapshot] = Field(min_length=1, max_length=500)
-    anchors: list[AnalysisAnchorSnapshot] = Field(default_factory=list, max_length=100)
-    facts: list[FactSnapshot] = Field(default_factory=list, max_length=1200)
-    parent_claims: list[AcceptedImpactClaim] = Field(default_factory=list, max_length=100)
-    direct_signal_fact_ids: list[str] = Field(default_factory=list, max_length=500)
+    anchors: list[AnalysisAnchorSnapshot] = Field(default_factory=list, max_length=MAX_RUN_ANCHORS)
+    facts: list[FactSnapshot] = Field(default_factory=list, max_length=2000)
+    parent_assessments: list[LayerAssessment] = Field(default_factory=list, max_length=MAX_RUN_ANCHORS)
+    direct_signal_fact_ids: list[str] = Field(default_factory=list, max_length=2000)
+    ontology: ReasoningOntologyContext
+    retrieval_receipt: RetrievalReceipt
     retrieval_round: int = Field(default=1, ge=1, le=2)
 
 
 class LayerAnalysisResult(FrozenModel):
     layer: ImpactLayer
-    claims: list[AcceptedImpactClaim] = Field(default_factory=list, max_length=100)
-    supporting_facts: list[FactSnapshot] = Field(default_factory=list, max_length=1200)
+    assessments: list[LayerAssessment] = Field(default_factory=list, max_length=MAX_RUN_ANCHORS)
+    supporting_facts: list[FactSnapshot] = Field(default_factory=list, max_length=2000)
     summary: str = Field(min_length=1, max_length=1600)
     limitations: list[str] = Field(default_factory=list, max_length=20)
+    retrieval_receipts: list[RetrievalReceipt] = Field(default_factory=list, max_length=2)
     retrieval_rounds: int = Field(default=1, ge=1, le=2)
+
+
+class CrossLayerTransmissionProposal(FrozenModel):
+    """One explicit hypothesis explaining how an upper assessment informs a lower assessment."""
+
+    source_assessment_id: str = Field(min_length=1)
+    target_assessment_id: str = Field(min_length=1)
+    mechanism_fact_ids: list[str] = Field(default_factory=list, max_length=20)
+    logic: str = Field(min_length=1, max_length=1600)
+    confidence: Confidence
+    status: str = Field(min_length=1, max_length=500)
+
+
+class CrossLayerTransmissionBatch(FrozenModel):
+    proposals: list[CrossLayerTransmissionProposal] = Field(default_factory=list, max_length=MAX_RUN_PROPOSALS)
+    limitations: list[str] = Field(default_factory=list, max_length=20)
+
+
+class AcceptedCrossLayerTransmission(CrossLayerTransmissionProposal):
+    transmission_id: str
+    source_layer: ImpactLayer
+    target_layer: ImpactLayer
+    relation_type: Literal["CROSS_LAYER", "SAME_SOURCE_SIGNAL"]
+
+
+class CandidateCrossLayerMechanism(CrossLayerTransmissionProposal):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class CrossLayerAnalysisResult(FrozenModel):
+    target_layer: ImpactLayer
+    accepted: list[AcceptedCrossLayerTransmission] = Field(default_factory=list, max_length=MAX_RUN_PROPOSALS)
+    candidates: list[CandidateCrossLayerMechanism] = Field(default_factory=list, max_length=MAX_RUN_PROPOSALS)
+    limitations: list[str] = Field(default_factory=list, max_length=20)
 
 
 class ChainNodeSnapshot(FrozenModel):
@@ -245,7 +311,7 @@ class ChainNodeSnapshot(FrozenModel):
 class TopologyEdgeSnapshot(FrozenModel):
     uuid: str
     business_id: str
-    name: Literal["ChainNodeInputTo", "ChainNodeIsComponentOf", "ChainNodeDependsOn"]
+    name: str = Field(min_length=1, max_length=120)
     source_node_id: str
     source_name: str
     target_node_id: str
@@ -266,16 +332,18 @@ class IndustryChainSnapshot(FrozenModel):
 
 
 class InvestmentAnalysisContext(FrozenModel):
-    context_version: Literal["investment-reasoning-context/v3"] = "investment-reasoning-context/v3"
+    context_version: Literal["investment-reasoning-context/v5"] = "investment-reasoning-context/v5"
     request: InvestmentAnalysisRequest
     events: list[EventSnapshot] = Field(min_length=1, max_length=500)
     facts: list[FactSnapshot] = Field(default_factory=list, max_length=2000)
-    anchors: list[AnalysisAnchorSnapshot] = Field(default_factory=list, max_length=500)
-    chains: list[IndustryChainSnapshot] = Field(default_factory=list, max_length=10)
+    anchors: list[AnalysisAnchorSnapshot] = Field(default_factory=list, max_length=MAX_RUN_ANCHORS)
+    chains: list[IndustryChainSnapshot] = Field(default_factory=list, max_length=MAX_RUN_CHAINS)
+    ontology: ReasoningOntologyContext
     retrieval_strategy: Literal["GRAPHITI_NATIVE_SEARCH_PLUS_EXACT_TEMPORAL_SCOPE"] = (
         "GRAPHITI_NATIVE_SEARCH_PLUS_EXACT_TEMPORAL_SCOPE"
     )
     native_retrieved_fact_ids: list[str] = Field(default_factory=list, max_length=1000)
+    retrieval_receipts: list[RetrievalReceipt] = Field(default_factory=list, max_length=10)
     validation_issues: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -309,7 +377,23 @@ class InvestmentAnalysisContext(FrozenModel):
         }
 
 
+class TransmissionCandidate(FrozenModel):
+    """One real topology move that the Agent must evaluate without changing IDs."""
+
+    candidate_id: str
+    chain_id: str
+    topology_edge_id: str
+    source_node_id: str
+    target_node_id: str
+    flow: Literal["ALONG_EDGE", "AGAINST_EDGE"]
+    horizon: Horizon
+    source_fact_ids: list[str] = Field(default_factory=list, max_length=20)
+    source_assessment_ids: list[str] = Field(default_factory=list, max_length=20)
+    parent_transmission_ids: list[str] = Field(default_factory=list, max_length=20)
+
+
 class TransmissionProposal(FrozenModel):
+    candidate_id: str | None = None
     chain_id: str
     topology_edge_id: str
     source_node_id: str
@@ -321,20 +405,57 @@ class TransmissionProposal(FrozenModel):
     confidence: Confidence
     mechanism: str = Field(min_length=1, max_length=1200)
     source_fact_ids: list[str] = Field(default_factory=list, max_length=20)
-    source_claim_ids: list[str] = Field(default_factory=list, max_length=20)
+    source_assessment_ids: list[str] = Field(default_factory=list, max_length=20)
     parent_transmission_ids: list[str] = Field(default_factory=list, max_length=20)
     assumptions: list[str] = Field(default_factory=list, max_length=8)
 
 
 class AcceptedTransmission(TransmissionProposal):
     transmission_id: str
-    hop: int = Field(ge=1, le=3)
+    hop: int = Field(ge=1, le=5)
     root_signal_fact_ids: list[str] = Field(min_length=1, max_length=20)
+    path_score: float = Field(default=0.4, ge=0, le=1)
 
 
 class TransmissionBatch(FrozenModel):
-    proposals: list[TransmissionProposal] = Field(default_factory=list, max_length=100)
+    # One Agent call remains bounded per chain, while the deterministic runtime
+    # merges results from as many as 100 real chains into this run-level batch.
+    proposals: list[TransmissionProposal] = Field(default_factory=list, max_length=2000)
     stopped_reason: str | None = Field(default=None, max_length=500)
+
+
+class TransmissionSemanticIssue(FrozenModel):
+    """One concrete semantic defect attached to an otherwise valid transmission."""
+
+    transmission_id: str = Field(min_length=1, max_length=100)
+    issue_code: Literal[
+        "VARIABLE_TRANSITION_INCONSISTENT",
+        "MECHANISM_DIRECTION_INCONSISTENT",
+        "UNJUSTIFIED_EVIDENCE_REUSE",
+        "OTHER",
+    ]
+    critique: str = Field(min_length=1, max_length=1200)
+    repair_instruction: str = Field(min_length=1, max_length=1200)
+
+
+class TransmissionSemanticReview(FrozenModel):
+    """Sparse local review: only defective transmissions are returned."""
+
+    issues: list[TransmissionSemanticIssue] = Field(default_factory=list, max_length=MAX_RUN_PROPOSALS)
+
+
+class TransmissionExecutionMetrics(FrozenModel):
+    inclusion_threshold: float = Field(default=TRANSMISSION_INCLUSION_THRESHOLD, ge=0, le=1)
+    continuation_threshold: float = Field(default=TRANSMISSION_CONTINUATION_THRESHOLD, ge=0, le=1)
+    candidates_enumerated: int = Field(default=0, ge=0)
+    candidates_evaluated: int = Field(default=0, ge=0)
+    accepted: int = Field(default=0, ge=0)
+    rejected_below_inclusion: int = Field(default=0, ge=0)
+    stopped_by_confidence: int = Field(default=0, ge=0)
+    stopped_by_no_unvisited_neighbor: int = Field(default=0, ge=0)
+    semantic_review_issues: int = Field(default=0, ge=0)
+    semantic_repaired: int = Field(default=0, ge=0)
+    semantic_dropped: int = Field(default=0, ge=0)
 
 
 class NodeTrendView(FrozenModel):
@@ -348,7 +469,7 @@ class NodeTrendView(FrozenModel):
     investment_assessment: InvestmentAssessment
     rationale: str = Field(min_length=1, max_length=1600)
     supporting_fact_ids: list[str] = Field(default_factory=list, max_length=30)
-    supporting_claim_ids: list[str] = Field(default_factory=list, max_length=30)
+    supporting_assessment_ids: list[str] = Field(default_factory=list, max_length=30)
     supporting_transmission_ids: list[str] = Field(default_factory=list, max_length=30)
     risks: list[str] = Field(default_factory=list, max_length=10)
 
@@ -370,7 +491,7 @@ class ChainTrendView(FrozenModel):
 
 class AnalysisDraft(FrozenModel):
     one_sentence_conclusion: str = Field(min_length=1, max_length=2000)
-    chains: list[ChainTrendView] = Field(default_factory=list, max_length=10)
+    chains: list[ChainTrendView] = Field(default_factory=list, max_length=MAX_RUN_CHAINS)
     limitations: list[str] = Field(default_factory=list, max_length=20)
 
 
@@ -381,26 +502,43 @@ class ReviewResult(FrozenModel):
     review_summary: str = Field(min_length=1, max_length=2000)
 
 
+class ReportNarrativeRewrite(FrozenModel):
+    """One reader-facing text field rewritten without reopening frozen conclusions."""
+
+    key: str = Field(pattern=r"^copy-[0-9]{4}$")
+    text: str = Field(min_length=1, max_length=10_000)
+
+
+class ReportNarrativeBatch(FrozenModel):
+    rewrites: list[ReportNarrativeRewrite] = Field(default_factory=list, max_length=60)
+
+
 class ReasoningTraceNode(FrozenModel):
     node_id: str
-    node_type: Literal["EVENT", "FACT", "SIGNAL", "LAYER_CLAIM", "TRANSMISSION", "NODE_CONCLUSION"]
+    node_type: Literal["EVENT", "FACT", "SIGNAL", "LAYER_ASSESSMENT", "TRANSMISSION", "NODE_CONCLUSION"]
     label: str = Field(min_length=1, max_length=1600)
     parent_ids: list[str] = Field(default_factory=list, max_length=50)
 
 
 class InvestmentAnalysisResult(FrozenModel):
-    result_version: Literal["investment-reasoning-result/v3"] = "investment-reasoning-result/v3"
+    result_version: Literal["investment-reasoning-result/v5"] = "investment-reasoning-result/v5"
     executor: str
     status: Literal["SUCCEEDED", "NEEDS_REVIEW"]
     context_fingerprint: str
     geopolitical: LayerAnalysisResult
     macro: LayerAnalysisResult
     industry: LayerAnalysisResult
+    cross_layer_transmissions: list[AcceptedCrossLayerTransmission] = Field(
+        default_factory=list, max_length=MAX_RUN_PROPOSALS
+    )
+    cross_layer_candidates: list[CandidateCrossLayerMechanism] = Field(
+        default_factory=list, max_length=MAX_RUN_PROPOSALS
+    )
     transmissions: list[AcceptedTransmission]
     draft: AnalysisDraft
     review: ReviewResult
     reasoning_tree: list[ReasoningTraceNode] = Field(default_factory=list, max_length=5000)
-    stage_metrics: dict[str, int]
+    stage_metrics: dict[str, int | float]
     execution_issues: list[str] = Field(default_factory=list, max_length=100)
 
 
@@ -412,7 +550,7 @@ class InvestmentConclusionArtifact(InvestmentAnalysisResult):
     artifact_path: str = Field(min_length=1, max_length=4096)
     decision_at: datetime
     question: str = Field(min_length=1, max_length=2000)
-    event_window_hours: int = Field(ge=1, le=720)
+    event_window_hours: int = Field(ge=1, le=MAX_EVENT_WINDOW_HOURS)
     conclusion_status: Literal["SUPPORTED", "INSUFFICIENT_EVIDENCE"]
 
     @field_validator("decision_at")
@@ -437,6 +575,9 @@ class MacroAnalysisState(FrozenModel):
     prepared: PreparedInvestmentContext
     geopolitical: LayerAnalysisResult
     macro: LayerAnalysisResult
+    macro_transmission: CrossLayerAnalysisResult = Field(
+        default_factory=lambda: CrossLayerAnalysisResult(target_layer=ImpactLayer.MACRO_ECONOMIC)
+    )
 
 
 class IndustryAnalysisState(FrozenModel):
@@ -444,8 +585,33 @@ class IndustryAnalysisState(FrozenModel):
     geopolitical: LayerAnalysisResult
     macro: LayerAnalysisResult
     industry: LayerAnalysisResult
+    macro_transmission: CrossLayerAnalysisResult = Field(
+        default_factory=lambda: CrossLayerAnalysisResult(target_layer=ImpactLayer.MACRO_ECONOMIC)
+    )
+    industry_transmission: CrossLayerAnalysisResult = Field(
+        default_factory=lambda: CrossLayerAnalysisResult(target_layer=ImpactLayer.INDUSTRY)
+    )
     industry_context: InvestmentAnalysisContext
     transmissions: list[AcceptedTransmission]
-    rounds_executed: int = Field(ge=0, le=3)
+    rounds_executed: int = Field(ge=0, le=5)
+    transmission_metrics: TransmissionExecutionMetrics = Field(default_factory=TransmissionExecutionMetrics)
     draft: AnalysisDraft
     execution_issues: list[str] = Field(default_factory=list)
+
+
+class ReviewedInvestmentState(FrozenModel):
+    """Rename-safe handoff from review/audit to deterministic Report generation."""
+
+    analysis: InvestmentConclusionArtifact
+    context: InvestmentAnalysisContext
+
+
+class InvestmentReportWorkflowOutput(FrozenModel):
+    """Small final Workflow product, separate from the full reasoning audit."""
+
+    schema_version: Literal["investment-report-workflow-output/v2"] = "investment-report-workflow-output/v2"
+    source_report_id: str
+    report_artifact_path: str
+    audit_artifact_path: str
+    generation_status: Literal["GENERATED", "SKIPPED"]
+    reason: str | None = None

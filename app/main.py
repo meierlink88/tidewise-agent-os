@@ -15,6 +15,10 @@ from agents.event_identity import ensure_event_identity_agent
 from agents.event_signal_analyst import ensure_event_signal_analyst_agent
 from agents.evidence_extractor import ensure_evidence_extractor_agent
 from agents.investment_reasoner import ensure_investment_reasoner_agent, load_investment_reasoner_agent
+from agents.investment_report_writer import (
+    ensure_investment_report_writer_agent,
+    load_investment_report_writer_agent,
+)
 from agents.investment_reviewer import ensure_investment_reviewer_agent, load_investment_reviewer_agent
 from agents.tidewise_assistant import tidewise_assistant
 from agents.title_curator import ensure_title_curator_agent
@@ -97,6 +101,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     ensure_event_identity_agent(registry)
     ensure_event_signal_analyst_agent(registry)
     ensure_investment_reasoner_agent(registry)
+    ensure_investment_report_writer_agent(registry)
     ensure_investment_reviewer_agent(registry)
     ensure_raw_collection_workflow(registry)
     retire_collection_query_planner_agent()
@@ -115,6 +120,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
         investment_runtime = create_local_investment_workflow_runtime(
             model,
             load_investment_reasoner_agent(registry),
+            load_investment_report_writer_agent(registry),
             load_investment_reviewer_agent(registry),
         )
         configure_investment_workflow_runtime(investment_runtime)
