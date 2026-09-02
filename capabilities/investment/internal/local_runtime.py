@@ -1093,8 +1093,10 @@ class LocalInvestmentWorkflowRuntime:
                 )
                 calls.append(self._run(agent, prompt, ReportNarrativeBatch))
             batches = await asyncio.gather(*calls)
-            merged = ReportNarrativeBatch(rewrites=[item for batch in batches for item in batch.rewrites])
-            return apply_report_narratives(source, fields, merged)
+            rewritten = source
+            for batch in batches:
+                rewritten = apply_report_narratives(rewritten, fields, batch)
+            return rewritten
 
         written = await rewrite(
             report,

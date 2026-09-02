@@ -6,7 +6,7 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from agno.agent import Agent
 
@@ -523,6 +523,52 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(final.content.geopolitics.time_window, artifact.content.geopolitics.time_window)
         self.assertEqual(final.content.geopolitics.confidence, artifact.content.geopolitics.confidence)
         self.assertEqual(final.content.geopolitics.evidence_refs, artifact.content.geopolitics.evidence_refs)
+
+    async def test_report_writer_applies_large_reports_without_recombining_batches(self) -> None:
+        analysis, context = self._fixture()
+        artifact = InvestmentReportAssembler(EventEvidenceIndex(self.event_root)).assemble(analysis, context)
+        runtime = LocalInvestmentWorkflowRuntime(
+            cast(Any, None),
+            Agent(id="investment-reasoner"),
+            Agent(id="investment-reviewer"),
+            Agent(id="investment-report-writer"),
+        )
+        fields = extract_report_narratives(artifact)
+        template = fields[0]
+        large_fields = [
+            template.__class__(
+                key=f"copy-{index:04d}",
+                path=template.path,
+                role=template.role,
+                text=template.text,
+                locked_context=template.locked_context,
+            )
+            for index in range(1, 81)
+        ]
+        batch_sizes: list[int] = []
+
+        async def rewrite(agent: Agent, prompt: str, model: type[ReportNarrativeBatch]) -> ReportNarrativeBatch:
+            payload = json.loads(prompt.rsplit("\n", 1)[-1])
+            batch_sizes.append(len(payload["fields"]))
+            return model(
+                rewrites=[
+                    ReportNarrativeRewrite(key=item["key"], text=f"已润色：{item['current_text']}")
+                    for item in payload["fields"]
+                ]
+            )
+
+        runtime._run = AsyncMock(side_effect=rewrite)  # type: ignore[method-assign]
+        with patch(
+            "capabilities.investment.internal.local_runtime.extract_report_narratives",
+            return_value=large_fields,
+        ):
+            final = await runtime.write_and_edit_report(artifact)
+
+        self.assertEqual(batch_sizes, [40, 40, 40, 40])
+        rewritten: Any = final.model_dump(mode="python")
+        for part in template.path:
+            rewritten = rewritten[part]
+        self.assertTrue(rewritten.startswith("已润色："))
 
 
 if __name__ == "__main__":
