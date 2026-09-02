@@ -10,14 +10,14 @@ from app.settings import default_model
 from db import get_postgres_db
 
 INVESTMENT_REASONER_AGENT_ID = "investment-reasoner"
-INVESTMENT_REASONER_CONTRACT_VERSION = 3
+INVESTMENT_REASONER_CONTRACT_VERSION = 4
 _PROMPT = Path(__file__).with_name("investment_reasoner.seed.md")
 
 
 def _configure(agent: Agent) -> Agent:
     agent.db = get_postgres_db()
     agent.name = "Investment Reasoner"
-    agent.description = "Performs layered Signal-rooted impact reasoning and bounded topology propagation."
+    agent.description = "Interprets ontology-typed graph data and performs bounded cross-layer and topology reasoning."
     agent.tools = []
     agent.instructions = _PROMPT.read_text(encoding="utf-8").strip()
     agent.output_schema = None

@@ -12,7 +12,6 @@ from pydantic import BaseModel, ValidationError
 from capabilities.investment.internal.context import InvestmentContextBuilder
 from capabilities.investment.internal.engine import InvestmentReasoningEngine
 from capabilities.investment.internal.models import (
-    AcceptedImpactClaim,
     AcceptedTransmission,
     AnalysisDraft,
     ChainTrendView,
@@ -20,14 +19,15 @@ from capabilities.investment.internal.models import (
     CrossLayerAnalysisResult,
     CrossLayerTransmissionBatch,
     CrossLayerTransmissionProposal,
-    ImpactClaimProposal,
     ImpactLayer,
     IndustryAnalysisState,
     InvestmentAnalysisContext,
     InvestmentAnalysisRequest,
     LayerAnalysisContext,
     LayerAnalysisResult,
-    LayerImpactBatch,
+    LayerAssessment,
+    LayerAssessmentBatch,
+    LayerAssessmentProposal,
     NodeAnalysisBatch,
     NodeTrendView,
     PreparedInvestmentContext,
@@ -103,8 +103,8 @@ def _tolerant_payload[ModelT: BaseModel](value: Any, model: type[ModelT]) -> Mod
             )
         nodes, _ = _valid_items(normalized, NodeTrendView)
         return model.model_validate({"nodes": [item.model_dump(mode="json") for item in nodes]})
-    if model is LayerImpactBatch:
-        layer_proposals, layer_rejected = _valid_items(raw.get("proposals"), ImpactClaimProposal)
+    if model is LayerAssessmentBatch:
+        layer_proposals, layer_rejected = _valid_items(raw.get("proposals"), LayerAssessmentProposal)
         layer_limitations = _string_list(raw.get("limitations"), limit=19)
         if layer_rejected:
             layer_limitations.append("LLM_OUTPUT_ITEM_REJECTED")
@@ -197,154 +197,147 @@ class LocalInvestmentWorkflowRuntime:
         result, context = await self._analyze_layer(
             prepared,
             ImpactLayer.MACRO_ECONOMIC,
-            geopolitical.claims,
+            geopolitical.assessments,
         )
-        transmission = await self._analyze_cross_layer(context, geopolitical.claims, result.claims)
+        transmission = await self._analyze_cross_layer(
+            context,
+            geopolitical.assessments,
+            result.assessments,
+        )
         return result, transmission
 
     async def _analyze_layer(
         self,
         prepared: PreparedInvestmentContext,
         layer: ImpactLayer,
-        parent_claims: list[AcceptedImpactClaim],
+        parent_assessments: list[LayerAssessment],
     ) -> tuple[LayerAnalysisResult, LayerAnalysisContext]:
-        context = await self._provider.build_layer_context(prepared.context, layer, parent_claims)
+        context = await self._provider.build_layer_context(prepared.context, layer, parent_assessments)
         audit_facts_by_id = {fact.uuid: fact for fact in context.facts}
         if not context.anchors:
             return (
                 LayerAnalysisResult(
                     layer=layer,
-                    claims=[],
+                    assessments=[],
                     supporting_facts=[],
                     summary=f"{layer.value} 层未召回标准锚点，因此不形成方向结论。",
                     limitations=["NO_STANDARD_ANCHOR_CANDIDATE"],
+                    retrieval_receipts=[context.retrieval_receipt],
                 ),
                 context,
             )
         first = await self._reason_layer(context)
-        accepted = InvestmentReasoningEngine.validate_layer_batch(
+        assessments = InvestmentReasoningEngine.build_layer_assessments(
             context,
-            parent_claims,
             first,
             layer=layer,
         )
         limitations = list(first.limitations)
         summary = first.summary
         rounds = 1
-        second_had_proposals = False
+        receipts = [context.retrieval_receipt]
         if first.supplemental_queries:
             second_context = await self._provider.build_layer_context(
                 prepared.context,
                 layer,
-                parent_claims,
+                parent_assessments,
                 supplemental_queries=first.supplemental_queries,
                 retrieval_round=2,
             )
             second = await self._reason_layer(second_context)
             audit_facts_by_id.update({fact.uuid: fact for fact in second_context.facts})
-            second_had_proposals = bool(second.proposals)
-            second_accepted = InvestmentReasoningEngine.validate_layer_batch(
+            second_assessments = InvestmentReasoningEngine.build_layer_assessments(
                 second_context,
-                parent_claims,
                 second,
                 layer=layer,
             )
-            by_id = {item.claim_id: item for item in [*accepted, *second_accepted]}
-            accepted = list(by_id.values())
+            by_id = {item.assessment_id: item for item in [*assessments, *second_assessments]}
+            assessments = list(by_id.values())
             limitations.extend(second.limitations)
             summary = second.summary
             context = second_context
+            receipts.append(second_context.retrieval_receipt)
             rounds = 2
-        if not accepted:
-            had_proposals = bool(first.proposals) or second_had_proposals
-            limitations = ["NO_ACCEPTED_SIGNAL_LINEAGE"]
-            if had_proposals:
-                limitations.append("PROPOSALS_REJECTED_BY_LINEAGE_GATE")
+        if not assessments:
+            limitations = ["NO_DIRECT_SIGNAL_ASSESSMENT"]
             summary = (
-                f"{layer.value} 层没有通过确定性根谱门禁的方向结论；"
-                "相关 Event、普通 Fact 或模型候选不能替代有效 Signal 与跨层机制证据。"
+                f"{layer.value} 层未检索到可直接评估的 Signal 锚点；相关 Event 和普通 Fact 仅作为背景或待验证机制。"
             )
-        supporting_fact_ids = {
-            fact_id
-            for claim in accepted
-            for fact_id in [
-                *claim.source_fact_ids,
-                *claim.mechanism_fact_ids,
-                *claim.root_signal_fact_ids,
-            ]
-        }
-        supporting_facts = [fact for fact_id, fact in audit_facts_by_id.items() if fact_id in supporting_fact_ids]
         return (
             LayerAnalysisResult(
                 layer=layer,
-                claims=accepted,
-                supporting_facts=supporting_facts,
+                assessments=assessments,
+                # Preserve the bounded graph instances used by this layer so
+                # later cross-layer mechanism references remain auditable.
+                supporting_facts=list(audit_facts_by_id.values())[:1200],
                 summary=summary,
                 limitations=list(dict.fromkeys(limitations))[:20],
+                retrieval_receipts=receipts,
                 retrieval_rounds=rounds,
             ),
             context,
         )
 
-    async def _reason_layer(self, context: LayerAnalysisContext) -> LayerImpactBatch:
+    async def _reason_layer(self, context: LayerAnalysisContext) -> LayerAssessmentBatch:
         layer_rules = {
-            ImpactLayer.GEOPOLITICAL: (
-                "只分析预置 GeopoliticRivalry 锚点。方向结论必须引用直接有效 Signal；"
-                "不得因为 Event 文字相关就强行归入不存在的地缘蓝图。"
-            ),
+            ImpactLayer.GEOPOLITICAL: ("只解读已检索的 GeopoliticRivalry 锚点及其直接 Signal。"),
             ImpactLayer.MACRO_ECONOMIC: (
-                "只分析预置 MacroEconomic 锚点。可引用直接宏观 Signal；或引用已接受的地缘父结论，"
-                "但后者必须同时引用把父层影响连接到宏观锚点的普通 mechanism Fact。"
+                "只解读已检索的 MacroEconomic 锚点及其直接 Signal；地缘结果仅作为后续跨层传导的上下文。"
             ),
             ImpactLayer.INDUSTRY: (
-                "只对预置 ChainNode 提出产业层 Claim。IndustryChain 只是节点集合与后续汇总视图，"
-                "不拥有直接 Signal 或单独 Claim。可引用节点直接 Signal；或引用已接受的上层结论，"
-                "但后者必须同时引用连接到该节点的普通 mechanism Fact。"
+                "只解读已检索的 ChainNode 直接 Signal。IndustryChain 是节点集合视图，不拥有直接 Signal 或单独评估。"
             ),
         }[context.layer]
-        payload = context.model_dump(mode="json")
+        context_payload = context.model_dump(mode="json")
+        payload = {
+            "ontology": context_payload.pop("ontology"),
+            "retrieval_receipt": context_payload.pop("retrieval_receipt"),
+            "instances": context_payload,
+        }
         prompt = (
-            "你在固定的分层投研 Workflow 中执行单层判断，只返回 LayerImpactBatch。"
-            "不得发明任何 Anchor、Fact、Event、Variable 或 Claim ID。"
-            "source_fact_ids 只能引用给定的直接 Signal Fact；mechanism_fact_ids 只能引用给定普通 Fact；"
-            "parent_claim_ids 只能引用给定父层结论。证据不足时 proposals 必须为空。"
-            "直接Signal提案的 variable_id、direction、horizons 必须逐字采用所引 Signal 的对应字段，"
-            "不得把 MEDIUM 改成 SHORT 或自行改写方向。"
+            "你在固定的分层投研 Workflow 中解读单层图谱数据，只返回 LayerAssessmentBatch。"
+            "ontology 定义数据概念与关系，instances 是本次检索实例。"
+            "不得发明 Anchor、Fact、Event 或 Variable ID。每个存在直接 Signal 的锚点应输出一条综合评估；"
+            "Signal Fact 和 Event 引用由 Workflow 自动绑定，你不需要抄写这些 ID。"
+            "Signal 方向是变量方向，需结合 Variable 定义综合为升温、降温、分化或无显著变化。"
             "如果仅缺少少量明确事实，可给出最多4条 supplemental_queries；第二轮后不得继续请求。"
             f"本层规则：{layer_rules}\n" + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         )
-        return await self._run(self._reasoner, prompt, LayerImpactBatch)
+        return await self._run(self._reasoner, prompt, LayerAssessmentBatch)
 
     async def _analyze_cross_layer(
         self,
         context: LayerAnalysisContext,
-        source_claims: list[AcceptedImpactClaim],
-        target_claims: list[AcceptedImpactClaim],
+        source_assessments: list[LayerAssessment],
+        target_assessments: list[LayerAssessment],
     ) -> CrossLayerAnalysisResult:
-        if not source_claims or not target_claims:
+        if not source_assessments or not target_assessments:
             return CrossLayerAnalysisResult(
                 target_layer=context.layer,
-                limitations=["NO_CLOSED_CROSS_LAYER_CLAIM_PAIR"],
+                limitations=["NO_CLOSED_CROSS_LAYER_ASSESSMENT_PAIR"],
             )
         payload = {
             "target_layer": context.layer.value,
-            "source_claims": [item.model_dump(mode="json") for item in source_claims],
-            "target_claims": [item.model_dump(mode="json") for item in target_claims],
+            "ontology": context.ontology.model_dump(mode="json"),
+            "retrieval_receipt": context.retrieval_receipt.model_dump(mode="json"),
+            "source_assessments": [item.model_dump(mode="json") for item in source_assessments],
+            "target_assessments": [item.model_dump(mode="json") for item in target_assessments],
             "ordinary_facts": [item.model_dump(mode="json") for item in context.facts if item.kind == "ORDINARY"],
         }
         prompt = (
-            "识别上层已接受结论如何影响本层已接受结论，只返回 CrossLayerTransmissionBatch。"
-            "source_claim_id 和 target_claim_id 只能引用输入；mechanism_fact_ids 只能引用输入中的普通 Fact。"
+            "识别上层锚点评估如何影响本层锚点评估，只返回 CrossLayerTransmissionBatch。"
+            "source_assessment_id 和 target_assessment_id 只能引用输入；"
+            "mechanism_fact_ids 只能引用输入中的普通 Fact。"
             "同一 Event 在两层分别产生直接 Signal 只能说明同源影响，不能写成因果桥梁；"
-            "仍可用简洁逻辑说明上层结论如何帮助理解下层结论。"
-            "无法形成合理路径时不要提案，不得发明锚点或结论。\n"
+            "仍可作为并行背景说明。普通 Fact 能解释机制时引用；"
+            "无普通 Fact 但逻辑合理时保留为低置信度待验证传导，不得发明锚点。\n"
             + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         )
         batch = await self._run(self._reasoner, prompt, CrossLayerTransmissionBatch)
         return InvestmentReasoningEngine.validate_cross_layer_batch(
             context,
-            source_claims,
-            target_claims,
+            source_assessments,
+            target_assessments,
             batch,
         )
 
@@ -355,13 +348,13 @@ class LocalInvestmentWorkflowRuntime:
         macro: LayerAnalysisResult,
         macro_transmission: CrossLayerAnalysisResult | None = None,
     ) -> IndustryAnalysisState:
-        parents = [*geopolitical.claims, *macro.claims]
+        parents = [*geopolitical.assessments, *macro.assessments]
         industry, layer_context = await self._analyze_layer(prepared, ImpactLayer.INDUSTRY, parents)
-        industry_transmission = await self._analyze_cross_layer(layer_context, parents, industry.claims)
+        industry_transmission = await self._analyze_cross_layer(layer_context, parents, industry.assessments)
         industry_context = await self._provider.expand_industry_context(
             prepared.context,
             layer_context,
-            industry.claims,
+            industry.assessments,
         )
         audit_facts = [
             *geopolitical.supporting_facts,
@@ -369,14 +362,39 @@ class LocalInvestmentWorkflowRuntime:
             *industry.supporting_facts,
         ]
         facts_by_id = {item.uuid: item for item in [*audit_facts, *industry_context.facts]}
-        industry_context = industry_context.model_copy(update={"facts": list(facts_by_id.values())[:2000]})
+        macro_cross_layer = macro_transmission or CrossLayerAnalysisResult(target_layer=ImpactLayer.MACRO_ECONOMIC)
+        mechanism_fact_ids = list(
+            dict.fromkeys(
+                fact_id
+                for transmission in [*macro_cross_layer.accepted, *industry_transmission.accepted]
+                for fact_id in transmission.mechanism_fact_ids
+            )
+        )
+        prioritized_facts = [facts_by_id[fact_id] for fact_id in mechanism_fact_ids if fact_id in facts_by_id]
+        prioritized_ids = {item.uuid for item in prioritized_facts}
+        prioritized_facts.extend(item for item in facts_by_id.values() if item.uuid not in prioritized_ids)
+        receipts_by_identity = {
+            (item.stage, item.retrieval_round, tuple(item.required_actions)): item
+            for item in [
+                *industry_context.retrieval_receipts,
+                *geopolitical.retrieval_receipts,
+                *macro.retrieval_receipts,
+                *industry.retrieval_receipts,
+            ]
+        }
+        industry_context = industry_context.model_copy(
+            update={
+                "facts": prioritized_facts[:2000],
+                "retrieval_receipts": list(receipts_by_identity.values())[:10],
+            }
+        )
         accepted: list[AcceptedTransmission] = []
         rounds = 0
         if any(chain.signal_root_node_ids for chain in industry_context.chains):
             for round_number in range(1, industry_context.request.max_hops + 1):
                 batch = await self._propagate(
                     industry_context,
-                    industry.claims,
+                    industry.assessments,
                     accepted,
                     round_number=round_number,
                 )
@@ -386,17 +404,17 @@ class LocalInvestmentWorkflowRuntime:
                     accepted,
                     batch,
                     round_number=round_number,
-                    root_claims=industry.claims,
+                    root_assessments=industry.assessments,
                 )
                 accepted.extend(new_items)
                 if not any(item.confidence != Confidence.LOW for item in new_items):
                     break
-        draft = await self._synthesize(industry_context, industry.claims, accepted)
+        draft = await self._synthesize(industry_context, industry.assessments, accepted)
         draft = InvestmentReasoningEngine.normalize_draft(
             industry_context,
             accepted,
             draft,
-            industry.claims,
+            industry.assessments,
         )
         return IndustryAnalysisState(
             prepared=prepared,
@@ -415,7 +433,7 @@ class LocalInvestmentWorkflowRuntime:
     async def _propagate(
         self,
         context: InvestmentAnalysisContext,
-        industry_claims: list[AcceptedImpactClaim],
+        industry_assessments: list[LayerAssessment],
         accepted: list[AcceptedTransmission],
         *,
         round_number: int,
@@ -423,9 +441,9 @@ class LocalInvestmentWorkflowRuntime:
         calls = []
         for chain in context.chains:
             chain_accepted = [item for item in accepted if item.chain_id == chain.business_id]
-            chain_claims = [
+            chain_assessments = [
                 item
-                for item in industry_claims
+                for item in industry_assessments
                 if item.anchor_id == chain.business_id
                 or any(node.business_id == item.anchor_id for node in chain.nodes)
             ]
@@ -443,15 +461,16 @@ class LocalInvestmentWorkflowRuntime:
             payload = {
                 "round_number": round_number,
                 "question": context.request.question,
+                "ontology": context.ontology.model_dump(mode="json"),
                 "chain": chain.model_dump(mode="json"),
                 "facts": [item.model_dump(mode="json") for item in relevant_facts],
-                "industry_claims": [item.model_dump(mode="json") for item in chain_claims],
+                "industry_assessments": [item.model_dump(mode="json") for item in chain_assessments],
                 "accepted_transmissions": [item.model_dump(mode="json") for item in chain_accepted],
             }
             prompt = (
                 f"执行第 {round_number} 轮产业链拓扑传导，只返回 TransmissionBatch。"
                 "第1轮必须由作用于 source_node_id 的直接有效 Signal（source_fact_ids），"
-                "或已接受 Industry ChainNode Claim（source_claim_ids）启动。"
+                "或已形成的 Industry ChainNode Assessment（source_assessment_ids）启动。"
                 "后续轮只能从上一轮已接受 Transmission 的 target_node_id 继续。"
                 "不得发明节点、边或ID；证据不足时返回空 proposals。\n"
                 + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
@@ -469,7 +488,7 @@ class LocalInvestmentWorkflowRuntime:
     async def _synthesize(
         self,
         context: InvestmentAnalysisContext,
-        industry_claims: list[AcceptedImpactClaim],
+        industry_assessments: list[LayerAssessment],
         transmissions: list[AcceptedTransmission],
     ) -> AnalysisDraft:
         if not context.chains:
@@ -477,7 +496,7 @@ class LocalInvestmentWorkflowRuntime:
                 one_sentence_conclusion="当前事件与上层结论没有召回可验证的标准产业链。",
                 limitations=["NO_INDUSTRY_CHAIN_CONTEXT"],
             )
-        if not industry_claims and not any(chain.signal_root_fact_ids for chain in context.chains):
+        if not industry_assessments and not any(chain.signal_root_fact_ids for chain in context.chains):
             return AnalysisDraft(
                 one_sentence_conclusion="当前事件可召回相关产业链，但没有有效 Signal 谱系支持方向性结论。",
                 chains=[InvestmentReasoningEngine.insufficient_chain(chain) for chain in context.chains],
@@ -493,21 +512,24 @@ class LocalInvestmentWorkflowRuntime:
                 if fact.source_business_id in node_ids | {chain.business_id}
                 or fact.target_business_id in node_ids | {chain.business_id}
             ]
-            claims = [
-                item for item in industry_claims if item.anchor_id == chain.business_id or item.anchor_id in node_ids
+            assessments = [
+                item
+                for item in industry_assessments
+                if item.anchor_id == chain.business_id or item.anchor_id in node_ids
             ]
             chain_transmissions = [item for item in transmissions if item.chain_id == chain.business_id]
             payload = {
                 "question": context.request.question,
+                "ontology": context.ontology.model_dump(mode="json"),
                 "chain": chain.model_dump(mode="json"),
                 "facts": [item.model_dump(mode="json") for item in facts],
-                "accepted_industry_claims": [item.model_dump(mode="json") for item in claims],
+                "industry_assessments": [item.model_dump(mode="json") for item in assessments],
                 "accepted_transmissions": [item.model_dump(mode="json") for item in chain_transmissions],
             }
             prompt = (
                 "输出 NodeAnalysisBatch，覆盖产业链所有真实节点。只有直接有效 Signal、作用于该节点的"
-                "已接受 Industry Claim，或有可追溯 Signal 根的 Transmission 才能形成方向结论；"
-                "分别填写 supporting_fact_ids、supporting_claim_ids、supporting_transmission_ids。"
+                "Industry Assessment，或有可追溯 Signal 根的 Transmission 才能形成方向结论；"
+                "分别填写 supporting_fact_ids、supporting_assessment_ids、supporting_transmission_ids。"
                 "其余节点必须 INSUFFICIENT_EVIDENCE，不得发明ID。\n"
                 + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
             )
@@ -545,6 +567,8 @@ class LocalInvestmentWorkflowRuntime:
 
     async def review(self, state: IndustryAnalysisState) -> ReviewResult:
         payload = {
+            "ontology": state.industry_context.ontology.model_dump(mode="json"),
+            "retrieval_receipts": [item.model_dump(mode="json") for item in state.industry_context.retrieval_receipts],
             "active_signal_facts": [
                 item.model_dump(mode="json")
                 for item in state.industry_context.facts
@@ -565,8 +589,10 @@ class LocalInvestmentWorkflowRuntime:
             "draft": state.draft.model_dump(mode="json"),
         }
         prompt = (
-            "审核该分层投研结果。不得补充新结论；任何方向结论没有 Event→Signal→层结论/传导谱系，"
-            "或引用不存在的锚点、节点、Fact、Claim、拓扑边时 accepted=false。\n"
+            "审核该分层投研 Workflow 的执行完整性，不得补充新结论。"
+            "检查必需检索动作是否完成、输出引用是否来自本次上下文、"
+            "直接 Signal 与传导假设是否分开。单条传导证据弱应记录 issue，"
+            "不应否决其他已完成步骤或有直接 Signal 支持的评估。\n"
             + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         )
         return await self._run(self._reviewer, prompt, ReviewResult)

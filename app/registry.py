@@ -70,7 +70,6 @@ from capabilities.evidence.functions import (
 )
 from capabilities.investment import (
     AcceptedCrossLayerTransmission,
-    AcceptedImpactClaim,
     AnalysisDraft,
     CandidateCrossLayerMechanism,
     CrossLayerAnalysisResult,
@@ -84,7 +83,8 @@ from capabilities.investment import (
     InvestmentReportWorkflowOutput,
     LayerAnalysisContext,
     LayerAnalysisResult,
-    LayerImpactBatch,
+    LayerAssessment,
+    LayerAssessmentBatch,
     MacroAnalysisState,
     PreparedInvestmentContext,
     ReasoningTraceNode,
@@ -161,8 +161,8 @@ registry = TidewiseRegistry(
         PreparedInvestmentContext,
         ReasoningTraceNode,
         LayerAnalysisContext,
-        LayerImpactBatch,
-        AcceptedImpactClaim,
+        LayerAssessmentBatch,
+        LayerAssessment,
         CrossLayerTransmissionProposal,
         CrossLayerTransmissionBatch,
         AcceptedCrossLayerTransmission,

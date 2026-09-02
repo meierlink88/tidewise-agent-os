@@ -8,7 +8,6 @@ from pathlib import Path
 
 from capabilities.investment import (
     AcceptedCrossLayerTransmission,
-    AcceptedImpactClaim,
     AcceptedTransmission,
     AnalysisDraft,
     ChainNodeSnapshot,
@@ -25,7 +24,9 @@ from capabilities.investment import (
     InvestmentAssessment,
     InvestmentConclusionArtifact,
     LayerAnalysisResult,
+    LayerAssessment,
     NodeTrendView,
+    ReasoningOntologyContext,
     ReviewResult,
     TopologyEdgeSnapshot,
     Trend,
@@ -86,31 +87,28 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
         )
 
     @classmethod
-    def _claim(
+    def _assessment(
         cls,
-        claim_id: str,
+        assessment_id: str,
         layer: ImpactLayer,
         anchor_id: str,
         anchor_name: str,
         anchor_type: str,
         fact: FactSnapshot,
-    ) -> AcceptedImpactClaim:
-        return AcceptedImpactClaim(
+    ) -> LayerAssessment:
+        return LayerAssessment(
             anchor_id=anchor_id,
-            variable_id="market_demand",
-            direction=Direction.UP,
-            horizons=[Horizon.MEDIUM],
+            result=Trend.WARMING,
             confidence=Confidence.MEDIUM,
             summary=f"{anchor_name}升温。",
-            mechanism=f"{fact.fact}，因此{anchor_name}升温。",
-            source_fact_ids=[fact.uuid],
-            claim_id=claim_id,
+            reasoning=f"{fact.fact}，因此{anchor_name}升温。",
+            direct_signal_fact_ids=[fact.uuid],
+            assessment_id=assessment_id,
             layer=layer,
             anchor_name=anchor_name,
             anchor_type=anchor_type,
-            derivation="DIRECT_SIGNAL",
+            horizons=[Horizon.MEDIUM],
             root_event_ids=fact.source_event_ids,
-            root_signal_fact_ids=[fact.uuid],
         )
 
     def _fixture(self) -> tuple[InvestmentConclusionArtifact, InvestmentAnalysisContext]:
@@ -118,13 +116,15 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
         macro_fact = self._signal("signal-macro", "event-macro", "macro-1", "增长预期修正", "MacroEconomic")
         node_fact = self._signal("signal-node", "event-node", "node-1", "油品运输服务", "ChainNode")
         facts = [geo_fact, macro_fact, node_fact]
-        geo_claim = self._claim(
-            "claim-geo", ImpactLayer.GEOPOLITICAL, "geo-1", "海湾安全对抗", "GeopoliticRivalry", geo_fact
+        geo_assessment = self._assessment(
+            "assessment-geo", ImpactLayer.GEOPOLITICAL, "geo-1", "海湾安全对抗", "GeopoliticRivalry", geo_fact
         )
-        macro_claim = self._claim(
-            "claim-macro", ImpactLayer.MACRO_ECONOMIC, "macro-1", "增长预期修正", "MacroEconomic", macro_fact
+        macro_assessment = self._assessment(
+            "assessment-macro", ImpactLayer.MACRO_ECONOMIC, "macro-1", "增长预期修正", "MacroEconomic", macro_fact
         )
-        node_claim = self._claim("claim-node", ImpactLayer.INDUSTRY, "node-1", "油品运输服务", "ChainNode", node_fact)
+        node_assessment = self._assessment(
+            "assessment-node", ImpactLayer.INDUSTRY, "node-1", "油品运输服务", "ChainNode", node_fact
+        )
         chain = IndustryChainSnapshot(
             uuid="chain-uuid",
             business_id="chain-1",
@@ -166,6 +166,12 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
             ],
             facts=facts,
             chains=[chain],
+            ontology=ReasoningOntologyContext(
+                entity_types={"Event": "事件", "ChainNode": "产业链节点"},
+                fact_types={"SIGNAL_ON": "变量信号"},
+                relationship_types={"ChainNodeInputTo": "投入传导"},
+                usage_rules=["直接 Signal 不转换为 Claim。"],
+            ),
         )
         topology = AcceptedTransmission(
             chain_id="chain-1",
@@ -185,8 +191,8 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
         )
         cross = [
             AcceptedCrossLayerTransmission(
-                source_claim_id="claim-geo",
-                target_claim_id="claim-macro",
+                source_assessment_id="assessment-geo",
+                target_assessment_id="assessment-macro",
                 logic="海湾安全风险通过能源运输条件强化增长预期下修。",
                 confidence=Confidence.LOW,
                 status="已形成解释闭环；仍需连续数据验证",
@@ -196,8 +202,8 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
                 relation_type="CROSS_LAYER",
             ),
             AcceptedCrossLayerTransmission(
-                source_claim_id="claim-macro",
-                target_claim_id="claim-node",
+                source_assessment_id="assessment-macro",
+                target_assessment_id="assessment-node",
                 logic="增长预期变化影响油品运输需求。",
                 confidence=Confidence.LOW,
                 status="目标节点已有直接 Signal",
@@ -218,7 +224,7 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
             investment_assessment=InvestmentAssessment.OPPORTUNITY_CANDIDATE,
             rationale="运输需求上升使该节点升温。",
             supporting_fact_ids=[node_fact.uuid],
-            supporting_claim_ids=[node_claim.claim_id],
+            supporting_assessment_ids=[node_assessment.assessment_id],
         )
         inferred_node = NodeTrendView(
             chain_id="chain-1",
@@ -253,19 +259,19 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
             context_fingerprint="fingerprint",
             geopolitical=LayerAnalysisResult(
                 layer=ImpactLayer.GEOPOLITICAL,
-                claims=[geo_claim],
+                assessments=[geo_assessment],
                 supporting_facts=[geo_fact],
                 summary="海湾安全对抗升温。",
             ),
             macro=LayerAnalysisResult(
                 layer=ImpactLayer.MACRO_ECONOMIC,
-                claims=[macro_claim],
+                assessments=[macro_assessment],
                 supporting_facts=[macro_fact],
                 summary="增长预期修正升温。",
             ),
             industry=LayerAnalysisResult(
                 layer=ImpactLayer.INDUSTRY,
-                claims=[node_claim],
+                assessments=[node_assessment],
                 supporting_facts=[node_fact],
                 summary="油品运输服务升温。",
             ),

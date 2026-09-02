@@ -128,21 +128,57 @@ def _deterministic_issues(state: IndustryAnalysisState) -> list[str]:
     eligible = context.eligible_signal_fact_ids
     event_ids = {item.event_id for item in context.events}
     issues: list[str] = []
-    all_claims = [*state.geopolitical.claims, *state.macro.claims, *state.industry.claims]
-    for claim in all_claims:
-        if not claim.root_signal_fact_ids or not set(claim.root_signal_fact_ids) <= eligible:
-            issues.append(f"CLAIM_WITHOUT_ACTIVE_SIGNAL_ROOT:{claim.claim_id}")
-        if not claim.root_event_ids or not set(claim.root_event_ids) <= event_ids:
-            issues.append(f"CLAIM_WITHOUT_SCOPED_EVENT_ROOT:{claim.claim_id}")
-    for transmission in state.transmissions:
-        if not transmission.root_signal_fact_ids or not set(transmission.root_signal_fact_ids) <= eligible:
-            issues.append(f"TRANSMISSION_WITHOUT_SIGNAL_ROOT:{transmission.transmission_id}")
+    for receipt in context.retrieval_receipts:
+        missing = set(receipt.required_actions) - set(receipt.completed_actions)
+        for action in sorted(missing):
+            issues.append(f"REQUIRED_RETRIEVAL_NOT_EXECUTED:{receipt.stage}:{action}")
+    required_stages = {"PREPARE", "GEOPOLITICAL", "MACRO_ECONOMIC", "INDUSTRY"}
+    completed_stages = {receipt.stage for receipt in context.retrieval_receipts}
+    for stage in sorted(required_stages - completed_stages):
+        issues.append(f"RETRIEVAL_RECEIPT_MISSING:{stage}")
+    all_assessments = [
+        *state.geopolitical.assessments,
+        *state.macro.assessments,
+        *state.industry.assessments,
+    ]
+    receipt_signal_ids_by_layer = {
+        layer: {
+            fact_id
+            for receipt in context.retrieval_receipts
+            if receipt.layer == layer
+            for fact_id in receipt.direct_signal_fact_ids
+        }
+        for layer in ImpactLayer
+    }
+    for assessment in all_assessments:
+        if not assessment.direct_signal_fact_ids or not set(assessment.direct_signal_fact_ids) <= eligible:
+            issues.append(f"ASSESSMENT_REFERENCE_OUTSIDE_CONTEXT:{assessment.assessment_id}")
+        if not set(assessment.direct_signal_fact_ids) <= receipt_signal_ids_by_layer[assessment.layer]:
+            issues.append(f"ASSESSMENT_REFERENCE_OUTSIDE_LAYER_RETRIEVAL:{assessment.assessment_id}")
+        if not assessment.root_event_ids or not set(assessment.root_event_ids) <= event_ids:
+            issues.append(f"ASSESSMENT_EVENT_REFERENCE_OUTSIDE_CONTEXT:{assessment.assessment_id}")
+    assessment_ids = {item.assessment_id for item in all_assessments}
+    ordinary_fact_ids = {item.uuid for item in context.facts if item.kind == "ORDINARY"}
+    cross_layer_items = [
+        *state.macro_transmission.accepted,
+        *state.macro_transmission.candidates,
+        *state.industry_transmission.accepted,
+        *state.industry_transmission.candidates,
+    ]
+    for cross_item in cross_layer_items:
+        if {cross_item.source_assessment_id, cross_item.target_assessment_id} - assessment_ids:
+            issues.append(f"CROSS_LAYER_REFERENCE_OUTSIDE_CONTEXT:{cross_item.source_assessment_id}")
+        if not set(cross_item.mechanism_fact_ids) <= ordinary_fact_ids:
+            issues.append(f"CROSS_LAYER_FACT_REFERENCE_OUTSIDE_CONTEXT:{cross_item.source_assessment_id}")
+    for node_transmission in state.transmissions:
+        if not node_transmission.root_signal_fact_ids or not set(node_transmission.root_signal_fact_ids) <= eligible:
+            issues.append(f"TRANSMISSION_WITHOUT_SIGNAL_ROOT:{node_transmission.transmission_id}")
     issues.extend(
         InvestmentReasoningEngine.directional_lineage_issues(
             context,
             state.transmissions,
             state.draft,
-            state.industry.claims,
+            state.industry.assessments,
         )
     )
     return list(dict.fromkeys(issues))
@@ -150,9 +186,9 @@ def _deterministic_issues(state: IndustryAnalysisState) -> list[str]:
 
 def _requires_semantic_review(state: IndustryAnalysisState) -> bool:
     return bool(
-        state.geopolitical.claims
-        or state.macro.claims
-        or state.industry.claims
+        state.geopolitical.assessments
+        or state.macro.assessments
+        or state.industry.assessments
         or state.transmissions
         or any(
             trend != Trend.INSUFFICIENT_EVIDENCE
@@ -163,19 +199,8 @@ def _requires_semantic_review(state: IndustryAnalysisState) -> bool:
     )
 
 
-def _safe_layer_result(result: LayerAnalysisResult, reason: str) -> LayerAnalysisResult:
-    return result.model_copy(
-        update={
-            "claims": [],
-            "supporting_facts": [],
-            "summary": f"{result.layer.value} 层结论未通过最终门禁，已安全降级为证据不足。",
-            "limitations": list(dict.fromkeys([*result.limitations, reason]))[:20],
-        }
-    )
-
-
 async def review_and_finalize(step_input: StepInput, run_context: RunContext) -> StepOutput:
-    """Apply deterministic lineage gates, then let the Reviewer check supported conclusions."""
+    """Verify required actions and output references, then record semantic review notes."""
 
     state = _content(step_input, IndustryAnalysisState)
     draft = state.draft
@@ -186,19 +211,11 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
     hard_issues = _deterministic_issues(state)
     execution_issues = list(state.execution_issues)
     if hard_issues:
-        draft = InvestmentReasoningEngine.safe_fallback_draft(
-            state.industry_context,
-            "DETERMINISTIC_GATE_SAFE_FALLBACK",
-        )
-        geopolitical = _safe_layer_result(geopolitical, "DETERMINISTIC_GATE_SAFE_FALLBACK")
-        macro = _safe_layer_result(macro, "DETERMINISTIC_GATE_SAFE_FALLBACK")
-        industry = _safe_layer_result(industry, "DETERMINISTIC_GATE_SAFE_FALLBACK")
-        transmissions = []
         review = ReviewResult(
-            accepted=True,
+            accepted=False,
             confidence=Confidence.LOW,
             issue_codes=hard_issues[:30],
-            review_summary="确定性门禁拒绝了无完整谱系的方向结论，结果已降级为安全弃权。",
+            review_summary="Workflow 必需检索动作或输出引用不完整，不发布最终报告。",
         )
         execution_issues.extend(hard_issues)
     elif not _requires_semantic_review(state):
@@ -209,12 +226,25 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
             review_summary="所有产业链节点均未作无证据的方向断言；本次是成功的证据不足弃权。",
         )
     else:
-        review = await investment_workflow_runtime().review(state)
-        if not review.accepted:
-            # Deterministic lineage gates already removed unsupported conclusions.
-            # The semantic Reviewer remains an audit signal; it must not erase an
-            # otherwise valid partial report or turn model uncertainty into a run failure.
-            execution_issues.extend(review.issue_codes)
+        semantic_review = await investment_workflow_runtime().review(state)
+        execution_issues.extend(semantic_review.issue_codes)
+        if "REVIEW_OUTPUT_INVALID" in semantic_review.issue_codes:
+            review = semantic_review.model_copy(
+                update={
+                    "accepted": False,
+                    "review_summary": "Reviewer 输出未通过结构合同，不发布最终报告。",
+                }
+            )
+        else:
+            review = semantic_review.model_copy(
+                update={
+                    "accepted": True,
+                    "review_summary": (
+                        "Workflow 检索与输出合同完整。"
+                        + (f"语义审核备注：{semantic_review.review_summary}" if semantic_review.issue_codes else "")
+                    )[:2000],
+                }
+            )
 
     layer_results = [geopolitical, macro, industry]
     result = InvestmentAnalysisResult(
@@ -245,9 +275,9 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
             "events": len(state.industry_context.events),
             "facts": len(state.industry_context.facts),
             "eligible_signals": len(state.industry_context.eligible_signal_fact_ids),
-            "geopolitical_claims": len(geopolitical.claims),
-            "macro_claims": len(macro.claims),
-            "industry_claims": len(industry.claims),
+            "geopolitical_assessments": len(geopolitical.assessments),
+            "macro_assessments": len(macro.assessments),
+            "industry_assessments": len(industry.assessments),
             "chains": len(state.industry_context.chains),
             "nodes": sum(len(item.nodes) for item in state.industry_context.chains),
             "topology_edges": sum(len(item.edges) for item in state.industry_context.chains),
@@ -260,9 +290,9 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
     path = conclusion_artifact_path(workflow_run_id)
     request = state.prepared.context.request
     has_supported_conclusion = bool(
-        geopolitical.claims
-        or macro.claims
-        or industry.claims
+        geopolitical.assessments
+        or macro.assessments
+        or industry.assessments
         or transmissions
         or any(
             trend != Trend.INSUFFICIENT_EVIDENCE
@@ -293,6 +323,17 @@ async def generate_investment_report(step_input: StepInput, run_context: RunCont
     del run_context
     reviewed = _content(step_input, ReviewedInvestmentState)
     analysis = reviewed.analysis
+    if not analysis.review.accepted:
+        return StepOutput(
+            content=InvestmentReportWorkflowOutput(
+                source_report_id=f"agentos-investment-{analysis.workflow_run_id}",
+                report_artifact_path="",
+                audit_artifact_path=analysis.artifact_path,
+                generation_status="SKIPPED",
+                reason="Workflow 必需检索动作或输出引用未通过审核。",
+            ),
+            success=True,
+        )
     try:
         package = InvestmentReportAssembler().assemble(analysis, reviewed.context)
     except ReportNotPublishable as exc:

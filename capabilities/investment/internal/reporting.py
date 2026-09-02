@@ -10,7 +10,6 @@ from zoneinfo import ZoneInfo
 
 from capabilities.event.internal.storage import event_artifact_root
 from capabilities.investment.internal.models import (
-    AcceptedImpactClaim,
     Confidence,
     Direction,
     FactSnapshot,
@@ -18,6 +17,7 @@ from capabilities.investment.internal.models import (
     ImpactLayer,
     InvestmentAnalysisContext,
     InvestmentConclusionArtifact,
+    LayerAssessment,
     NodeTrendView,
     Trend,
 )
@@ -179,9 +179,13 @@ class InvestmentReportAssembler:
     ) -> InvestmentReportArtifact:
         event_evidence = self._evidence_index.load()
         fact_by_id = {item.uuid: item for item in context.facts}
-        claim_by_id = {
-            item.claim_id: item
-            for item in [*analysis.geopolitical.claims, *analysis.macro.claims, *analysis.industry.claims]
+        assessment_by_id = {
+            item.assessment_id: item
+            for item in [
+                *analysis.geopolitical.assessments,
+                *analysis.macro.assessments,
+                *analysis.industry.assessments,
+            ]
         }
         chain_keys = {item.business_id: _key("chain", item.business_id) for item in context.chains}
         node_keys: dict[tuple[str, str], str] = {
@@ -196,25 +200,25 @@ class InvestmentReportAssembler:
 
         geo = self._layer(
             ImpactLayer.GEOPOLITICAL,
-            analysis.geopolitical.claims,
+            analysis.geopolitical.assessments,
             analysis.geopolitical.summary,
             analysis.geopolitical.limitations,
             analysis,
             event_evidence,
             fact_by_id,
-            claim_by_id,
+            assessment_by_id,
             chain_keys,
             node_refs,
         )
         macro = self._layer(
             ImpactLayer.MACRO_ECONOMIC,
-            analysis.macro.claims,
+            analysis.macro.assessments,
             analysis.macro.summary,
             analysis.macro.limitations,
             analysis,
             event_evidence,
             fact_by_id,
-            claim_by_id,
+            assessment_by_id,
             chain_keys,
             node_refs,
         )
@@ -223,7 +227,7 @@ class InvestmentReportAssembler:
             context,
             event_evidence,
             fact_by_id,
-            claim_by_id,
+            assessment_by_id,
             chain_keys,
             node_keys,
             node_membership_counts,
@@ -269,80 +273,81 @@ class InvestmentReportAssembler:
             content=content,
         )
 
-    def _claim_evidence(
+    def _assessment_evidence(
         self,
-        claim: AcceptedImpactClaim,
+        assessment: LayerAssessment,
         event_evidence: dict[str, list[str]],
     ) -> list[str]:
-        if claim.derivation != "DIRECT_SIGNAL":
-            return []
         return list(
             dict.fromkeys(
-                evidence_id for event_id in claim.root_event_ids for evidence_id in event_evidence.get(event_id, [])
+                evidence_id
+                for event_id in assessment.root_event_ids
+                for evidence_id in event_evidence.get(event_id, [])
             )
         )
 
     def _layer(
         self,
         layer: ImpactLayer,
-        claims: list[AcceptedImpactClaim],
+        assessments: list[LayerAssessment],
         summary: str,
         limitations: list[str],
         analysis: InvestmentConclusionArtifact,
         event_evidence: dict[str, list[str]],
         fact_by_id: dict[str, FactSnapshot],
-        claim_by_id: dict[str, AcceptedImpactClaim],
+        assessment_by_id: dict[str, LayerAssessment],
         chain_keys: dict[str, str],
         node_refs: dict[str, list[tuple[str, str]]],
     ) -> ReportLayer:
-        grouped: dict[str, list[AcceptedImpactClaim]] = defaultdict(list)
-        for claim in claims:
-            grouped[claim.anchor_id].append(claim)
+        grouped: dict[str, list[LayerAssessment]] = defaultdict(list)
+        for assessment in assessments:
+            grouped[assessment.anchor_id].append(assessment)
         anchors: list[ReportAnchor] = []
         reasoning_steps: list[ReportReasoningStep] = []
         anchor_key_by_id = {anchor_id: _key("anchor", anchor_id) for anchor_id in grouped}
         for index, (anchor_id, items) in enumerate(sorted(grouped.items(), key=lambda pair: pair[1][0].anchor_name), 1):
             evidence = list(
                 dict.fromkeys(
-                    evidence_id for claim in items for evidence_id in self._claim_evidence(claim, event_evidence)
+                    evidence_id
+                    for assessment in items
+                    for evidence_id in self._assessment_evidence(assessment, event_evidence)
                 )
             )
-            direct = any(item.derivation == "DIRECT_SIGNAL" for item in items)
-            if direct and not evidence:
+            if not evidence:
                 raise ReportNotPublishable(f"直接锚点 {items[0].anchor_name} 无法映射到正式 Evidence ID")
-            states = [self._claim_state(item, fact_by_id) for item in items]
+            states = [self._assessment_state(item, fact_by_id) for item in items]
             anchors.append(
                 ReportAnchor(
                     key=anchor_key_by_id[anchor_id],
                     display_order=index,
                     name=items[0].anchor_name,
                     current_state="；".join(states),
-                    result=_result_from_directions([item.direction for item in items]),
-                    nature=_nature("direct_evidence" if direct else "reasoning_hypothesis"),
-                    reasoning="；".join(item.summary for item in items)[:10_000],
+                    result=_result_from_trends([item.result for item in items]),
+                    nature=_nature("direct_evidence"),
+                    reasoning="；".join(item.reasoning for item in items)[:10_000],
                     time_window=_horizon([value for item in items for value in item.horizons]),
                     confidence=_confidence(_minimum_confidence([item.confidence for item in items])),
                     evidence_refs=_refs(evidence),
                 )
             )
-            for claim in items:
-                claim_evidence = self._claim_evidence(claim, event_evidence)
+            for assessment in items:
+                assessment_evidence = self._assessment_evidence(assessment, event_evidence)
                 reasoning_steps.append(
                     ReportReasoningStep(
-                        key=_key("reason", claim.claim_id),
+                        key=_key("reason", assessment.assessment_id),
                         display_order=len(reasoning_steps) + 1,
-                        input=claim.summary,
-                        mechanism=claim.mechanism,
-                        output=f"{claim.anchor_name}：{self._claim_state(claim, fact_by_id)}",
-                        type="Event → Signal" if claim.derivation == "DIRECT_SIGNAL" else "跨层推理",
-                        confidence=_confidence(claim.confidence),
-                        evidence_refs=_refs(claim_evidence),
+                        input=assessment.summary,
+                        mechanism=assessment.reasoning,
+                        output=f"{assessment.anchor_name}：{self._assessment_state(assessment, fact_by_id)}",
+                        type="Event → Signal → 锚点评估",
+                        confidence=_confidence(assessment.confidence),
+                        evidence_refs=_refs(assessment_evidence),
                     )
                 )
         downward = self._downward(
             layer,
             analysis,
-            claim_by_id,
+            assessment_by_id,
             anchor_key_by_id,
             chain_keys,
             node_refs,
@@ -350,17 +355,17 @@ class InvestmentReportAssembler:
         all_evidence = list(
             dict.fromkeys(reference.evidence_id for anchor in anchors for reference in anchor.evidence_refs)
         )
-        directions = [item.direction for item in claims]
-        confidence = _minimum_confidence([item.confidence for item in claims])
+        results = [item.result for item in assessments]
+        confidence = _minimum_confidence([item.confidence for item in assessments])
         layer_key = "geopolitics" if layer == ImpactLayer.GEOPOLITICAL else "macroeconomics"
         return ReportLayer(
             key=layer_key,
             display_order=1 if layer == ImpactLayer.GEOPOLITICAL else 2,
             title="地缘政治" if layer == ImpactLayer.GEOPOLITICAL else "宏观经济",
             conclusion=summary,
-            result=_result_from_directions(directions),
+            result=_result_from_trends(results),
             confidence=_confidence(confidence),
-            time_window=_horizon([value for item in claims for value in item.horizons]),
+            time_window=_horizon([value for item in assessments for value in item.horizons]),
             anchors=anchors,
             reasoning_steps=reasoning_steps,
             related_anchor_keys=[item.key for item in anchors],
@@ -387,15 +392,15 @@ class InvestmentReportAssembler:
         self,
         layer: ImpactLayer,
         analysis: InvestmentConclusionArtifact,
-        claim_by_id: dict[str, AcceptedImpactClaim],
+        assessment_by_id: dict[str, LayerAssessment],
         anchor_key_by_id: dict[str, str],
         chain_keys: dict[str, str],
         node_refs: dict[str, list[tuple[str, str]]],
     ) -> ReportDownwardTransmission:
         paths: list[ReportTransmissionPath] = []
         for item in analysis.cross_layer_transmissions:
-            source = claim_by_id.get(item.source_claim_id)
-            target = claim_by_id.get(item.target_claim_id)
+            source = assessment_by_id.get(item.source_assessment_id)
+            target = assessment_by_id.get(item.target_assessment_id)
             if source is None or target is None or source.layer != layer:
                 continue
             targets: list[ReportTransmissionTarget] = []
@@ -405,7 +410,7 @@ class InvestmentReportAssembler:
                     ReportTransmissionTarget(
                         ref=ReportTargetReference(type="anchor", key=target_key),
                         label=f"宏观经济 · {target.anchor_name}",
-                        result=_result_from_directions([target.direction]),
+                        result=_result_from_trends([target.result]),
                     )
                 )
             elif target.layer == ImpactLayer.INDUSTRY:
@@ -415,12 +420,12 @@ class InvestmentReportAssembler:
                             ReportTransmissionTarget(
                                 ref=ReportTargetReference(type="industry_chain", key=chain_key),
                                 label="产业链",
-                                result=_result_from_directions([target.direction]),
+                                result=_result_from_trends([target.result]),
                             ),
                             ReportTransmissionTarget(
                                 ref=ReportTargetReference(type="industry_chain_node", key=node_key),
                                 label=target.anchor_name,
-                                result=_result_from_directions([target.direction]),
+                                result=_result_from_trends([target.result]),
                             ),
                         ]
                     )
@@ -445,12 +450,15 @@ class InvestmentReportAssembler:
             )
         candidates: list[ReportCandidateMechanism] = []
         for candidate in analysis.cross_layer_candidates:
-            source = claim_by_id.get(candidate.source_claim_id)
+            source = assessment_by_id.get(candidate.source_assessment_id)
             if source is None or source.layer != layer:
                 continue
             candidates.append(
                 ReportCandidateMechanism(
-                    key=_key("candidate", f"{candidate.source_claim_id}:{candidate.target_claim_id}"),
+                    key=_key(
+                        "candidate",
+                        f"{candidate.source_assessment_id}:{candidate.target_assessment_id}",
+                    ),
                     display_order=len(candidates) + 1,
                     mechanism=candidate.logic,
                     evidence_gap=None,
@@ -471,7 +479,7 @@ class InvestmentReportAssembler:
         context: InvestmentAnalysisContext,
         event_evidence: dict[str, list[str]],
         fact_by_id: dict[str, FactSnapshot],
-        claim_by_id: dict[str, AcceptedImpactClaim],
+        assessment_by_id: dict[str, LayerAssessment],
         chain_keys: dict[str, str],
         node_keys: dict[tuple[str, str], str],
         node_membership_counts: Counter[str],
@@ -489,25 +497,25 @@ class InvestmentReportAssembler:
                     for fact_id in node.supporting_fact_ids
                     if fact_id in fact_by_id and fact_by_id[fact_id].kind == "SIGNAL"
                 ]
-                direct_claims = [
-                    claim_by_id[claim_id]
-                    for claim_id in node.supporting_claim_ids
-                    if claim_id in claim_by_id and claim_by_id[claim_id].derivation == "DIRECT_SIGNAL"
+                direct_assessments = [
+                    assessment_by_id[assessment_id]
+                    for assessment_id in node.supporting_assessment_ids
+                    if assessment_id in assessment_by_id
                 ]
                 evidence = list(
                     dict.fromkeys(
                         evidence_id
                         for event_id in [
                             *[event for fact_id in direct_fact_ids for event in fact_by_id[fact_id].source_event_ids],
-                            *[event for claim in direct_claims for event in claim.root_event_ids],
+                            *[event for assessment in direct_assessments for event in assessment.root_event_ids],
                         ]
                         for evidence_id in event_evidence.get(event_id, [])
                     )
                 )
-                if (direct_fact_ids or direct_claims) and not evidence:
+                if (direct_fact_ids or direct_assessments) and not evidence:
                     raise ReportNotPublishable(f"直接产业链节点 {node.node_name} 无法映射到正式 Evidence ID")
                 result = _result_from_trends([node.short, node.medium, node.long])
-                if direct_fact_ids or direct_claims:
+                if direct_fact_ids or direct_assessments:
                     nature = _nature("direct_evidence")
                 elif node.supporting_transmission_ids:
                     nature = _nature("reasoning_hypothesis")
@@ -629,14 +637,15 @@ class InvestmentReportAssembler:
         return "真实同链拓扑相邻，尚无直接 Signal"
 
     @staticmethod
-    def _claim_state(claim: AcceptedImpactClaim, facts: dict[str, FactSnapshot]) -> str:
-        labels = [
-            facts[fact_id].source_name
-            for fact_id in claim.source_fact_ids
-            if fact_id in facts and facts[fact_id].kind == "SIGNAL"
-        ]
-        variable = "、".join(dict.fromkeys(labels)) or claim.variable_id
-        return f"{variable}：{_direction(claim.direction)}（置信度{_confidence(claim.confidence).label}）"
+    def _assessment_state(assessment: LayerAssessment, facts: dict[str, FactSnapshot]) -> str:
+        values = []
+        for fact_id in assessment.direct_signal_fact_ids:
+            fact = facts.get(fact_id)
+            if fact is None or fact.kind != "SIGNAL" or fact.direction is None:
+                continue
+            variable = fact.source_name or fact.variable_id or "Variable"
+            values.append(f"{variable}：{_direction(fact.direction)}")
+        return "；".join(dict.fromkeys(values)) or f"综合结果：{assessment.result.value}"
 
     @staticmethod
     def _chain_status(direct_nodes: list[str], hypothesis_nodes: list[str]) -> str:

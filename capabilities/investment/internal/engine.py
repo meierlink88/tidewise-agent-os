@@ -7,7 +7,6 @@ import json
 
 from capabilities.investment.internal.models import (
     AcceptedCrossLayerTransmission,
-    AcceptedImpactClaim,
     AcceptedTransmission,
     AnalysisDraft,
     CandidateCrossLayerMechanism,
@@ -24,7 +23,8 @@ from capabilities.investment.internal.models import (
     InvestmentAssessment,
     LayerAnalysisContext,
     LayerAnalysisResult,
-    LayerImpactBatch,
+    LayerAssessment,
+    LayerAssessmentBatch,
     NodeTrendView,
     ReasoningTraceNode,
     TransmissionBatch,
@@ -34,7 +34,7 @@ from capabilities.investment.internal.models import (
 
 
 class InvestmentReasoningEngine:
-    """Validate lineage and normalize unsupported LLM conclusions."""
+    """Validate Workflow outputs and normalize unsupported model conclusions."""
 
     @staticmethod
     def context_fingerprint(context: InvestmentAnalysisContext) -> str:
@@ -47,207 +47,104 @@ class InvestmentReasoningEngine:
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @classmethod
-    def validate_layer_batch(
+    def build_layer_assessments(
         cls,
         context: LayerAnalysisContext,
-        previous_claims: list[AcceptedImpactClaim],
-        batch: LayerImpactBatch,
+        batch: LayerAssessmentBatch,
         *,
         layer: ImpactLayer,
-    ) -> list[AcceptedImpactClaim]:
-        """Accept only claims with an explicit active Signal root and bounded lineage."""
+    ) -> list[LayerAssessment]:
+        """Interpret every retrieved direct Signal anchor without re-validating graph semantics."""
 
         if context.layer != layer:
             raise ValueError(f"layer context mismatch: expected {layer.value}, got {context.layer.value}")
         anchors = {item.business_id: item for item in context.anchors}
-        facts = {item.uuid: item for item in context.facts}
-        active_signals = {
-            item.uuid: item
-            for item in context.facts
-            if item.uuid in context.direct_signal_fact_ids
-            and item.is_active_signal(context.decision_at)
-            and bool({event.event_id for event in context.events}.intersection(item.source_event_ids))
+        scoped_event_ids = {event.event_id for event in context.events}
+        direct_signals = [item for item in context.facts if item.uuid in context.direct_signal_fact_ids]
+        proposals = {
+            item.anchor_id: item
+            for item in batch.proposals
+            if item.anchor_id in anchors and item.result != Trend.INSUFFICIENT_EVIDENCE
         }
-        parents = {item.claim_id: item for item in previous_claims}
-        allowed_parent_layers = {
-            ImpactLayer.GEOPOLITICAL: set(),
-            ImpactLayer.MACRO_ECONOMIC: {ImpactLayer.GEOPOLITICAL},
-            ImpactLayer.INDUSTRY: {ImpactLayer.GEOPOLITICAL, ImpactLayer.MACRO_ECONOMIC},
-        }[layer]
-        accepted: list[AcceptedImpactClaim] = []
-        seen: set[tuple[str, str, Direction, tuple[Horizon, ...]]] = set()
-        for proposal in batch.proposals:
-            if proposal.direction == Direction.UNKNOWN:
-                continue
-            anchor = anchors.get(proposal.anchor_id)
-            if anchor is None:
-                continue
-            if layer == ImpactLayer.INDUSTRY and anchor.entity_type != "ChainNode":
-                continue
-            cited_signals = [active_signals[item] for item in proposal.source_fact_ids if item in active_signals]
-            referenced_parents = [parents[item] for item in proposal.parent_claim_ids if item in parents]
-            if any(item.layer not in allowed_parent_layers for item in referenced_parents):
-                continue
-            cited_parents = [item for item in referenced_parents if item.layer in allowed_parent_layers]
-            valid_mechanisms = [
-                facts[item]
-                for item in proposal.mechanism_fact_ids
-                if item in facts
-                and facts[item].kind == "ORDINARY"
-                and cls._fact_is_valid_at(facts[item], context.decision_at)
+        assessments: list[LayerAssessment] = []
+        for anchor_id, anchor in anchors.items():
+            attached = [
+                signal
+                for signal in direct_signals
+                if anchor.uuid in {signal.source_uuid, signal.target_uuid}
+                or anchor_id in {signal.source_business_id, signal.target_business_id}
             ]
-
-            derivation: str
-            root_signal_ids: list[str]
-            root_event_ids: list[str]
-            confidence_cap: Confidence
-            validated_source_facts: list[str]
-            validated_mechanism_facts: list[str]
-            validated_parent_claims: list[str]
-            accepted_variable_id = proposal.variable_id
-            accepted_direction = proposal.direction
-            accepted_horizons = proposal.horizons
-            if cited_signals:
-                attached = [
-                    item
-                    for item in cited_signals
-                    if anchor.uuid in {item.source_uuid, item.target_uuid}
-                    or anchor.business_id in {item.source_business_id, item.target_business_id}
-                ]
-                if not attached:
-                    continue
-                by_variable: dict[str, list[FactSnapshot]] = {}
-                for item in attached:
-                    if item.variable_id:
-                        by_variable.setdefault(item.variable_id, []).append(item)
-                same_variable = by_variable.get(proposal.variable_id)
-                if not same_variable:
-                    continue
-                supported_horizons = sorted(
-                    {horizon for item in same_variable for horizon in item.horizons},
-                    key=lambda item: item.value,
-                )
-                supported_directions = {
-                    item.direction for item in same_variable if item.direction not in {None, Direction.UNKNOWN}
-                }
-                if not supported_horizons or not supported_directions:
-                    continue
-                supported_direction = (
-                    next(iter(supported_directions)) if len(supported_directions) == 1 else Direction.MIXED
-                )
-                # Do not silently rewrite a model narrative around different
-                # structured semantics. A mismatch is rejected so summary,
-                # mechanism, direction and horizon cannot contradict each other.
-                if proposal.direction != supported_direction or set(proposal.horizons) != set(supported_horizons):
-                    continue
-                accepted_horizons = supported_horizons
-                accepted_direction = supported_direction
-                root_signal_ids = list(dict.fromkeys(item.uuid for item in same_variable))
-                scoped_event_ids = {event.event_id for event in context.events}
-                root_event_ids = list(
-                    dict.fromkeys(
-                        event_id
-                        for item in same_variable
-                        for event_id in item.source_event_ids
-                        if event_id in scoped_event_ids
-                    )
-                )
-                if not root_event_ids:
-                    continue
-                confidence_cap = cls._minimum_confidence([item.confidence for item in same_variable])
-                derivation = "DIRECT_SIGNAL"
-                validated_source_facts = root_signal_ids
-                validated_mechanism_facts = []
-                validated_parent_claims = []
-            else:
-                if layer == ImpactLayer.GEOPOLITICAL or not cited_parents or not valid_mechanisms:
-                    continue
-                if not set(proposal.horizons) <= {horizon for parent in cited_parents for horizon in parent.horizons}:
-                    continue
-                # A cross-layer mechanism must be an actual bridge: the same
-                # ordinary Fact touches both the proposed anchor and a cited
-                # parent anchor. Merely co-occurring in the prompt is not lineage.
-                parent_anchor_ids = {item.anchor_id for item in cited_parents}
-                if not any(
-                    cls._fact_touches_anchor(fact, anchor.uuid, anchor.business_id)
-                    and bool(
-                        parent_anchor_ids.intersection(
-                            {
-                                fact.source_business_id,
-                                fact.target_business_id,
-                            }
-                        )
-                    )
-                    for fact in valid_mechanisms
-                ):
-                    continue
-                root_signal_ids = list(
-                    dict.fromkeys(item for parent in cited_parents for item in parent.root_signal_fact_ids)
-                )
-                root_event_ids = list(dict.fromkeys(item for parent in cited_parents for item in parent.root_event_ids))
-                if not root_signal_ids or not root_event_ids:
-                    continue
-                confidence_cap = cls._degrade_confidence(
-                    cls._minimum_confidence([parent.confidence for parent in cited_parents])
-                )
-                derivation = "CROSS_LAYER"
-                validated_source_facts = []
-                validated_mechanism_facts = list(dict.fromkeys(item.uuid for item in valid_mechanisms))
-                validated_parent_claims = list(dict.fromkeys(item.claim_id for item in cited_parents))
-
-            if proposal.assumptions:
-                confidence_cap = cls._degrade_confidence(confidence_cap)
-            confidence = cls._minimum_confidence([proposal.confidence, confidence_cap])
-            key = (
-                proposal.anchor_id,
-                accepted_variable_id,
-                accepted_direction,
-                tuple(sorted(accepted_horizons, key=lambda item: item.value)),
-            )
-            if key in seen:
+            if not attached:
                 continue
-            seen.add(key)
-            canonical_proposal = proposal.model_copy(
-                update={
-                    "variable_id": accepted_variable_id,
-                    "direction": accepted_direction,
-                    "horizons": accepted_horizons,
-                    "source_fact_ids": validated_source_facts,
-                    "mechanism_fact_ids": validated_mechanism_facts,
-                    "parent_claim_ids": validated_parent_claims,
-                }
+            signal_ids = list(dict.fromkeys(item.uuid for item in attached))
+            root_event_ids = list(
+                dict.fromkeys(
+                    event_id
+                    for signal in attached
+                    for event_id in signal.source_event_ids
+                    if event_id in scoped_event_ids
+                )
             )
-            claim_id = cls._claim_id(layer, canonical_proposal)
-            accepted.append(
-                AcceptedImpactClaim(
-                    **proposal.model_dump(
-                        exclude={
-                            "confidence",
-                            "variable_id",
-                            "direction",
-                            "horizons",
-                            "source_fact_ids",
-                            "mechanism_fact_ids",
-                            "parent_claim_ids",
-                        }
-                    ),
-                    variable_id=accepted_variable_id,
-                    direction=accepted_direction,
-                    horizons=accepted_horizons,
+            if not root_event_ids:
+                continue
+            proposal = proposals.get(anchor_id)
+            fallback_summary = (
+                "；".join(item.fact for item in attached if item.fact)[:1200] or f"{anchor.name}存在直接 Signal。"
+            )
+            fallback_reasoning = "；".join(item.mechanism or item.fact for item in attached)[:1600]
+            horizons = sorted({horizon for item in attached for horizon in item.horizons}, key=lambda item: item.value)
+            result = proposal.result if proposal is not None else cls._trend_from_signals(attached)
+            confidence = (
+                proposal.confidence
+                if proposal is not None
+                else cls._minimum_confidence([item.confidence for item in attached])
+            )
+            assessment_payload = {
+                "layer": layer.value,
+                "anchor_id": anchor_id,
+                "signal_fact_ids": signal_ids,
+            }
+            digest = hashlib.sha256(
+                json.dumps(assessment_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            ).hexdigest()[:20]
+            assessments.append(
+                LayerAssessment(
+                    anchor_id=anchor_id,
+                    result=result,
                     confidence=confidence,
-                    source_fact_ids=validated_source_facts,
-                    mechanism_fact_ids=validated_mechanism_facts,
-                    parent_claim_ids=validated_parent_claims,
-                    claim_id=claim_id,
+                    summary=proposal.summary if proposal is not None else fallback_summary,
+                    reasoning=proposal.reasoning if proposal is not None else fallback_reasoning,
+                    direct_signal_fact_ids=signal_ids,
+                    assumptions=proposal.assumptions if proposal is not None else [],
+                    risks=proposal.risks if proposal is not None else [],
+                    assessment_id=f"ASSESS-{digest}",
                     layer=layer,
                     anchor_name=anchor.name,
                     anchor_type=anchor.entity_type,
-                    derivation=derivation,
+                    horizons=horizons,
                     root_event_ids=root_event_ids,
-                    root_signal_fact_ids=root_signal_ids,
                 )
             )
-        return accepted
+        return assessments
+
+    @staticmethod
+    def _trend_from_signals(signals: list[FactSnapshot]) -> Trend:
+        return InvestmentReasoningEngine._trend_from_directions(
+            [item.direction for item in signals if item.direction is not None]
+        )
+
+    @staticmethod
+    def _trend_from_directions(values: list[Direction]) -> Trend:
+        directions = {item for item in values if item != Direction.UNKNOWN}
+        if Direction.MIXED in directions or {Direction.UP, Direction.DOWN}.issubset(directions):
+            return Trend.DIVERGENT
+        if Direction.UP in directions:
+            return Trend.WARMING
+        if Direction.DOWN in directions:
+            return Trend.COOLING
+        if Direction.STABLE in directions:
+            return Trend.NO_MATERIAL_CHANGE
+        return Trend.INSUFFICIENT_EVIDENCE
 
     @staticmethod
     def _fact_is_valid_at(fact: FactSnapshot, decision_at) -> bool:
@@ -262,37 +159,28 @@ class InvestmentReasoningEngine:
             fact.target_business_id,
         }
 
-    @staticmethod
-    def _claim_id(layer: ImpactLayer, proposal) -> str:
-        payload = proposal.model_dump(mode="json")
-        payload["layer"] = layer.value
-        digest = hashlib.sha256(
-            json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()[:20]
-        return f"CLAIM-{digest}"
-
     @classmethod
     def validate_cross_layer_batch(
         cls,
         context: LayerAnalysisContext,
-        source_claims: list[AcceptedImpactClaim],
-        target_claims: list[AcceptedImpactClaim],
+        source_assessments: list[LayerAssessment],
+        target_assessments: list[LayerAssessment],
         batch: CrossLayerTransmissionBatch,
     ) -> CrossLayerAnalysisResult:
         """Separate causal bridges from same-source context and unresolved hypotheses."""
 
-        sources = {item.claim_id: item for item in source_claims}
-        targets = {item.claim_id: item for item in target_claims}
+        sources = {item.assessment_id: item for item in source_assessments}
+        targets = {item.assessment_id: item for item in target_assessments}
         facts = {item.uuid: item for item in context.facts}
         accepted: list[AcceptedCrossLayerTransmission] = []
         candidates: list[CandidateCrossLayerMechanism] = []
         seen: set[tuple[str, str]] = set()
         for proposal in batch.proposals:
-            source = sources.get(proposal.source_claim_id)
-            target = targets.get(proposal.target_claim_id)
+            source = sources.get(proposal.source_assessment_id)
+            target = targets.get(proposal.target_assessment_id)
             if source is None or target is None or target.layer != context.layer:
                 continue
-            key = (source.claim_id, target.claim_id)
+            key = (source.assessment_id, target.assessment_id)
             if key in seen:
                 continue
             seen.add(key)
@@ -303,15 +191,7 @@ class InvestmentReasoningEngine:
                 and facts[item].kind == "ORDINARY"
                 and cls._fact_is_valid_at(facts[item], context.decision_at)
             ]
-            bridge = next(
-                (
-                    fact
-                    for fact in mechanisms
-                    if cls._fact_touches_anchor(fact, source.anchor_id, source.anchor_id)
-                    and cls._fact_touches_anchor(fact, target.anchor_id, target.anchor_id)
-                ),
-                None,
-            )
+            bridge = mechanisms[0] if mechanisms else None
             same_source = bool(set(source.root_event_ids).intersection(target.root_event_ids))
             confidence = cls._minimum_confidence([proposal.confidence, source.confidence, target.confidence])
             if bridge is not None:
@@ -332,8 +212,8 @@ class InvestmentReasoningEngine:
                 )
                 continue
             payload = {
-                "source_claim_id": source.claim_id,
-                "target_claim_id": target.claim_id,
+                "source_assessment_id": source.assessment_id,
+                "target_assessment_id": target.assessment_id,
                 "mechanism_fact_ids": mechanism_ids,
                 "logic": proposal.logic,
                 "relation_type": relation_type,
@@ -367,12 +247,12 @@ class InvestmentReasoningEngine:
         batch: TransmissionBatch,
         *,
         round_number: int,
-        root_claims: list[AcceptedImpactClaim] | None = None,
+        root_assessments: list[LayerAssessment] | None = None,
     ) -> list[AcceptedTransmission]:
         chains = {item.business_id: item for item in context.chains}
         eligible_signals = {fact.uuid: fact for fact in context.facts if fact.uuid in context.eligible_signal_fact_ids}
         accepted_by_id = {item.transmission_id: item for item in accepted}
-        claims_by_id = {item.claim_id: item for item in (root_claims or [])}
+        assessments_by_id = {item.assessment_id: item for item in (root_assessments or [])}
         seen = {
             (item.chain_id, item.target_node_id, item.target_variable, item.horizon, item.direction)
             for item in accepted
@@ -396,20 +276,15 @@ class InvestmentReasoningEngine:
             root_ids: list[str]
             confidence_cap: Confidence
             if round_number == 1:
-                cited = [
-                    eligible_signals[item]
-                    for item in proposal.source_fact_ids
-                    if item in eligible_signals and proposal.horizon in eligible_signals[item].horizons
+                cited = [eligible_signals[item] for item in proposal.source_fact_ids if item in eligible_signals]
+                cited_assessments = [
+                    assessments_by_id[item]
+                    for item in proposal.source_assessment_ids
+                    if item in assessments_by_id
+                    and assessments_by_id[item].anchor_type == "ChainNode"
+                    and assessments_by_id[item].anchor_id == proposal.source_node_id
                 ]
-                cited_claims = [
-                    claims_by_id[item]
-                    for item in proposal.source_claim_ids
-                    if item in claims_by_id
-                    and claims_by_id[item].anchor_type == "ChainNode"
-                    and claims_by_id[item].anchor_id == proposal.source_node_id
-                    and proposal.horizon in claims_by_id[item].horizons
-                ]
-                if not cited and not cited_claims:
+                if not cited and not cited_assessments:
                     continue
                 # A first-hop Signal must be attached to the actual source node. An
                 # ordinary Fact may still appear in the prompt, but can never pass this gate.
@@ -422,12 +297,12 @@ class InvestmentReasoningEngine:
                 root_ids = list(
                     dict.fromkeys(
                         [item.uuid for item in cited]
-                        + [root for claim in cited_claims for root in claim.root_signal_fact_ids]
+                        + [root for assessment in cited_assessments for root in assessment.direct_signal_fact_ids]
                     )
                 )
                 confidence_cap = cls._degrade_confidence(
                     cls._minimum_confidence(
-                        [item.confidence for item in cited] + [item.confidence for item in cited_claims]
+                        [item.confidence for item in cited] + [item.confidence for item in cited_assessments]
                     )
                 )
             else:
@@ -502,7 +377,7 @@ class InvestmentReasoningEngine:
         context: InvestmentAnalysisContext,
         transmissions: list[AcceptedTransmission],
         draft: AnalysisDraft,
-        industry_claims: list[AcceptedImpactClaim] | None = None,
+        industry_assessments: list[LayerAssessment] | None = None,
     ) -> AnalysisDraft:
         """Cover every canonical node and remove conclusions without Signal lineage."""
 
@@ -523,7 +398,7 @@ class InvestmentReasoningEngine:
                         chain.business_id,
                         canonical.business_id,
                         node,
-                        industry_claims or [],
+                        industry_assessments or [],
                     )
                 )
             normalized_chains.append(
@@ -554,7 +429,7 @@ class InvestmentReasoningEngine:
         chain_id: str,
         node_id: str,
         node: NodeTrendView,
-        industry_claims: list[AcceptedImpactClaim] | None = None,
+        industry_assessments: list[LayerAssessment] | None = None,
     ) -> NodeTrendView:
         direct_signals = [
             fact
@@ -563,37 +438,33 @@ class InvestmentReasoningEngine:
             and (fact.source_business_id == node_id or fact.target_business_id == node_id)
         ]
         incoming = [item for item in transmissions if item.chain_id == chain_id and item.target_node_id == node_id]
-        direct_claims = [
+        direct_assessments = [
             item
-            for item in (industry_claims or [])
+            for item in (industry_assessments or [])
             if item.layer == ImpactLayer.INDUSTRY
             and item.anchor_type == "ChainNode"
             and item.anchor_id == node_id
-            and set(item.root_signal_fact_ids) <= context.eligible_signal_fact_ids
+            and set(item.direct_signal_fact_ids) <= context.eligible_signal_fact_ids
         ]
-        cited_signal_ids = set(node.supporting_fact_ids) & {fact.uuid for fact in direct_signals}
-        cited_transmission_ids = set(node.supporting_transmission_ids) & {item.transmission_id for item in incoming}
-        cited_claim_ids = set(node.supporting_claim_ids) & {item.claim_id for item in direct_claims}
-        cited_signals = [item for item in direct_signals if item.uuid in cited_signal_ids]
-        cited_incoming = [item for item in incoming if item.transmission_id in cited_transmission_ids]
-        cited_claims = [item for item in direct_claims if item.claim_id in cited_claim_ids]
+        # These records already passed the Graphiti retrieval contract. Bind them
+        # deterministically instead of requiring the Agent to copy every ID.
+        cited_signals = direct_signals
+        cited_incoming = incoming
+        cited_assessments = direct_assessments
+        cited_signal_ids = {item.uuid for item in cited_signals}
+        cited_transmission_ids = {item.transmission_id for item in cited_incoming}
+        cited_assessment_ids = {item.assessment_id for item in cited_assessments}
         supported_horizons = (
             {horizon for fact in cited_signals for horizon in fact.horizons}
             | {item.horizon for item in cited_incoming}
-            | {horizon for claim in cited_claims for horizon in claim.horizons}
+            | {horizon for assessment in cited_assessments for horizon in assessment.horizons}
         )
         updates: dict[str, object] = {
             "chain_id": chain_id,
             "node_id": node_id,
-            "supporting_fact_ids": list(
-                dict.fromkeys(item for item in node.supporting_fact_ids if item in cited_signal_ids)
-            ),
-            "supporting_claim_ids": list(
-                dict.fromkeys(item for item in node.supporting_claim_ids if item in cited_claim_ids)
-            ),
-            "supporting_transmission_ids": list(
-                dict.fromkeys(item for item in node.supporting_transmission_ids if item in cited_transmission_ids)
-            ),
+            "supporting_fact_ids": sorted(cited_signal_ids),
+            "supporting_assessment_ids": sorted(cited_assessment_ids),
+            "supporting_transmission_ids": sorted(cited_transmission_ids),
         }
         risks = list(node.risks)
         for horizon, field in (
@@ -605,6 +476,11 @@ class InvestmentReasoningEngine:
                 updates[field] = Trend.INSUFFICIENT_EVIDENCE
                 if getattr(node, field) != Trend.INSUFFICIENT_EVIDENCE:
                     risks.append(f"UNSUPPORTED_{horizon.value}_NORMALIZED")
+            elif getattr(node, field) == Trend.INSUFFICIENT_EVIDENCE:
+                directions = [
+                    fact.direction for fact in cited_signals if horizon in fact.horizons and fact.direction is not None
+                ] + [item.direction for item in cited_incoming if item.horizon == horizon]
+                updates[field] = cls._trend_from_directions(directions)
         updates["risks"] = list(dict.fromkeys(risks))[:10]
         normalized = node.model_copy(update=updates)
         if all(getattr(normalized, field) == Trend.INSUFFICIENT_EVIDENCE for field in ("short", "medium", "long")):
@@ -622,13 +498,13 @@ class InvestmentReasoningEngine:
         context: InvestmentAnalysisContext,
         transmissions: list[AcceptedTransmission],
         draft: AnalysisDraft,
-        industry_claims: list[AcceptedImpactClaim] | None = None,
+        industry_assessments: list[LayerAssessment] | None = None,
     ) -> list[str]:
-        """Return hard-gate failures for every directional node/horizon claim."""
+        """Return output-reference failures for every directional node/horizon assessment."""
 
         active_signals = {item.uuid: item for item in context.facts if item.uuid in context.eligible_signal_fact_ids}
         transmissions_by_id = {item.transmission_id: item for item in transmissions}
-        claims_by_id = {item.claim_id: item for item in (industry_claims or [])}
+        assessments_by_id = {item.assessment_id: item for item in (industry_assessments or [])}
         issues: list[str] = []
         for chain in draft.chains:
             for node in chain.nodes:
@@ -656,18 +532,19 @@ class InvestmentReasoningEngine:
                         and set(transmissions_by_id[transmission_id].root_signal_fact_ids) <= set(active_signals)
                         for transmission_id in node.supporting_transmission_ids
                     )
-                    layer_claim = any(
-                        claim_id in claims_by_id
-                        and claims_by_id[claim_id].layer == ImpactLayer.INDUSTRY
-                        and claims_by_id[claim_id].anchor_type == "ChainNode"
-                        and claims_by_id[claim_id].anchor_id == node.node_id
-                        and horizon in claims_by_id[claim_id].horizons
-                        and set(claims_by_id[claim_id].root_signal_fact_ids) <= set(active_signals)
-                        for claim_id in node.supporting_claim_ids
+                    layer_assessment = any(
+                        assessment_id in assessments_by_id
+                        and assessments_by_id[assessment_id].layer == ImpactLayer.INDUSTRY
+                        and assessments_by_id[assessment_id].anchor_type == "ChainNode"
+                        and assessments_by_id[assessment_id].anchor_id == node.node_id
+                        and horizon in assessments_by_id[assessment_id].horizons
+                        and set(assessments_by_id[assessment_id].direct_signal_fact_ids) <= set(active_signals)
+                        for assessment_id in node.supporting_assessment_ids
                     )
-                    if not direct and not propagated and not layer_claim:
+                    if not direct and not propagated and not layer_assessment:
                         issues.append(
-                            f"DIRECTIONAL_CLAIM_WITHOUT_SIGNAL_LINEAGE:{chain.chain_id}:{node.node_id}:{horizon.value}"
+                            f"DIRECTIONAL_ASSESSMENT_WITHOUT_SIGNAL_LINEAGE:"
+                            f"{chain.chain_id}:{node.node_id}:{horizon.value}"
                         )
         return issues
 
@@ -736,28 +613,18 @@ class InvestmentReasoningEngine:
             )
             for fact in active.values()
         )
-        claims = [claim for result in layer_results for claim in result.claims]
-        mechanism_ids = {fact_id for claim in claims for fact_id in claim.mechanism_fact_ids}
+        assessments = [assessment for result in layer_results for assessment in result.assessments]
         nodes.extend(
             ReasoningTraceNode(
-                node_id=fact.uuid,
-                node_type="FACT",
-                label=f"{fact.source_name} —{fact.name}→ {fact.target_name}：{fact.fact}"[:1600],
-                parent_ids=[item for item in fact.source_event_ids if item],
+                node_id=assessment.assessment_id,
+                node_type="LAYER_ASSESSMENT",
+                label=(
+                    f"[{assessment.layer.value}] {assessment.anchor_name} "
+                    f"{assessment.result.value}：{assessment.summary}"
+                )[:1600],
+                parent_ids=list(assessment.direct_signal_fact_ids),
             )
-            for fact in context.facts
-            if fact.uuid in mechanism_ids
-        )
-        nodes.extend(
-            ReasoningTraceNode(
-                node_id=claim.claim_id,
-                node_type="LAYER_CLAIM",
-                label=f"[{claim.layer.value}] {claim.anchor_name} {claim.direction.value}：{claim.summary}"[:1600],
-                parent_ids=list(
-                    dict.fromkeys([*claim.parent_claim_ids, *claim.mechanism_fact_ids, *claim.root_signal_fact_ids])
-                ),
-            )
-            for claim in claims
+            for assessment in assessments
         )
         nodes.extend(
             ReasoningTraceNode(
@@ -765,7 +632,9 @@ class InvestmentReasoningEngine:
                 node_type="TRANSMISSION",
                 label=f"{item.source_node_id} → {item.target_node_id}：{item.mechanism}"[:1600],
                 parent_ids=list(
-                    dict.fromkeys([*item.source_claim_ids, *item.parent_transmission_ids, *item.root_signal_fact_ids])
+                    dict.fromkeys(
+                        [*item.source_assessment_ids, *item.parent_transmission_ids, *item.root_signal_fact_ids]
+                    )
                 ),
             )
             for item in transmissions
@@ -784,7 +653,7 @@ class InvestmentReasoningEngine:
                         parent_ids=list(
                             dict.fromkeys(
                                 [
-                                    *node.supporting_claim_ids,
+                                    *node.supporting_assessment_ids,
                                     *node.supporting_transmission_ids,
                                     *node.supporting_fact_ids,
                                 ]
