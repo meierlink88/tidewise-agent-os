@@ -10,7 +10,7 @@ from app.settings import default_model
 from db import get_postgres_db
 
 INVESTMENT_REPORT_WRITER_AGENT_ID = "investment-report-writer"
-INVESTMENT_REPORT_WRITER_CONTRACT_VERSION = 1
+INVESTMENT_REPORT_WRITER_CONTRACT_VERSION = 2
 _PROMPT = Path(__file__).with_name("investment_report_writer.seed.md")
 
 

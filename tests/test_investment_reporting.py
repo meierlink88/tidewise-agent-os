@@ -502,9 +502,11 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
             Agent(id="investment-report-writer"),
         )
         calls: list[str] = []
+        prompts: list[str] = []
 
         async def rewrite(agent: Agent, prompt: str, model: type[ReportNarrativeBatch]) -> ReportNarrativeBatch:
             calls.append(agent.id or "")
+            prompts.append(prompt)
             payload = json.loads(prompt.rsplit("\n", 1)[-1])
             prefix = "编辑润色" if agent.id == "investment-reviewer" else "撰稿改写"
             return model(
@@ -518,6 +520,9 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
         final = await runtime.write_and_edit_report(artifact)
 
         self.assertEqual(calls, ["investment-report-writer", "investment-reviewer"])
+        self.assertTrue(all("1 至 2 句" in prompt for prompt in prompts))
+        self.assertIn("原因、影响机制和结果", prompts[0])
+        self.assertIn("保持原结论、条件、不确定性及强弱边界", prompts[1])
         self.assertTrue(final.content.geopolitics.conclusion.startswith("编辑润色：撰稿改写："))
         self.assertEqual(final.content.geopolitics.result, artifact.content.geopolitics.result)
         self.assertEqual(final.content.geopolitics.time_window, artifact.content.geopolitics.time_window)
