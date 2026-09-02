@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -12,6 +13,7 @@ from capabilities.event.internal.storage import event_artifact_root
 from capabilities.investment.internal.models import (
     TRANSMISSION_CONTINUATION_THRESHOLD,
     TRANSMISSION_INCLUSION_THRESHOLD,
+    AcceptedTransmission,
     Confidence,
     Direction,
     FactSnapshot,
@@ -52,6 +54,65 @@ from capabilities.investment.internal.report_contract import (
 
 class ReportNotPublishable(ValueError):
     """The reviewed run cannot satisfy the fixed product contract without invention."""
+
+
+_INTERNAL_ID_PATTERN = re.compile(
+    r"\b(?:TX|ASSESS|SIG|EVT|IGE|XLT|TC|CND|ICH)-?[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*\b",
+    re.IGNORECASE,
+)
+_UUID_PATTERN = re.compile(
+    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+    re.IGNORECASE,
+)
+_REPORT_TERM_REPLACEMENTS = {
+    "INSUFFICIENT_EVIDENCE": "证据不足",
+    "NO_MATERIAL_CHANGE": "暂无明显变化",
+    "OPPORTUNITY_CANDIDATE": "值得关注",
+    "NO_CLEAR_EDGE": "暂无明确优势",
+    "AGAINST_EDGE": "沿需求链向上游传导",
+    "ALONG_EDGE": "沿产业链向下游传导",
+    "DIRECT_SIGNAL": "直接变量信号",
+    "DIVERGENT": "分化",
+    "WARMING": "升温",
+    "COOLING": "降温",
+    "STABLE": "平稳",
+    "UNKNOWN": "待验证",
+    "SHORT": "短期",
+    "MEDIUM": "中期",
+    "LONG": "长期",
+    "HIGH": "高",
+    "LOW": "低",
+    "UP": "上行",
+    "DOWN": "下行",
+    "MIXED": "分化",
+}
+
+
+def _humanize_report_text(value: str) -> str:
+    """Remove audit-only identifiers and enums from reader-facing prose."""
+
+    text = value.strip()
+    for source, target in (
+        ("Industry Assessment", "产业链层评估"),
+        ("Signal Fact", "变量信号"),
+        ("Variable Signal", "变量信号"),
+        ("直接Signal", "直接变量信号"),
+        ("Signal", "变量信号"),
+        ("Transmission", "传导路径"),
+        ("Assessment", "评估"),
+    ):
+        text = text.replace(source, target)
+    for source, target in _REPORT_TERM_REPLACEMENTS.items():
+        text = re.sub(rf"\b{re.escape(source)}\b", target, text, flags=re.IGNORECASE)
+    text = _INTERNAL_ID_PATTERN.sub("", text)
+    text = _UUID_PATTERN.sub("", text)
+    text = re.sub(r"(?:根据)?父路径\s*[,，:]?", "根据上一环节的传导，", text)
+    text = re.sub(r"[（(]\s*[）)]", "", text)
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s+([，。；：、])", r"\1", text)
+    text = re.sub(r"([，；：、])\s*([，；：、])", r"\1", text)
+    text = re.sub(r"([。])\s*\1+", r"\1", text)
+    return text.strip(" 　，。；：")
 
 
 def _key(prefix: str, value: str) -> str:
@@ -194,6 +255,7 @@ class InvestmentReportAssembler:
                 *analysis.industry.assessments,
             ]
         }
+        transmission_by_id = {item.transmission_id: item for item in analysis.transmissions}
         chain_keys = {item.business_id: _key("chain", item.business_id) for item in context.chains}
         node_keys: dict[tuple[str, str], str] = {
             (chain.business_id, node.business_id): _key("node", f"{chain.business_id}:{node.business_id}")
@@ -238,6 +300,7 @@ class InvestmentReportAssembler:
             chain_keys,
             node_keys,
             node_membership_counts,
+            transmission_by_id,
         )
         cards = self._cards(geo, macro, chains)
         pending_nodes = sum(1 for chain in chains for node in chain.nodes if node.result.code == "pending")
@@ -350,7 +413,7 @@ class InvestmentReportAssembler:
                     current_state="；".join(states),
                     result=_result_from_trends([item.result for item in items]),
                     nature=_nature("direct_evidence"),
-                    reasoning="；".join(item.reasoning for item in items)[:10_000],
+                    reasoning=_humanize_report_text("；".join(item.reasoning for item in items))[:10_000],
                     time_window=_horizon([value for item in items for value in item.horizons]),
                     confidence=_confidence(_minimum_confidence([item.confidence for item in items])),
                     evidence_refs=_refs(evidence),
@@ -362,8 +425,8 @@ class InvestmentReportAssembler:
                     ReportReasoningStep(
                         key=_key("reason", assessment.assessment_id),
                         display_order=len(reasoning_steps) + 1,
-                        input=assessment.summary,
-                        mechanism=assessment.reasoning,
+                        input=_humanize_report_text(assessment.summary),
+                        mechanism=_humanize_report_text(assessment.reasoning),
                         output=f"{assessment.anchor_name}：{self._assessment_state(assessment, fact_by_id)}",
                         type="Event → Signal → 锚点评估",
                         confidence=_confidence(assessment.confidence),
@@ -388,7 +451,7 @@ class InvestmentReportAssembler:
             key=layer_key,
             display_order=1 if layer == ImpactLayer.GEOPOLITICAL else 2,
             title="地缘政治" if layer == ImpactLayer.GEOPOLITICAL else "宏观经济",
-            conclusion=summary,
+            conclusion=_humanize_report_text(summary),
             result=_result_from_trends(results),
             confidence=_confidence(confidence),
             time_window=_horizon([value for item in assessments for value in item.horizons]),
@@ -464,13 +527,13 @@ class InvestmentReportAssembler:
                 ReportTransmissionPath(
                     key=_key("path", item.transmission_id),
                     display_order=len(paths) + 1,
-                    source_conclusion=source.summary,
+                    source_conclusion=_humanize_report_text(source.summary),
                     target_refs=list(unique.values()),
-                    logic=item.logic,
+                    logic=_humanize_report_text(item.logic),
                     relation_nature="跨层推理" if item.relation_type == "CROSS_LAYER" else "同源信号",
                     evidence_role="推导背景",
                     confidence=_confidence(item.confidence),
-                    status=item.status,
+                    status=_humanize_report_text(item.status),
                     evidence_refs=[],
                 )
             )
@@ -486,7 +549,7 @@ class InvestmentReportAssembler:
                         f"{candidate.source_assessment_id}:{candidate.target_assessment_id}",
                     ),
                     display_order=len(candidates) + 1,
-                    mechanism=candidate.logic,
+                    mechanism=_humanize_report_text(candidate.logic),
                     evidence_gap=None,
                     confidence=_confidence(candidate.confidence),
                     evidence_refs=[],
@@ -509,6 +572,7 @@ class InvestmentReportAssembler:
         chain_keys: dict[str, str],
         node_keys: dict[tuple[str, str], str],
         node_membership_counts: Counter[str],
+        transmission_by_id: dict[str, AcceptedTransmission],
     ) -> list[ReportIndustryChain]:
         chain_snapshot = {item.business_id: item for item in context.chains}
         output: list[ReportIndustryChain] = []
@@ -575,7 +639,14 @@ class InvestmentReportAssembler:
                         impact=impact,
                         result=result,
                         nature=nature,
-                        reasoning=node.rationale,
+                        reasoning=self._node_reasoning(
+                            node,
+                            result,
+                            direct_fact_ids,
+                            direct_assessments,
+                            fact_by_id,
+                            transmission_by_id,
+                        ),
                         time_window=_node_horizon(node),
                         confidence=_confidence(node.confidence),
                         evidence_refs=_refs(evidence),
@@ -617,13 +688,13 @@ class InvestmentReportAssembler:
                     claim_key=_key("claim", chain_view.chain_id),
                     display_order=order,
                     name=chain_view.chain_name,
-                    conclusion=chain_view.summary,
+                    conclusion=_humanize_report_text(chain_view.summary),
                     status=self._chain_status(direct_nodes, hypothesis_nodes),
                     result=_result_from_trends([chain_view.short, chain_view.medium, chain_view.long]),
                     confidence=_confidence(chain_view.confidence),
                     time_window=self._chain_horizon(chain_view.nodes),
                     path_summary=(
-                        "、".join(direct_nodes) + "（直接 Signal 节点）→ 真实同链拓扑节点" if direct_nodes else None
+                        "、".join(direct_nodes) + "（直接变量信号节点）→ 真实同链拓扑节点" if direct_nodes else None
                     ),
                     accepted_hypothesis_summary="；".join(hypothesis_nodes) or None,
                     evidence_refs=_refs(chain_evidence),
@@ -641,6 +712,59 @@ class InvestmentReportAssembler:
                 )
             )
         return output
+
+    @staticmethod
+    def _node_reasoning(
+        node: NodeTrendView,
+        result: ReportResult,
+        direct_fact_ids: list[str],
+        direct_assessments: list[LayerAssessment],
+        facts: dict[str, FactSnapshot],
+        transmissions: dict[str, AcceptedTransmission],
+    ) -> str:
+        """Build reader-facing node reasoning from structured, reviewed inputs."""
+
+        if result.code == "pending":
+            return (
+                "该节点与已受影响节点存在真实产业链关系，"
+                "但当前既无直接变量信号，也没有通过审核的传导路径，因此暂不判断方向。"
+            )
+
+        direct_details: list[str] = []
+        for fact_id in direct_fact_ids:
+            fact = facts[fact_id]
+            fact_text = _humanize_report_text(fact.fact)
+            variable = fact.source_name or fact.variable_id or "相关变量"
+            if fact.direction is not None:
+                signal_text = f"{node.node_name}的{variable}出现{_direction(fact.direction)}变量信号"
+            else:
+                signal_text = f"{node.node_name}出现直接变量信号"
+            direct_details.append(f"{fact_text}；{signal_text}" if fact_text else signal_text)
+        if not direct_details:
+            direct_details.extend(_humanize_report_text(item.reasoning) for item in direct_assessments)
+
+        transmission_details: list[str] = []
+        assumptions: list[str] = []
+        for transmission_id in node.supporting_transmission_ids:
+            transmission = transmissions.get(transmission_id)
+            if transmission is None:
+                continue
+            transmission_details.append(_humanize_report_text(transmission.mechanism))
+            assumptions.extend(_humanize_report_text(item) for item in transmission.assumptions)
+
+        parts: list[str] = []
+        if direct_details:
+            parts.append("直接信息表明，" + "；".join(dict.fromkeys(direct_details)))
+        if transmission_details:
+            parts.append("产业链传导显示，" + "；".join(dict.fromkeys(transmission_details)))
+        if assumptions:
+            parts.append("该判断依赖的条件包括：" + "；".join(dict.fromkeys(assumptions[:3])))
+        if not parts:
+            fallback = _humanize_report_text(node.rationale)
+            if fallback:
+                parts.append(fallback)
+        parts.append(f"综合来看，{node.node_name}在{_node_horizon(node)}呈现{result.label}。")
+        return ("。".join(part.rstrip("。") for part in parts if part) + "。")[:10_000]
 
     @staticmethod
     def _chain_counterevidence_and_gap(

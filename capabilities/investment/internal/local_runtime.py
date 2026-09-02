@@ -468,6 +468,11 @@ class LocalInvestmentWorkflowRuntime:
                     "semantic_chain": "源变量及方向 -> 明确经济机制 -> 目标变量及方向",
                     "topology_rule": "拓扑 flow 只表示遍历方向，不代表变量涨跌方向",
                     "same_source_rule": "同源 Signal 可以并列影响两层，但不能伪装成因果桥梁",
+                    "causal_asymmetry_rule": (
+                        "下游终端需求可以拉动上游组件需求；上游组件需求上升不能反向证明下游终端需求上升"
+                    ),
+                    "profit_rule": "上游价格或利润改善不等于下游利润改善，必须说明成本转嫁或供需机制",
+                    "hop_rule": "多跳传导必须从上一跳的目标变量出发，不得跳过中间节点直接复用根信号结论",
                     "confidence_rule": "低置信度本身不是错误",
                     "output_rule": "只返回存在具体语义矛盾的 transmission_id",
                 },
@@ -478,6 +483,7 @@ class LocalInvestmentWorkflowRuntime:
                 "你是传导路径的局部语义审核员，只返回 TransmissionSemanticReview。"
                 "逐条检查源变量、机制、目标变量与方向能否组成连贯的经济命题。"
                 "技术成熟度、商业化进度、市场需求等不同变量之间必须写出桥梁；"
+                "重点排除组件需求反推终端需求、上游利润直接复制到下游，以及多跳路径跳过中间变量的情况；"
                 "重复使用同一根证据只有在目标机制不同且逻辑成立时才允许。"
                 "不要因为置信度低、待验证或缺少额外材料而报错；只列出实际矛盾。\n"
                 + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
@@ -907,7 +913,8 @@ class LocalInvestmentWorkflowRuntime:
                 "Industry Assessment，或有可追溯 Signal 根的 Transmission 才能形成方向结论；"
                 "分别填写 supporting_fact_ids、supporting_assessment_ids、supporting_transmission_ids。"
                 "其余节点必须 INSUFFICIENT_EVIDENCE，不得发明ID。\n"
-                + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+                "rationale 只写面向投研读者的业务事实和传导逻辑，不得出现内部 ID、英文枚举、"
+                "flow 或框架对象名。\n" + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
             )
             calls.append((chain, self._run(self._reasoner, prompt, NodeAnalysisBatch)))
         batches = await asyncio.gather(*(item[1] for item in calls))

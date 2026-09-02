@@ -415,6 +415,44 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("同链相邻节点缺少直接 Variable Signal 与经营观测", uncertainty)
         self.assertNotIn("NO_SIGNAL_LINEAGE", uncertainty)
 
+    def test_report_rebuilds_reader_facing_node_reasoning_without_audit_tokens(self) -> None:
+        analysis, context = self._fixture()
+        chain = analysis.draft.chains[0]
+        direct, inferred = chain.nodes
+        direct = direct.model_copy(
+            update={
+                "rationale": (
+                    "Industry Assessment ASSESS-deadbeef 为 WARMING，并形成传导 TX-deadbeef（AGAINST_EDGE）。"
+                )
+            }
+        )
+        inferred = inferred.model_copy(update={"rationale": "根据父路径 TX-deadbeef，中期结果为 WARMING。"})
+        analysis = analysis.model_copy(
+            update={
+                "draft": analysis.draft.model_copy(
+                    update={
+                        "chains": [
+                            chain.model_copy(
+                                update={
+                                    "summary": "ASSESS-deadbeef 支持 WARMING。",
+                                    "nodes": [direct, inferred],
+                                }
+                            )
+                        ]
+                    }
+                )
+            }
+        )
+
+        artifact = InvestmentReportAssembler(EventEvidenceIndex(self.event_root)).assemble(analysis, context)
+        report_chain = artifact.content.industry_chains[0]
+        report_text = "\n".join([report_chain.conclusion, *(item.reasoning for item in report_chain.nodes)])
+
+        for internal_token in ("ASSESS-", "TX-", "WARMING", "AGAINST_EDGE", "Signal Fact"):
+            self.assertNotIn(internal_token, report_text)
+        self.assertIn("市场需求上升", report_chain.nodes[0].reasoning)
+        self.assertIn("运输受限会继续影响批发交付", report_chain.nodes[1].reasoning)
+
 
 if __name__ == "__main__":
     unittest.main()

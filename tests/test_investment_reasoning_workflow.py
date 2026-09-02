@@ -867,6 +867,25 @@ class LocalTransmissionSemanticReviewTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(clean[0].direction, Direction.UP)
         self.assertNotEqual(clean[0].transmission_id, accepted[0].transmission_id)
 
+    async def test_semantic_review_prompt_enforces_causal_asymmetry_and_hop_continuity(self) -> None:
+        _, _, accepted, _ = self._node_fixture()
+        runtime = LocalInvestmentWorkflowRuntime(cast(Any, None), cast(Agent, object()), cast(Agent, object()))
+        runtime._run = AsyncMock(return_value=TransmissionSemanticReview())  # type: ignore[method-assign]
+
+        await runtime._review_transmission_semantics(
+            transmission_kind="INDUSTRY_TOPOLOGY",
+            transmissions=accepted,
+            context_payload={},
+        )
+
+        call = runtime._run.await_args
+        self.assertIsNotNone(call)
+        assert call is not None
+        prompt = call.args[1]
+        self.assertIn("上游组件需求上升不能反向证明下游终端需求上升", prompt)
+        self.assertIn("上游价格或利润改善不等于下游利润改善", prompt)
+        self.assertIn("多跳传导必须从上一跳的目标变量出发", prompt)
+
     async def test_node_transmission_still_inconsistent_after_repair_is_dropped(self) -> None:
         context, candidates, accepted, proposal = self._node_fixture()
         first_issue = TransmissionSemanticIssue(
