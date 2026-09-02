@@ -42,6 +42,12 @@ class InvestmentWorkflowRuntime(Protocol):
         state: IndustryAnalysisState,
     ) -> ReviewResult: ...
 
+    async def repair(
+        self,
+        state: IndustryAnalysisState,
+        review: ReviewResult,
+    ) -> IndustryAnalysisState: ...
+
     async def close(self) -> None: ...
 
 

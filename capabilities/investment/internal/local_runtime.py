@@ -33,6 +33,8 @@ from capabilities.investment.internal.models import (
     PreparedInvestmentContext,
     ReviewResult,
     TransmissionBatch,
+    TransmissionCandidate,
+    TransmissionExecutionMetrics,
     TransmissionProposal,
 )
 from sematica.graphiti.investment import GraphitiInvestmentReader
@@ -390,25 +392,54 @@ class LocalInvestmentWorkflowRuntime:
         )
         accepted: list[AcceptedTransmission] = []
         rounds = 0
+        candidates_enumerated = 0
+        candidates_evaluated = 0
+        rejected_below_inclusion = 0
+        stopped_by_confidence = 0
+        stopped_by_no_unvisited_neighbor = 0
         if any(chain.signal_root_node_ids for chain in industry_context.chains):
             for round_number in range(1, industry_context.request.max_hops + 1):
+                candidates = InvestmentReasoningEngine.enumerate_transmission_candidates(
+                    industry_context,
+                    accepted,
+                    round_number=round_number,
+                    root_assessments=industry.assessments,
+                )
+                if not candidates:
+                    has_continuable_frontier = round_number == 1 or any(
+                        item.hop == round_number - 1
+                        and item.path_score >= InvestmentReasoningEngine.TRANSMISSION_CONTINUATION_THRESHOLD
+                        for item in accepted
+                    )
+                    if has_continuable_frontier:
+                        stopped_by_no_unvisited_neighbor += 1
+                    break
+                candidates_enumerated += len(candidates)
                 batch = await self._propagate(
                     industry_context,
                     industry.assessments,
                     accepted,
+                    candidates,
                     round_number=round_number,
                 )
                 rounds += 1
+                # Every enumerated candidate was included in the Agent's fixed
+                # evaluation set. Omitted proposals are explicit rejections.
+                candidates_evaluated += len(candidates)
                 new_items = InvestmentReasoningEngine.validate_round(
                     industry_context,
                     accepted,
                     batch,
                     round_number=round_number,
                     root_assessments=industry.assessments,
+                    candidates=candidates,
                 )
                 accepted.extend(new_items)
-                if not any(item.confidence != Confidence.LOW for item in new_items):
-                    break
+                rejected_below_inclusion += max(0, len(batch.proposals) - len(new_items))
+                stopped_by_confidence += sum(
+                    item.path_score < InvestmentReasoningEngine.TRANSMISSION_CONTINUATION_THRESHOLD
+                    for item in new_items
+                )
         draft = await self._synthesize(industry_context, industry.assessments, accepted)
         draft = InvestmentReasoningEngine.normalize_draft(
             industry_context,
@@ -426,6 +457,14 @@ class LocalInvestmentWorkflowRuntime:
             industry_context=industry_context,
             transmissions=accepted,
             rounds_executed=rounds,
+            transmission_metrics=TransmissionExecutionMetrics(
+                candidates_enumerated=candidates_enumerated,
+                candidates_evaluated=candidates_evaluated,
+                accepted=len(accepted),
+                rejected_below_inclusion=rejected_below_inclusion,
+                stopped_by_confidence=stopped_by_confidence,
+                stopped_by_no_unvisited_neighbor=stopped_by_no_unvisited_neighbor,
+            ),
             draft=draft,
             execution_issues=[],
         )
@@ -435,11 +474,15 @@ class LocalInvestmentWorkflowRuntime:
         context: InvestmentAnalysisContext,
         industry_assessments: list[LayerAssessment],
         accepted: list[AcceptedTransmission],
+        candidates: list[TransmissionCandidate],
         *,
         round_number: int,
     ) -> TransmissionBatch:
         calls = []
         for chain in context.chains:
+            chain_candidates = [item for item in candidates if item.chain_id == chain.business_id]
+            if not chain_candidates:
+                continue
             chain_accepted = [item for item in accepted if item.chain_id == chain.business_id]
             chain_assessments = [
                 item
@@ -466,13 +509,14 @@ class LocalInvestmentWorkflowRuntime:
                 "facts": [item.model_dump(mode="json") for item in relevant_facts],
                 "industry_assessments": [item.model_dump(mode="json") for item in chain_assessments],
                 "accepted_transmissions": [item.model_dump(mode="json") for item in chain_accepted],
+                "transmission_candidates": [item.model_dump(mode="json") for item in chain_candidates],
             }
             prompt = (
                 f"执行第 {round_number} 轮产业链拓扑传导，只返回 TransmissionBatch。"
-                "第1轮必须由作用于 source_node_id 的直接有效 Signal（source_fact_ids），"
-                "或已形成的 Industry ChainNode Assessment（source_assessment_ids）启动。"
-                "后续轮只能从上一轮已接受 Transmission 的 target_node_id 继续。"
-                "不得发明节点、边或ID；证据不足时返回空 proposals。\n"
+                "必须逐条评估 transmission_candidates；只有机制成立的候选才返回 proposal，"
+                "并原样复制 candidate_id 以及其中全部节点、边、方向、周期和谱系 ID。"
+                "你只补充 target_variable、direction、confidence、mechanism 和 assumptions。"
+                "不得自行选择候选之外的节点或边；不成立的候选直接省略。\n"
                 + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
             )
             calls.append(self._run(self._reasoner, prompt, TransmissionBatch))
@@ -490,6 +534,7 @@ class LocalInvestmentWorkflowRuntime:
         context: InvestmentAnalysisContext,
         industry_assessments: list[LayerAssessment],
         transmissions: list[AcceptedTransmission],
+        repair_issues: list[str] | None = None,
     ) -> AnalysisDraft:
         if not context.chains:
             return AnalysisDraft(
@@ -525,6 +570,7 @@ class LocalInvestmentWorkflowRuntime:
                 "facts": [item.model_dump(mode="json") for item in facts],
                 "industry_assessments": [item.model_dump(mode="json") for item in assessments],
                 "accepted_transmissions": [item.model_dump(mode="json") for item in chain_transmissions],
+                "review_repair_issues": list(repair_issues or []),
             }
             prompt = (
                 "输出 NodeAnalysisBatch，覆盖产业链所有真实节点。只有直接有效 Signal、作用于该节点的"
@@ -565,6 +611,30 @@ class LocalInvestmentWorkflowRuntime:
             limitations=list(dict.fromkeys(context.validation_issues))[:20],
         )
 
+    async def repair(self, state: IndustryAnalysisState, review: ReviewResult) -> IndustryAnalysisState:
+        """Run one bounded semantic repair over the same frozen graph context."""
+
+        draft = await self._synthesize(
+            state.industry_context,
+            state.industry.assessments,
+            state.transmissions,
+            repair_issues=review.issue_codes,
+        )
+        normalized = InvestmentReasoningEngine.normalize_draft(
+            state.industry_context,
+            state.transmissions,
+            draft,
+            state.industry.assessments,
+        )
+        return state.model_copy(
+            update={
+                "draft": normalized,
+                "execution_issues": list(
+                    dict.fromkeys([*state.execution_issues, *review.issue_codes, "SEMANTIC_REPAIR_EXECUTED"])
+                ),
+            }
+        )
+
     async def review(self, state: IndustryAnalysisState) -> ReviewResult:
         payload = {
             "ontology": state.industry_context.ontology.model_dump(mode="json"),
@@ -591,8 +661,9 @@ class LocalInvestmentWorkflowRuntime:
         prompt = (
             "审核该分层投研 Workflow 的执行完整性，不得补充新结论。"
             "检查必需检索动作是否完成、输出引用是否来自本次上下文、"
-            "直接 Signal 与传导假设是否分开。单条传导证据弱应记录 issue，"
-            "不应否决其他已完成步骤或有直接 Signal 支持的评估。\n"
+            "直接 Signal 与传导假设是否分开，并检查节点方向、链级聚合与摘要是否一致。"
+            "存在可通过重新综合修正的方向冲突时 accepted=false 并返回 REASONING_INCONSISTENCY；"
+            "单条证据弱但没有结构矛盾时只记录 issue。\n"
             + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         )
         return await self._run(self._reviewer, prompt, ReviewResult)

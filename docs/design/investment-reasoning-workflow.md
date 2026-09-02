@@ -28,7 +28,7 @@ Event 进入 Graphiti 前后的分类、锚点匹配和直接 Signal Fact 构建
 }
 ```
 
-Agno 的 HTTP 层在配置 Workflow `input_schema` 时会先把原始 message 当 JSON 解码，因此本 Workflow 不在 Agno 入口声明 `input_schema`，而由第一个确定性 Function 把原始自然语言或 JSON 统一校验为 `InvestmentReasoningInput`。该合同必须拒绝未知字段和 `include_company=true`。为迁移现有本地 Schedule，可在一个兼容周期内接受包含明确“最近 N 小时”的旧中文 message；不得静默使用另一个隐藏时间窗。`decision_at`、产业链上限、检索预算和最多三跳由确定性代码控制，不接受 Schedule 覆盖。`event_window_hours` 最大支持 8760 小时，便于对同一历史 Event 范围做确定性重放；生产 Schedule 仍由 Control Panel 显式保持 48 小时等日常窗口。
+Agno 的 HTTP 层在配置 Workflow `input_schema` 时会先把原始 message 当 JSON 解码，因此本 Workflow 不在 Agno 入口声明 `input_schema`，而由第一个确定性 Function 把原始自然语言或 JSON 统一校验为 `InvestmentReasoningInput`。该合同必须拒绝未知字段和 `include_company=true`。为迁移现有本地 Schedule，可在一个兼容周期内接受包含明确“最近 N 小时”的旧中文 message；不得静默使用另一个隐藏时间窗。`decision_at`、产业链上限、检索预算和最多五跳由确定性代码控制，不接受 Schedule 覆盖。`event_window_hours` 最大支持 8760 小时，便于对同一历史 Event 范围做确定性重放；生产 Schedule 仍由 Control Panel 显式保持 48 小时等日常窗口。
 
 ## 固定六步
 
@@ -99,15 +99,17 @@ generate-investment-report
 2. 只用这些 Signal 和与根节点直接相关的本次 Event Fact 形成节点评估，不执行宽泛产业锚点向量召回，也不批量加载候选锚点的全部 Fact；
 3. 通过真实 `ChainNodeBelongsToIndustryChain` 关系解析根节点所属的全部 `IndustryChain`；
 4. 每条候选链独立加载全部标准 `ChainNode` 和真实拓扑边；
-5. 将上层结论作为跨层解释上下文，沿真实拓扑最多执行三轮传导；
-6. 覆盖该链每个标准节点，分别生成短、中、长期趋势；
-7. 汇总产业链整体升温、降温、分化、无显著变化或证据不足。
+5. 程序从每个 Signal 根枚举全部真实相邻边，Reasoner 只评估固定候选，不得自行挑选节点或边；
+6. 路径分数达到 `0.40` 才保留为推理假设，达到 `0.65` 的单条路径才继续下一跳，最多五跳；
+7. 每条路径独立停止，某条低置信度路径不得阻断其他分支；
+8. 覆盖该链每个标准节点，分别生成短、中、长期趋势；
+9. 由程序根据真实节点结果汇总产业链整体升温、降温、分化、无显著变化或证据不足。
 
 Event 语义相关不能单独选择产业链或启动方向判断。产业链结论必须由其真实成员节点的直接或受控传导结果汇总，不得使用链级 Signal 启动方向。交叉出现在多条产业链中的节点必须按 `(industry_chain_id, chain_node_id)` 分析，禁止跨链污染。全历史重放与日常时间窗使用同一数据准备顺序；扩大 Event 时间窗不得退化为“候选锚点全部 Fact”查询。
 
 ### 5. review-and-finalize
 
-确定性门禁检查必需 Step 和检索动作是否执行、输出结构是否符合合同、所有 ID 是否来自本次检索上下文。Reviewer 只审核语义表达与直接/推理边界，不重新校验 Graphiti 已返回数据的业务真伪，也不因单条弱传导否决其他有效结果。
+确定性门禁检查必需 Step 和检索动作是否执行、输出结构是否符合合同、所有 ID 是否来自本次检索上下文。Reviewer 只审核语义表达、直接/推理边界以及节点方向与链级聚合是否一致，不重新校验 Graphiti 已返回数据的业务真伪，也不因单条弱传导否决其他有效结果。若发现可修复的聚合矛盾，允许在同一冻结上下文上返工一次并复审；第二次仍不通过则不生成报告。
 
 最终结果包括：
 
@@ -149,7 +151,10 @@ data/investment/conclusions/<workflow_run_id>.json
 2. 锚点评估、跨层传导和节点传导中的 ID 均属于本次检索上下文。
 3. 直接 Signal、普通 Fact、跨层传导假设和产业链拓扑传导保持不同语义类型。
 4. 无直接 Signal 或可追溯传导支持的节点不得形成方向结论。
-5. 单条假设证据弱时标记低置信度、待验证或 issue，不全局否决其他直接 Signal 支持的评估。
+5. 产业链方向必须由其节点方向确定性聚合，升温与降温并存时必须为分化。
+6. 单条假设证据弱时标记低置信度、待验证或 issue，不全局否决其他直接 Signal 支持的评估。
+
+报告只展示直接 Signal 节点、通过路径门槛的推理节点，以及最多三个与这些节点直接相邻的 Evidence Gap；其余全量拓扑仍保留在审计上下文中，不写入产品报告。
 
 ## Graphiti 检索原则
 

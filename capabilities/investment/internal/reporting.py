@@ -254,13 +254,17 @@ class InvestmentReportAssembler:
                 signal_fact_count=sum(item.kind == "SIGNAL" for item in context.facts),
                 transmission_hypothesis_count=len(analysis.transmissions),
                 remaining_topology_pending_count=pending_nodes,
-                adaptive_inclusion_threshold=0,
-                adaptive_continuation_threshold=0.5,
+                adaptive_inclusion_threshold=0.4,
+                adaptive_continuation_threshold=0.65,
                 adaptive_hard_max_hops=context.request.max_hops,
                 adaptive_observed_max_hops=max((item.hop for item in analysis.transmissions), default=0),
-                adaptive_stopped_by_confidence=0,
-                adaptive_stopped_by_no_unvisited_neighbor=0,
-                adaptive_rejected_below_inclusion=0,
+                adaptive_stopped_by_confidence=analysis.stage_metrics.get("transmission_stopped_by_confidence", 0),
+                adaptive_stopped_by_no_unvisited_neighbor=analysis.stage_metrics.get(
+                    "transmission_stopped_by_no_neighbor", 0
+                ),
+                adaptive_rejected_below_inclusion=analysis.stage_metrics.get(
+                    "transmission_rejected_below_inclusion", 0
+                ),
                 geopolitic_anchor_count=len(geo.anchors),
                 macroeconomic_anchor_count=len(macro.anchors),
                 signaled_chain_node_count=len({item for item in signaled_nodes if item}),
@@ -495,8 +499,27 @@ class InvestmentReportAssembler:
             snapshot = chain_snapshot.get(chain_view.chain_id)
             if snapshot is None:
                 continue
+            supported_node_ids = {
+                node.node_id
+                for node in chain_view.nodes
+                if node.supporting_fact_ids or node.supporting_assessment_ids or node.supporting_transmission_ids
+            }
+            adjacent_gap_ids: list[str] = []
+            for edge in snapshot.edges:
+                if edge.source_node_id in supported_node_ids and edge.target_node_id not in supported_node_ids:
+                    adjacent_gap_ids.append(edge.target_node_id)
+                if edge.target_node_id in supported_node_ids and edge.source_node_id not in supported_node_ids:
+                    adjacent_gap_ids.append(edge.source_node_id)
+            displayed_node_ids = supported_node_ids | set(dict.fromkeys(adjacent_gap_ids[:3]))
+            if not supported_node_ids:
+                continue
             nodes: list[ReportIndustryChainNode] = []
-            for node_order, node in enumerate(chain_view.nodes, 1):
+            displayed_source_nodes: list[NodeTrendView] = []
+            for node in chain_view.nodes:
+                if node.node_id not in displayed_node_ids:
+                    continue
+                displayed_source_nodes.append(node)
+                node_order = len(nodes) + 1
                 direct_fact_ids = [
                     fact_id
                     for fact_id in node.supporting_fact_ids
@@ -545,7 +568,13 @@ class InvestmentReportAssembler:
             for edge in snapshot.edges:
                 from_key = node_keys.get((snapshot.business_id, edge.source_node_id))
                 to_key = node_keys.get((snapshot.business_id, edge.target_node_id))
-                if from_key is None or to_key is None or from_key == to_key:
+                if (
+                    edge.source_node_id not in displayed_node_ids
+                    or edge.target_node_id not in displayed_node_ids
+                    or from_key is None
+                    or to_key is None
+                    or from_key == to_key
+                ):
                     continue
                 edge_items.append(
                     ReportIndustryChainEdge(
@@ -585,7 +614,7 @@ class InvestmentReportAssembler:
                     edges=edge_items,
                     uncertainty=ReportChainUncertainty(
                         counterevidence_and_gap=self._chain_counterevidence_and_gap(
-                            chain_view.nodes,
+                            displayed_source_nodes,
                             nodes,
                             node_membership_counts,
                         ),

@@ -28,6 +28,7 @@ from capabilities.investment.internal.models import (
     NodeTrendView,
     ReasoningTraceNode,
     TransmissionBatch,
+    TransmissionCandidate,
     TransmissionProposal,
     Trend,
 )
@@ -35,6 +36,9 @@ from capabilities.investment.internal.models import (
 
 class InvestmentReasoningEngine:
     """Validate Workflow outputs and normalize unsupported model conclusions."""
+
+    TRANSMISSION_INCLUSION_THRESHOLD = 0.40
+    TRANSMISSION_CONTINUATION_THRESHOLD = 0.65
 
     @staticmethod
     def context_fingerprint(context: InvestmentAnalysisContext) -> str:
@@ -248,6 +252,7 @@ class InvestmentReasoningEngine:
         *,
         round_number: int,
         root_assessments: list[LayerAssessment] | None = None,
+        candidates: list[TransmissionCandidate] | None = None,
     ) -> list[AcceptedTransmission]:
         chains = {item.business_id: item for item in context.chains}
         eligible_signals = {fact.uuid: fact for fact in context.facts if fact.uuid in context.eligible_signal_fact_ids}
@@ -258,7 +263,26 @@ class InvestmentReasoningEngine:
             for item in accepted
         }
         validated: list[AcceptedTransmission] = []
-        for proposal in batch.proposals:
+        candidates_by_id = {item.candidate_id: item for item in candidates or []}
+        for generated in batch.proposals:
+            proposal = generated
+            if candidates is not None:
+                candidate = candidates_by_id.get(generated.candidate_id or "")
+                if candidate is None:
+                    continue
+                proposal = generated.model_copy(
+                    update={
+                        "chain_id": candidate.chain_id,
+                        "topology_edge_id": candidate.topology_edge_id,
+                        "source_node_id": candidate.source_node_id,
+                        "target_node_id": candidate.target_node_id,
+                        "flow": candidate.flow,
+                        "horizon": candidate.horizon,
+                        "source_fact_ids": candidate.source_fact_ids,
+                        "source_assessment_ids": candidate.source_assessment_ids,
+                        "parent_transmission_ids": candidate.parent_transmission_ids,
+                    }
+                )
             chain = chains.get(proposal.chain_id)
             if chain is None:
                 continue
@@ -325,6 +349,19 @@ class InvestmentReasoningEngine:
             if proposal.assumptions:
                 confidence_cap = cls._degrade_confidence(confidence_cap)
             accepted_confidence = cls._minimum_confidence([proposal.confidence, confidence_cap])
+            path_score = cls._path_score(
+                proposal,
+                accepted_by_id,
+                cited_confidence=(
+                    cls._minimum_confidence(
+                        [item.confidence for item in cited] + [item.confidence for item in cited_assessments]
+                    )
+                    if round_number == 1
+                    else None
+                ),
+            )
+            if path_score < cls.TRANSMISSION_INCLUSION_THRESHOLD:
+                continue
 
             key = (
                 proposal.chain_id,
@@ -343,10 +380,150 @@ class InvestmentReasoningEngine:
                 transmission_id=transmission_id,
                 hop=round_number,
                 root_signal_fact_ids=root_ids,
+                path_score=path_score,
             )
             validated.append(item)
             accepted_by_id[transmission_id] = item
         return validated
+
+    @classmethod
+    def enumerate_transmission_candidates(
+        cls,
+        context: InvestmentAnalysisContext,
+        accepted: list[AcceptedTransmission],
+        *,
+        round_number: int,
+        root_assessments: list[LayerAssessment] | None = None,
+    ) -> list[TransmissionCandidate]:
+        """Enumerate every real, unvisited adjacent topology move for this round."""
+
+        eligible = {item.uuid: item for item in context.facts if item.uuid in context.eligible_signal_fact_ids}
+        assessments = list(root_assessments or [])
+        accepted_by_id = {item.transmission_id: item for item in accepted}
+        result: list[TransmissionCandidate] = []
+        seen: set[tuple[str, str, str, Horizon, tuple[str, ...]]] = set()
+        for chain in context.chains:
+            if round_number == 1:
+                frontiers: list[tuple[str, Horizon, list[str], list[str], list[str], set[str]]] = []
+                for node_id in chain.signal_root_node_ids:
+                    facts = [
+                        item
+                        for item in eligible.values()
+                        if node_id in {item.source_business_id, item.target_business_id}
+                    ]
+                    node_assessments = [
+                        item for item in assessments if item.anchor_type == "ChainNode" and item.anchor_id == node_id
+                    ]
+                    horizons = {horizon for item in facts for horizon in item.horizons} | {
+                        horizon for item in node_assessments for horizon in item.horizons
+                    }
+                    for horizon in sorted(horizons, key=lambda item: item.value):
+                        horizon_facts = [item for item in facts if horizon in item.horizons]
+                        horizon_assessments = [item for item in node_assessments if horizon in item.horizons]
+                        frontiers.append(
+                            (
+                                node_id,
+                                horizon,
+                                [item.uuid for item in horizon_facts],
+                                [item.assessment_id for item in horizon_assessments],
+                                [],
+                                {node_id},
+                            )
+                        )
+            else:
+                frontiers = []
+                for parent in accepted:
+                    if (
+                        parent.chain_id != chain.business_id
+                        or parent.hop != round_number - 1
+                        or parent.path_score < cls.TRANSMISSION_CONTINUATION_THRESHOLD
+                    ):
+                        continue
+                    visited = cls._visited_nodes(parent, accepted_by_id)
+                    frontiers.append(
+                        (
+                            parent.target_node_id,
+                            parent.horizon,
+                            [],
+                            [],
+                            [parent.transmission_id],
+                            visited,
+                        )
+                    )
+            for source_id, horizon, fact_ids, assessment_ids, parent_ids, visited in frontiers:
+                for edge in chain.edges:
+                    if edge.source_node_id == source_id:
+                        target_id, flow = edge.target_node_id, "ALONG_EDGE"
+                    elif edge.target_node_id == source_id:
+                        target_id, flow = edge.source_node_id, "AGAINST_EDGE"
+                    else:
+                        continue
+                    if target_id in visited:
+                        continue
+                    key = (chain.business_id, edge.business_id, source_id, horizon, tuple(parent_ids))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    payload = {
+                        "chain": chain.business_id,
+                        "edge": edge.business_id,
+                        "source": source_id,
+                        "target": target_id,
+                        "horizon": horizon.value,
+                        "parents": parent_ids,
+                    }
+                    digest = hashlib.sha256(
+                        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                    ).hexdigest()[:20]
+                    result.append(
+                        TransmissionCandidate(
+                            candidate_id=f"TC-{digest}",
+                            chain_id=chain.business_id,
+                            topology_edge_id=edge.business_id,
+                            source_node_id=source_id,
+                            target_node_id=target_id,
+                            flow=flow,
+                            horizon=horizon,
+                            source_fact_ids=fact_ids,
+                            source_assessment_ids=assessment_ids,
+                            parent_transmission_ids=parent_ids,
+                        )
+                    )
+        return result
+
+    @classmethod
+    def _visited_nodes(
+        cls,
+        item: AcceptedTransmission,
+        accepted_by_id: dict[str, AcceptedTransmission],
+    ) -> set[str]:
+        visited = {item.source_node_id, item.target_node_id}
+        pending = list(item.parent_transmission_ids)
+        while pending:
+            parent = accepted_by_id.get(pending.pop())
+            if parent is None:
+                continue
+            visited.update((parent.source_node_id, parent.target_node_id))
+            pending.extend(parent.parent_transmission_ids)
+        return visited
+
+    @classmethod
+    def _path_score(
+        cls,
+        proposal: TransmissionProposal,
+        accepted_by_id: dict[str, AcceptedTransmission],
+        *,
+        cited_confidence: Confidence | None,
+    ) -> float:
+        confidence_score = {Confidence.LOW: 0.4, Confidence.MEDIUM: 0.7, Confidence.HIGH: 1.0}
+        semantic = confidence_score[proposal.confidence]
+        if cited_confidence is not None:
+            upstream = confidence_score[cited_confidence]
+        else:
+            parents = [accepted_by_id[item] for item in proposal.parent_transmission_ids if item in accepted_by_id]
+            upstream = min((item.path_score for item in parents), default=0.0)
+        assumptions_penalty = min(len(proposal.assumptions) * 0.08, 0.24)
+        return round(max(0.0, min(1.0, upstream * 0.60 + semantic * 0.40 - assumptions_penalty)), 4)
 
     @staticmethod
     def _minimum_confidence(values: list[Confidence | None]) -> Confidence:
@@ -409,6 +586,17 @@ class InvestmentReasoningEngine:
                         "short": cls._reduce_trend([item.short for item in nodes]),
                         "medium": cls._reduce_trend([item.medium for item in nodes]),
                         "long": cls._reduce_trend([item.long for item in nodes]),
+                        "confidence": cls._minimum_confidence(
+                            [
+                                item.confidence
+                                for item in nodes
+                                if any(
+                                    value != Trend.INSUFFICIENT_EVIDENCE
+                                    for value in (item.short, item.medium, item.long)
+                                )
+                            ]
+                        ),
+                        "summary": cls._chain_summary(chain.name, nodes),
                         "nodes": nodes,
                     }
                 )
@@ -480,7 +668,10 @@ class InvestmentReasoningEngine:
                 directions = [
                     fact.direction for fact in cited_signals if horizon in fact.horizons and fact.direction is not None
                 ] + [item.direction for item in cited_incoming if item.horizon == horizon]
-                updates[field] = cls._trend_from_directions(directions)
+                assessment_trends = [item.result for item in cited_assessments if horizon in item.horizons]
+                derived = cls._reduce_trend([cls._trend_from_directions(directions), *assessment_trends])
+                if derived != Trend.INSUFFICIENT_EVIDENCE:
+                    updates[field] = derived
         updates["risks"] = list(dict.fromkeys(risks))[:10]
         normalized = node.model_copy(update=updates)
         if all(getattr(normalized, field) == Trend.INSUFFICIENT_EVIDENCE for field in ("short", "medium", "long")):
@@ -491,6 +682,21 @@ class InvestmentReasoningEngine:
                 }
             )
         return normalized
+
+    @classmethod
+    def _chain_summary(cls, chain_name: str, nodes: list[NodeTrendView]) -> str:
+        directional = [
+            item
+            for item in nodes
+            if any(value != Trend.INSUFFICIENT_EVIDENCE for value in (item.short, item.medium, item.long))
+        ]
+        if not directional:
+            return f"{chain_name}当前没有可追溯至有效 Signal 的方向结论。"
+        fragments = [
+            f"{item.node_name}短期{item.short.value}、中期{item.medium.value}、长期{item.long.value}"
+            for item in directional
+        ]
+        return (f"{chain_name}由真实节点结果聚合：" + "；".join(fragments))[:1600]
 
     @classmethod
     def directional_lineage_issues(

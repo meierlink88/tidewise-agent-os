@@ -43,6 +43,8 @@ from capabilities.investment.internal.models import (
     ReviewResult,
     TopologyEdgeSnapshot,
     TransmissionBatch,
+    TransmissionCandidate,
+    TransmissionExecutionMetrics,
     TransmissionProposal,
     Trend,
 )
@@ -107,6 +109,8 @@ __all__ = [
     "ReviewedInvestmentState",
     "TopologyEdgeSnapshot",
     "TransmissionBatch",
+    "TransmissionCandidate",
+    "TransmissionExecutionMetrics",
     "TransmissionProposal",
     "Trend",
     "configure_investment_workflow_runtime",

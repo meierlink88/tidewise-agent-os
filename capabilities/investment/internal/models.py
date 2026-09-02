@@ -100,7 +100,7 @@ class InvestmentAnalysisRequest(InvestmentReasoningInput):
     forward_horizon_days: int = Field(default=1095, ge=1, le=3650)
     min_anchor_matches: int = Field(default=1, ge=1, le=10)
     max_chains: int = Field(default=100, ge=1, le=100)
-    max_hops: int = Field(default=3, ge=1, le=3)
+    max_hops: int = Field(default=5, ge=1, le=5)
     decision_at: datetime
 
     @field_validator("decision_at")
@@ -372,7 +372,23 @@ class InvestmentAnalysisContext(FrozenModel):
         }
 
 
+class TransmissionCandidate(FrozenModel):
+    """One real topology move that the Agent must evaluate without changing IDs."""
+
+    candidate_id: str
+    chain_id: str
+    topology_edge_id: str
+    source_node_id: str
+    target_node_id: str
+    flow: Literal["ALONG_EDGE", "AGAINST_EDGE"]
+    horizon: Horizon
+    source_fact_ids: list[str] = Field(default_factory=list, max_length=20)
+    source_assessment_ids: list[str] = Field(default_factory=list, max_length=20)
+    parent_transmission_ids: list[str] = Field(default_factory=list, max_length=20)
+
+
 class TransmissionProposal(FrozenModel):
+    candidate_id: str | None = None
     chain_id: str
     topology_edge_id: str
     source_node_id: str
@@ -391,13 +407,27 @@ class TransmissionProposal(FrozenModel):
 
 class AcceptedTransmission(TransmissionProposal):
     transmission_id: str
-    hop: int = Field(ge=1, le=3)
+    hop: int = Field(ge=1, le=5)
     root_signal_fact_ids: list[str] = Field(min_length=1, max_length=20)
+    path_score: float = Field(default=0.4, ge=0, le=1)
 
 
 class TransmissionBatch(FrozenModel):
-    proposals: list[TransmissionProposal] = Field(default_factory=list, max_length=100)
+    # One Agent call remains bounded per chain, while the deterministic runtime
+    # merges results from as many as 100 real chains into this run-level batch.
+    proposals: list[TransmissionProposal] = Field(default_factory=list, max_length=2000)
     stopped_reason: str | None = Field(default=None, max_length=500)
+
+
+class TransmissionExecutionMetrics(FrozenModel):
+    inclusion_threshold: float = Field(default=0.4, ge=0, le=1)
+    continuation_threshold: float = Field(default=0.65, ge=0, le=1)
+    candidates_enumerated: int = Field(default=0, ge=0)
+    candidates_evaluated: int = Field(default=0, ge=0)
+    accepted: int = Field(default=0, ge=0)
+    rejected_below_inclusion: int = Field(default=0, ge=0)
+    stopped_by_confidence: int = Field(default=0, ge=0)
+    stopped_by_no_unvisited_neighbor: int = Field(default=0, ge=0)
 
 
 class NodeTrendView(FrozenModel):
@@ -520,7 +550,8 @@ class IndustryAnalysisState(FrozenModel):
     )
     industry_context: InvestmentAnalysisContext
     transmissions: list[AcceptedTransmission]
-    rounds_executed: int = Field(ge=0, le=3)
+    rounds_executed: int = Field(ge=0, le=5)
+    transmission_metrics: TransmissionExecutionMetrics = Field(default_factory=TransmissionExecutionMetrics)
     draft: AnalysisDraft
     execution_issues: list[str] = Field(default_factory=list)
 

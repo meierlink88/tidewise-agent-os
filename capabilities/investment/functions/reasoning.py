@@ -69,7 +69,7 @@ async def prepare_investment_context(step_input: StepInput, run_context: RunCont
         forward_horizon_days=1095,
         min_anchor_matches=1,
         max_chains=100,
-        max_hops=3,
+        max_hops=5,
     )
     context = await investment_workflow_runtime().prepare(request)
     return StepOutput(
@@ -203,11 +203,6 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
     """Verify required actions and output references, then record semantic review notes."""
 
     state = _content(step_input, IndustryAnalysisState)
-    draft = state.draft
-    geopolitical = state.geopolitical
-    macro = state.macro
-    industry = state.industry
-    transmissions = list(state.transmissions)
     hard_issues = _deterministic_issues(state)
     execution_issues = list(state.execution_issues)
     if hard_issues:
@@ -226,7 +221,8 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
             review_summary="所有产业链节点均未作无证据的方向断言；本次是成功的证据不足弃权。",
         )
     else:
-        semantic_review = await investment_workflow_runtime().review(state)
+        runtime = investment_workflow_runtime()
+        semantic_review = await runtime.review(state)
         execution_issues.extend(semantic_review.issue_codes)
         if "REVIEW_OUTPUT_INVALID" in semantic_review.issue_codes:
             review = semantic_review.model_copy(
@@ -235,10 +231,30 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
                     "review_summary": "Reviewer 输出未通过结构合同，不发布最终报告。",
                 }
             )
+        elif not semantic_review.accepted:
+            repair = getattr(runtime, "repair", None)
+            if repair is None:
+                review = semantic_review
+            else:
+                state = await repair(state, semantic_review)
+                repair_hard_issues = _deterministic_issues(state)
+                if repair_hard_issues:
+                    execution_issues.extend(repair_hard_issues)
+                    review = ReviewResult(
+                        accepted=False,
+                        confidence=Confidence.LOW,
+                        issue_codes=repair_hard_issues[:30],
+                        review_summary="一次语义返工后仍未通过确定性谱系校验。",
+                    )
+                else:
+                    second_review = await runtime.review(state)
+                    execution_issues.extend(second_review.issue_codes)
+                    review = second_review.model_copy(
+                        update={"review_summary": ("已执行一次语义返工。" + second_review.review_summary)[:2000]}
+                    )
         else:
             review = semantic_review.model_copy(
                 update={
-                    "accepted": True,
                     "review_summary": (
                         "Workflow 检索与输出合同完整。"
                         + (f"语义审核备注：{semantic_review.review_summary}" if semantic_review.issue_codes else "")
@@ -246,6 +262,11 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
                 }
             )
 
+    draft = state.draft
+    geopolitical = state.geopolitical
+    macro = state.macro
+    industry = state.industry
+    transmissions = list(state.transmissions)
     layer_results = [geopolitical, macro, industry]
     result = InvestmentAnalysisResult(
         executor="agentos-investment-reasoning-workflow",
@@ -283,6 +304,11 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
             "topology_edges": sum(len(item.edges) for item in state.industry_context.chains),
             "transmission_rounds": state.rounds_executed,
             "accepted_transmissions": len(transmissions),
+            "transmission_candidates_enumerated": state.transmission_metrics.candidates_enumerated,
+            "transmission_candidates_evaluated": state.transmission_metrics.candidates_evaluated,
+            "transmission_rejected_below_inclusion": state.transmission_metrics.rejected_below_inclusion,
+            "transmission_stopped_by_confidence": state.transmission_metrics.stopped_by_confidence,
+            "transmission_stopped_by_no_neighbor": state.transmission_metrics.stopped_by_no_unvisited_neighbor,
         },
         execution_issues=list(dict.fromkeys(execution_issues))[:100],
     )

@@ -216,6 +216,99 @@ class InvestmentReasoningGateTest(unittest.TestCase):
         self.assertEqual(accepted[0].root_signal_fact_ids, [fact.uuid])
         self.assertEqual(accepted[0].confidence, Confidence.MEDIUM)
 
+    def test_candidate_enumeration_covers_every_real_adjacent_edge(self) -> None:
+        fact = self._active_signal()
+        context = self._context(fact)
+        chain = context.chains[0]
+        extended = chain.model_copy(
+            update={
+                "nodes": [
+                    *chain.nodes,
+                    ChainNodeSnapshot(uuid="node-c-uuid", business_id="node-c", name="另一邻点"),
+                ],
+                "edges": [
+                    *chain.edges,
+                    TopologyEdgeSnapshot(
+                        uuid="edge-2-uuid",
+                        business_id="edge-2",
+                        name="ChainNodeDependsOn",
+                        source_node_id="node-c",
+                        source_name="另一邻点",
+                        target_node_id="node-a",
+                        target_name="上游",
+                        fact="另一邻点依赖上游",
+                    ),
+                ],
+            }
+        )
+        context = context.model_copy(update={"chains": [extended]})
+
+        candidates = InvestmentReasoningEngine.enumerate_transmission_candidates(context, [], round_number=1)
+
+        self.assertEqual({item.target_node_id for item in candidates}, {"node-b", "node-c"})
+        self.assertEqual({item.flow for item in candidates}, {"ALONG_EDGE", "AGAINST_EDGE"})
+
+    def test_medium_root_uses_path_score_to_continue_even_when_enum_confidence_is_low(self) -> None:
+        fact = self._active_signal().model_copy(update={"confidence": Confidence.MEDIUM})
+        context = self._context(fact)
+        chain = context.chains[0]
+        chain = chain.model_copy(
+            update={
+                "nodes": [
+                    *chain.nodes,
+                    ChainNodeSnapshot(uuid="node-c-uuid", business_id="node-c", name="终端"),
+                ],
+                "edges": [
+                    *chain.edges,
+                    TopologyEdgeSnapshot(
+                        uuid="edge-2-uuid",
+                        business_id="edge-2",
+                        name="ChainNodeInputTo",
+                        source_node_id="node-b",
+                        source_name="下游",
+                        target_node_id="node-c",
+                        target_name="终端",
+                        fact="下游向终端提供投入品",
+                    ),
+                ],
+            }
+        )
+        context = context.model_copy(update={"chains": [chain]})
+        first_candidate = InvestmentReasoningEngine.enumerate_transmission_candidates(context, [], round_number=1)[0]
+        proposal = (
+            self._proposal(fact.uuid)
+            .proposals[0]
+            .model_copy(update={"candidate_id": first_candidate.candidate_id, "confidence": Confidence.MEDIUM})
+        )
+        first = InvestmentReasoningEngine.validate_round(
+            context,
+            [],
+            TransmissionBatch(proposals=[proposal]),
+            round_number=1,
+            candidates=[first_candidate],
+        )[0]
+
+        second_candidates = InvestmentReasoningEngine.enumerate_transmission_candidates(
+            context, [first], round_number=2
+        )
+
+        self.assertEqual(first.confidence, Confidence.LOW)
+        self.assertEqual(first.path_score, 0.7)
+        self.assertEqual([item.target_node_id for item in second_candidates], ["node-c"])
+
+    def test_chain_trend_aggregation_preserves_mixed_node_directions(self) -> None:
+        self.assertEqual(
+            InvestmentReasoningEngine._reduce_trend([Trend.WARMING, Trend.COOLING]),
+            Trend.DIVERGENT,
+        )
+
+    def test_run_level_batch_can_merge_more_than_one_hundred_chain_results(self) -> None:
+        proposal = self._proposal(self._active_signal().uuid).proposals[0]
+
+        batch = TransmissionBatch(proposals=[proposal] * 134)
+
+        self.assertEqual(len(batch.proposals), 134)
+
     def test_industry_chain_signal_cannot_start_directional_reasoning(self) -> None:
         fact = self._active_signal().model_copy(
             update={
@@ -370,7 +463,7 @@ class InvestmentReasoningGateTest(unittest.TestCase):
             update={"topology_edge_id": "edge-does-not-exist", "transmission_id": "ignored"}
         )
         fabricated_proposal = TransmissionProposal.model_validate(
-            fabricated.model_dump(exclude={"transmission_id", "hop", "root_signal_fact_ids"})
+            fabricated.model_dump(exclude={"transmission_id", "hop", "root_signal_fact_ids", "path_score"})
         )
         rejected = InvestmentReasoningEngine.validate_round(
             context, accepted[:-1], TransmissionBatch(proposals=[fabricated_proposal]), round_number=3
@@ -797,7 +890,7 @@ class InvestmentWorkflowShapeTest(unittest.TestCase):
     def test_http_natural_language_contract_is_owned_by_prepare_not_workflow_input_schema(self) -> None:
         workflow = _seed_workflow(cast(Agent, object()), cast(Agent, object()))
 
-        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 7)
+        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 8)
         self.assertIsNone(workflow.input_schema)
         self.assertIs(cast(list[Step], workflow.steps)[0].executor, prepare_investment_context)
 
@@ -1152,7 +1245,7 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result.review.accepted)
         self.assertIn("ASSESSMENT_REFERENCE_OUTSIDE_CONTEXT", ";".join(result.review.issue_codes))
 
-    async def test_reviewer_rejection_is_advisory_after_deterministic_lineage_gate(self) -> None:
+    async def test_reviewer_rejection_blocks_when_runtime_cannot_repair(self) -> None:
         state = self._finalization_state(
             assessment_layers=(ImpactLayer.GEOPOLITICAL, ImpactLayer.MACRO_ECONOMIC, ImpactLayer.INDUSTRY),
             include_transmission=True,
@@ -1176,8 +1269,8 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
 
         result = cast(ReviewedInvestmentState, output.content).analysis
         reviewer.assert_awaited_once_with(state)
-        self.assertEqual(result.status, "SUCCEEDED")
-        self.assertTrue(result.review.accepted)
+        self.assertEqual(result.status, "NEEDS_REVIEW")
+        self.assertFalse(result.review.accepted)
         self.assertTrue(result.geopolitical.assessments)
         self.assertTrue(result.macro.assessments)
         self.assertTrue(result.industry.assessments)
@@ -1185,6 +1278,42 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(
             {"LAYER_ASSESSMENT", "TRANSMISSION"}.intersection(item.node_type for item in result.reasoning_tree)
         )
+
+    async def test_reviewer_runs_one_repair_and_rechecks_the_same_frozen_state(self) -> None:
+        state = self._finalization_state(
+            assessment_layers=(ImpactLayer.GEOPOLITICAL, ImpactLayer.MACRO_ECONOMIC, ImpactLayer.INDUSTRY),
+            include_transmission=True,
+        )
+        first = ReviewResult(
+            accepted=False,
+            confidence=Confidence.LOW,
+            issue_codes=["REASONING_INCONSISTENCY"],
+            review_summary="节点与链级方向冲突。",
+        )
+        second = ReviewResult(
+            accepted=True,
+            confidence=Confidence.MEDIUM,
+            issue_codes=[],
+            review_summary="返工后方向一致。",
+        )
+        runtime = SimpleNamespace(
+            review=AsyncMock(side_effect=[first, second]),
+            repair=AsyncMock(return_value=state),
+        )
+        configure_investment_workflow_runtime(runtime)
+        try:
+            output = await review_and_finalize(
+                StepInput(previous_step_content=state),
+                self._run_context("run-review-repair"),
+            )
+        finally:
+            configure_investment_workflow_runtime(None)
+
+        result = cast(ReviewedInvestmentState, output.content).analysis
+        self.assertEqual(runtime.review.await_count, 2)
+        runtime.repair.assert_awaited_once_with(state, first)
+        self.assertEqual(result.status, "SUCCEEDED")
+        self.assertTrue(result.review.accepted)
 
     async def test_invalid_reviewer_output_blocks_report_generation(self) -> None:
         state = self._finalization_state(assessment_layers=(ImpactLayer.GEOPOLITICAL,))
