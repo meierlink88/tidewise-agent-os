@@ -979,6 +979,45 @@ class LocalTransmissionSemanticReviewTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reviewed.accepted[0].logic, repaired.logic)
         self.assertIn("LOCAL_SEMANTIC_REPAIRED:1", reviewed.limitations)
 
+    def test_cross_layer_proposal_that_rejects_its_own_mechanism_is_not_published(self) -> None:
+        fixture = LayerAssessmentContractTest()
+        fixture.setUp()
+        context = fixture._layer_context(ImpactLayer.MACRO_ECONOMIC)
+        source = InvestmentReasoningEngine.build_layer_assessments(
+            fixture._layer_context(ImpactLayer.GEOPOLITICAL),
+            fixture._geo_batch(),
+            layer=ImpactLayer.GEOPOLITICAL,
+        )[0]
+        target = source.model_copy(
+            update={
+                "assessment_id": "assessment-macro-self-rejected",
+                "layer": ImpactLayer.MACRO_ECONOMIC,
+                "anchor_id": fixture.macro_anchor.business_id,
+                "anchor_name": fixture.macro_anchor.name,
+                "anchor_type": "MacroEconomic",
+                "summary": "通胀预期上升。",
+            }
+        )
+        proposal = CrossLayerTransmissionProposal(
+            source_assessment_id=source.assessment_id,
+            target_assessment_id=target.assessment_id,
+            mechanism_fact_ids=[fixture.mechanism.uuid],
+            logic="当前缺少必要中间环节，因此该机制不成立。",
+            confidence=Confidence.LOW,
+            status="仅保留为背景说明。",
+        )
+
+        result = InvestmentReasoningEngine.validate_cross_layer_batch(
+            context,
+            [source],
+            [target],
+            CrossLayerTransmissionBatch(proposals=[proposal]),
+        )
+
+        self.assertEqual(result.accepted, [])
+        self.assertEqual(len(result.candidates), 1)
+        self.assertIn("尚未成立", result.candidates[0].reason)
+
     async def test_invalid_layer_summary_degrades_to_deterministic_assessment_distribution(self) -> None:
         fixture = LayerAssessmentContractTest()
         fixture.setUp()

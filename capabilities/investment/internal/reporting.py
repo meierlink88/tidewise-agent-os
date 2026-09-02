@@ -57,11 +57,11 @@ class ReportNotPublishable(ValueError):
 
 
 _INTERNAL_ID_PATTERN = re.compile(
-    r"\b(?:TX|ASSESS|SIG|EVT|IGE|XLT|TC|CND|ICH)-?[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*\b",
+    r"(?<![A-Za-z0-9_])(?:TX|ASSESS|SIG|EVT|IGE|XLT|TC|CND|ICH)-?[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*(?![A-Za-z0-9_])",
     re.IGNORECASE,
 )
 _UUID_PATTERN = re.compile(
-    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+    r"(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-f])",
     re.IGNORECASE,
 )
 _REPORT_TERM_REPLACEMENTS = {
@@ -103,7 +103,12 @@ def _humanize_report_text(value: str) -> str:
     ):
         text = text.replace(source, target)
     for source, target in _REPORT_TERM_REPLACEMENTS.items():
-        text = re.sub(rf"\b{re.escape(source)}\b", target, text, flags=re.IGNORECASE)
+        text = re.sub(
+            rf"(?<![A-Za-z0-9_]){re.escape(source)}(?![A-Za-z0-9_])",
+            target,
+            text,
+            flags=re.IGNORECASE,
+        )
     text = _INTERNAL_ID_PATTERN.sub("", text)
     text = _UUID_PATTERN.sub("", text)
     text = re.sub(r"(?:根据)?父路径\s*[,，:]?", "根据上一环节的传导，", text)
@@ -428,7 +433,7 @@ class InvestmentReportAssembler:
                         input=_humanize_report_text(assessment.summary),
                         mechanism=_humanize_report_text(assessment.reasoning),
                         output=f"{assessment.anchor_name}：{self._assessment_state(assessment, fact_by_id)}",
-                        type="Event → Signal → 锚点评估",
+                        type="事件 → 变量信号 → 锚点评估",
                         confidence=_confidence(assessment.confidence),
                         evidence_refs=_refs(assessment_evidence),
                     )
@@ -471,7 +476,7 @@ class InvestmentReportAssembler:
                 counterevidence=None,
                 evidence_gap=None,
                 boundary="仅纳入具有真实图谱锚点和受控谱系的结论。",
-                reversal_condition="若根 Signal 失效、方向反转或机制事实被否定，则修正本层结论。",
+                reversal_condition="若根变量信号失效、方向反转或机制事实被否定，则修正本层结论。",
                 checkpoints=[],
             ),
             evidence_refs=_refs(all_evidence),
@@ -706,7 +711,7 @@ class InvestmentReportAssembler:
                             nodes,
                             node_membership_counts,
                         ),
-                        stop_condition="若根 Signal 失效、方向反转或链语境不成立，则关闭或修正本链结论。",
+                        stop_condition="若根变量信号失效、方向反转或链语境不成立，则关闭或修正本链结论。",
                         checkpoints=[],
                     ),
                 )
@@ -791,7 +796,7 @@ class InvestmentReportAssembler:
             parts.append("上述传导为经路径评分筛选的推理假设，仍需目标节点的订单、价格、产能或经营数据验证")
             parts.append("未被推导的相邻节点继续作为 Evidence Gap")
         elif pending:
-            parts.append("同链相邻节点缺少直接 Variable Signal 与经营观测")
+            parts.append("同链相邻节点缺少直接变量信号与经营观测")
         if not parts:
             parts.append("本期未形成独立反证或额外 Evidence Gap")
         return "；".join(parts) + "。"

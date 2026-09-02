@@ -412,7 +412,7 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
         uncertainty = artifact.content.industry_chains[0].uncertainty.counterevidence_and_gap or ""
 
         self.assertIn("订单取消会削弱需求结论", uncertainty)
-        self.assertIn("同链相邻节点缺少直接 Variable Signal 与经营观测", uncertainty)
+        self.assertIn("同链相邻节点缺少直接变量信号与经营观测", uncertainty)
         self.assertNotIn("NO_SIGNAL_LINEAGE", uncertainty)
 
     def test_report_rebuilds_reader_facing_node_reasoning_without_audit_tokens(self) -> None:
