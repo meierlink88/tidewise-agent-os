@@ -73,7 +73,7 @@ from capabilities.investment.functions import (
 )
 from capabilities.investment.internal.context import InvestmentContextBuilder
 from capabilities.investment.internal.engine import InvestmentReasoningEngine
-from capabilities.investment.internal.local_runtime import LocalInvestmentWorkflowRuntime, _payload
+from capabilities.investment.internal.local_runtime import LocalInvestmentWorkflowRuntime, _bounded_text, _payload
 from capabilities.investment.internal.storage import write_conclusion_artifact
 from sematica.graphiti.investment import GraphitiInvestmentReader
 from workflows.investment_reasoning import (
@@ -917,6 +917,26 @@ class InvestmentWorkflowShapeTest(unittest.TestCase):
         self.assertEqual(parsed.question, message)
         self.assertEqual(parsed.event_window_hours, 72)
         self.assertFalse(parsed.include_company)
+
+    def test_validation_run_can_request_one_year_of_event_history(self) -> None:
+        parsed = InvestmentReasoningInput.model_validate(
+            {
+                "question": "重放历史 Event 并验证投研推理。",
+                "event_window_hours": 24 * 365,
+                "include_company": False,
+            }
+        )
+
+        self.assertEqual(parsed.event_window_hours, 8760)
+
+    def test_overlong_transmission_stop_reason_is_tolerantly_truncated(self) -> None:
+        parsed = _payload(
+            SimpleNamespace(content={"proposals": [], "stopped_reason": "证据不足" * 200}),
+            TransmissionBatch,
+        )
+
+        self.assertEqual(len(parsed.stopped_reason or ""), 500)
+        self.assertEqual(len(_bounded_text("A" * 900, limit=500) or ""), 500)
 
     def test_workflow_has_six_fixed_business_stages(self) -> None:
         workflow = _seed_workflow(cast(Agent, object()), cast(Agent, object()))

@@ -73,6 +73,12 @@ def _string_list(value: Any, *, limit: int) -> list[str]:
     return [item for item in value if isinstance(item, str) and item.strip()][:limit]
 
 
+def _bounded_text(value: Any, *, limit: int, fallback: str | None = None) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return fallback
+    return value.strip()[:limit]
+
+
 def _tolerant_payload[ModelT: BaseModel](value: Any, model: type[ModelT]) -> ModelT:
     """Keep valid semantic items and degrade malformed model output instead of aborting a run."""
 
@@ -116,12 +122,15 @@ def _tolerant_payload[ModelT: BaseModel](value: Any, model: type[ModelT]) -> Mod
     if model is TransmissionBatch:
         transmission_proposals, _ = _valid_items(raw.get("proposals"), TransmissionProposal)
         stopped_reason = raw.get("stopped_reason")
+        normalized_stopped_reason = _bounded_text(
+            stopped_reason,
+            limit=500,
+            fallback="LLM_OUTPUT_ITEM_REJECTED",
+        )
         return model.model_validate(
             {
                 "proposals": [item.model_dump(mode="json") for item in transmission_proposals],
-                "stopped_reason": stopped_reason
-                if isinstance(stopped_reason, str) and stopped_reason.strip()
-                else "LLM_OUTPUT_ITEM_REJECTED",
+                "stopped_reason": normalized_stopped_reason,
             }
         )
     if model is CrossLayerTransmissionBatch:
@@ -451,7 +460,10 @@ class LocalInvestmentWorkflowRuntime:
         batches = await asyncio.gather(*calls) if calls else []
         return TransmissionBatch(
             proposals=[proposal for batch in batches for proposal in batch.proposals],
-            stopped_reason=";".join(batch.stopped_reason for batch in batches if batch.stopped_reason) or None,
+            stopped_reason=_bounded_text(
+                ";".join(batch.stopped_reason for batch in batches if batch.stopped_reason),
+                limit=500,
+            ),
         )
 
     async def _synthesize(

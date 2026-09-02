@@ -10,6 +10,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+MAX_EVENT_WINDOW_HOURS = 24 * 365
+
 
 class FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -55,7 +57,7 @@ class InvestmentReasoningInput(FrozenModel):
     """Schedule-owned proposition accepted directly by the Workflow."""
 
     question: str = Field(min_length=1, max_length=2000)
-    event_window_hours: int = Field(default=48, ge=1, le=720)
+    event_window_hours: int = Field(default=48, ge=1, le=MAX_EVENT_WINDOW_HOURS)
     include_company: Literal[False] = False
 
     @model_validator(mode="before")
@@ -448,7 +450,7 @@ class InvestmentConclusionArtifact(InvestmentAnalysisResult):
     artifact_path: str = Field(min_length=1, max_length=4096)
     decision_at: datetime
     question: str = Field(min_length=1, max_length=2000)
-    event_window_hours: int = Field(ge=1, le=720)
+    event_window_hours: int = Field(ge=1, le=MAX_EVENT_WINDOW_HOURS)
     conclusion_status: Literal["SUPPORTED", "INSUFFICIENT_EVIDENCE"]
 
     @field_validator("decision_at")

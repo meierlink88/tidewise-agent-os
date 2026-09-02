@@ -28,7 +28,7 @@ Event 进入 Graphiti 前后的分类、锚点匹配和直接 Signal Fact 构建
 }
 ```
 
-Agno 的 HTTP 层在配置 Workflow `input_schema` 时会先把原始 message 当 JSON 解码，因此本 Workflow 不在 Agno 入口声明 `input_schema`，而由第一个确定性 Function 把原始自然语言或 JSON 统一校验为 `InvestmentReasoningInput`。该合同必须拒绝未知字段和 `include_company=true`。为迁移现有本地 Schedule，可在一个兼容周期内接受包含明确“最近 N 小时”的旧中文 message；不得静默使用另一个隐藏时间窗。`decision_at`、产业链上限、检索预算和最多三跳由确定性代码控制，不接受 Schedule 覆盖。
+Agno 的 HTTP 层在配置 Workflow `input_schema` 时会先把原始 message 当 JSON 解码，因此本 Workflow 不在 Agno 入口声明 `input_schema`，而由第一个确定性 Function 把原始自然语言或 JSON 统一校验为 `InvestmentReasoningInput`。该合同必须拒绝未知字段和 `include_company=true`。为迁移现有本地 Schedule，可在一个兼容周期内接受包含明确“最近 N 小时”的旧中文 message；不得静默使用另一个隐藏时间窗。`decision_at`、产业链上限、检索预算和最多三跳由确定性代码控制，不接受 Schedule 覆盖。`event_window_hours` 最大支持 8760 小时，便于对同一历史 Event 范围做确定性重放；生产 Schedule 仍由 Control Panel 显式保持 48 小时等日常窗口。
 
 ## 固定五步
 
