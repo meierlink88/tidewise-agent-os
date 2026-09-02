@@ -19,7 +19,7 @@ from capabilities.investment.functions import (
 from db import get_postgres_db
 
 INVESTMENT_REASONING_WORKFLOW_ID = "investment-reasoning"
-INVESTMENT_REASONING_CONTRACT_VERSION = 9
+INVESTMENT_REASONING_CONTRACT_VERSION = 10
 INVESTMENT_REASONING_DESCRIPTION = (
     "Freezes the Schedule Event window, analyzes geopolitical and macro impacts in sequence, "
     "then loads all Signal-rooted industry topology for bounded node transmission, reviews lineage, "

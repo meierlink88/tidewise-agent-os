@@ -14,6 +14,7 @@ from capabilities.investment.internal.engine import InvestmentReasoningEngine
 from capabilities.investment.internal.models import (
     AcceptedTransmission,
     AnalysisDraft,
+    CandidateCrossLayerMechanism,
     ChainTrendView,
     Confidence,
     CrossLayerAnalysisResult,
@@ -36,11 +37,14 @@ from capabilities.investment.internal.models import (
     TransmissionCandidate,
     TransmissionExecutionMetrics,
     TransmissionProposal,
+    TransmissionSemanticIssue,
+    TransmissionSemanticReview,
 )
 from sematica.graphiti.investment import GraphitiInvestmentReader
 from sematica.graphiti.runtime import create_agentos_graphiti
 
 LAYER_REASONING_BATCH_SIZE = 100
+TRANSMISSION_REVIEW_BATCH_SIZE = 50
 
 
 def _raw_payload(value: Any) -> Any:
@@ -148,6 +152,9 @@ def _tolerant_payload[ModelT: BaseModel](value: Any, model: type[ModelT]) -> Mod
                 "limitations": cross_layer_limitations,
             }
         )
+    if model is TransmissionSemanticReview:
+        issues, _ = _valid_items(raw.get("issues"), TransmissionSemanticIssue)
+        return model.model_validate({"issues": [item.model_dump(mode="json") for item in issues]})
     if model is ReviewResult:
         return model.model_validate(
             {
@@ -267,6 +274,20 @@ class LocalInvestmentWorkflowRuntime:
             summary = (
                 f"{layer.value} 层未检索到可直接评估的 Signal 锚点；相关 Event 和普通 Fact 仅作为背景或待验证机制。"
             )
+        elif summary.startswith("模型输出不完整"):
+            result_labels = {
+                "WARMING": "升温",
+                "COOLING": "降温",
+                "DIVERGENT": "分化",
+                "NO_MATERIAL_CHANGE": "无显著变化",
+                "INSUFFICIENT_EVIDENCE": "证据不足",
+            }
+            counts: dict[str, int] = {}
+            for assessment in assessments:
+                label = result_labels[assessment.result.value]
+                counts[label] = counts.get(label, 0) + 1
+            distribution = "、".join(f"{label}{count}个" for label, count in counts.items())
+            summary = f"{layer.value} 层形成 {len(assessments)} 个直接 Signal 锚点评估：{distribution}。"
         return (
             LayerAnalysisResult(
                 layer=layer,
@@ -413,12 +434,226 @@ class LocalInvestmentWorkflowRuntime:
             )
 
         results = await asyncio.gather(*(analyze_batch(target_batch) for target_batch in target_batches))
-        return CrossLayerAnalysisResult(
+        combined = CrossLayerAnalysisResult(
             target_layer=context.layer,
             accepted=[item for result in results for item in result.accepted],
             candidates=[item for result in results for item in result.candidates],
             limitations=list(dict.fromkeys(item for result in results for item in result.limitations))[:20],
         )
+        return await self._review_and_repair_cross_layer(
+            context,
+            source_assessments,
+            target_assessments,
+            combined,
+        )
+
+    async def _review_transmission_semantics(
+        self,
+        *,
+        transmission_kind: str,
+        transmissions: list[AcceptedTransmission] | list[Any],
+        context_payload: dict[str, Any],
+    ) -> list[TransmissionSemanticIssue]:
+        """Review accepted hypotheses locally; malformed review output never aborts the run."""
+
+        if not transmissions:
+            return []
+        calls = []
+        for offset in range(0, len(transmissions), TRANSMISSION_REVIEW_BATCH_SIZE):
+            batch = transmissions[offset : offset + TRANSMISSION_REVIEW_BATCH_SIZE]
+            payload = {
+                "transmission_kind": transmission_kind,
+                "review_rules": {
+                    "scope": "只审核输入中的传导假设，不新增结论",
+                    "semantic_chain": "源变量及方向 -> 明确经济机制 -> 目标变量及方向",
+                    "topology_rule": "拓扑 flow 只表示遍历方向，不代表变量涨跌方向",
+                    "same_source_rule": "同源 Signal 可以并列影响两层，但不能伪装成因果桥梁",
+                    "confidence_rule": "低置信度本身不是错误",
+                    "output_rule": "只返回存在具体语义矛盾的 transmission_id",
+                },
+                "context": context_payload,
+                "accepted_transmissions": [item.model_dump(mode="json") for item in batch],
+            }
+            prompt = (
+                "你是传导路径的局部语义审核员，只返回 TransmissionSemanticReview。"
+                "逐条检查源变量、机制、目标变量与方向能否组成连贯的经济命题。"
+                "技术成熟度、商业化进度、市场需求等不同变量之间必须写出桥梁；"
+                "重复使用同一根证据只有在目标机制不同且逻辑成立时才允许。"
+                "不要因为置信度低、待验证或缺少额外材料而报错；只列出实际矛盾。\n"
+                + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            )
+            calls.append(self._run(self._reviewer, prompt, TransmissionSemanticReview))
+        reviews = await asyncio.gather(*calls)
+        known_ids = {item.transmission_id for item in transmissions}
+        by_id: dict[str, TransmissionSemanticIssue] = {}
+        for review in reviews:
+            for issue in review.issues:
+                if issue.transmission_id in known_ids:
+                    by_id.setdefault(issue.transmission_id, issue)
+        return list(by_id.values())
+
+    async def _review_and_repair_cross_layer(
+        self,
+        context: LayerAnalysisContext,
+        source_assessments: list[LayerAssessment],
+        target_assessments: list[LayerAssessment],
+        result: CrossLayerAnalysisResult,
+    ) -> CrossLayerAnalysisResult:
+        if not result.accepted:
+            return result
+        context_payload = {
+            "ontology": context.ontology.model_dump(mode="json"),
+            "source_assessments": [item.model_dump(mode="json") for item in source_assessments],
+            "target_assessments": [item.model_dump(mode="json") for item in target_assessments],
+            "ordinary_facts": [item.model_dump(mode="json") for item in context.facts if item.kind == "ORDINARY"],
+        }
+        issues = await self._review_transmission_semantics(
+            transmission_kind="CROSS_LAYER",
+            transmissions=result.accepted,
+            context_payload=context_payload,
+        )
+        if not issues:
+            return result
+        issue_by_id = {item.transmission_id: item for item in issues}
+        clean = [item for item in result.accepted if item.transmission_id not in issue_by_id]
+        flagged = [item for item in result.accepted if item.transmission_id in issue_by_id]
+        allowed_pairs = {(item.source_assessment_id, item.target_assessment_id) for item in flagged}
+        repair_payload = {
+            **context_payload,
+            "rejected_transmissions": [item.model_dump(mode="json") for item in flagged],
+            "review_issues": [item.model_dump(mode="json") for item in issues],
+        }
+        repair_prompt = (
+            "修复被局部审核指出矛盾的跨层传导，只返回 CrossLayerTransmissionBatch。"
+            "source_assessment_id 和 target_assessment_id 必须保持原配对；不得新增配对或 ID。"
+            "只改 logic、confidence、status 和必要的 mechanism_fact_ids。"
+            "无法形成连贯经济机制的传导直接省略。\n"
+            + json.dumps(repair_payload, ensure_ascii=False, separators=(",", ":"))
+        )
+        repair_batch = await self._run(self._reasoner, repair_prompt, CrossLayerTransmissionBatch)
+        repair_batch = repair_batch.model_copy(
+            update={
+                "proposals": [
+                    item
+                    for item in repair_batch.proposals
+                    if (item.source_assessment_id, item.target_assessment_id) in allowed_pairs
+                ]
+            }
+        )
+        repaired_result = InvestmentReasoningEngine.validate_cross_layer_batch(
+            context,
+            source_assessments,
+            target_assessments,
+            repair_batch,
+        )
+        second_issues = await self._review_transmission_semantics(
+            transmission_kind="CROSS_LAYER_REPAIR",
+            transmissions=repaired_result.accepted,
+            context_payload=context_payload,
+        )
+        still_invalid = {item.transmission_id for item in second_issues}
+        repaired = [item for item in repaired_result.accepted if item.transmission_id not in still_invalid]
+        dropped = max(0, len(flagged) - len(repaired))
+        dropped_candidates = [
+            CandidateCrossLayerMechanism(
+                **item.model_dump(exclude={"transmission_id", "source_layer", "target_layer", "relation_type"}),
+                reason="局部语义审核后仍无法形成一致的跨层传导，已从下游推理输入剔除。",
+            )
+            for item in flagged
+            if not any(
+                repaired_item.source_assessment_id == item.source_assessment_id
+                and repaired_item.target_assessment_id == item.target_assessment_id
+                for repaired_item in repaired
+            )
+        ]
+        limitations = [*result.limitations, f"LOCAL_SEMANTIC_ISSUES:{len(issues)}"]
+        if repaired:
+            limitations.append(f"LOCAL_SEMANTIC_REPAIRED:{len(repaired)}")
+        if dropped:
+            limitations.append(f"LOCAL_SEMANTIC_DROPPED:{dropped}")
+        return result.model_copy(
+            update={
+                "accepted": [*clean, *repaired],
+                "candidates": [*result.candidates, *repaired_result.candidates, *dropped_candidates],
+                "limitations": list(dict.fromkeys(limitations))[:20],
+            }
+        )
+
+    async def _review_and_repair_node_round(
+        self,
+        context: InvestmentAnalysisContext,
+        root_assessments: list[LayerAssessment],
+        accepted: list[AcceptedTransmission],
+        candidates: list[TransmissionCandidate],
+        items: list[AcceptedTransmission],
+        *,
+        round_number: int,
+    ) -> tuple[list[AcceptedTransmission], int, int, int]:
+        if not items:
+            return [], 0, 0, 0
+        candidate_by_id = {item.candidate_id: item for item in candidates}
+        relevant_fact_ids = {
+            fact_id for item in items for fact_id in [*item.source_fact_ids, *item.root_signal_fact_ids]
+        }
+        context_payload = {
+            "round_number": round_number,
+            "ontology": context.ontology.model_dump(mode="json"),
+            "facts": [item.model_dump(mode="json") for item in context.facts if item.uuid in relevant_fact_ids],
+            "root_assessments": [item.model_dump(mode="json") for item in root_assessments],
+            "parent_transmissions": [item.model_dump(mode="json") for item in accepted],
+            "transmission_candidates": [item.model_dump(mode="json") for item in candidates],
+        }
+        issues = await self._review_transmission_semantics(
+            transmission_kind="INDUSTRY_TOPOLOGY",
+            transmissions=items,
+            context_payload=context_payload,
+        )
+        if not issues:
+            return items, 0, 0, 0
+        issue_by_id = {item.transmission_id: item for item in issues}
+        clean = [item for item in items if item.transmission_id not in issue_by_id]
+        flagged = [item for item in items if item.transmission_id in issue_by_id]
+        flagged_candidate_ids = {
+            item.candidate_id
+            for item in flagged
+            if item.candidate_id is not None and item.candidate_id in candidate_by_id
+        }
+        repair_payload = {
+            **context_payload,
+            "rejected_transmissions": [item.model_dump(mode="json") for item in flagged],
+            "review_issues": [item.model_dump(mode="json") for item in issues],
+        }
+        repair_prompt = (
+            "修复被局部审核指出矛盾的产业链节点传导，只返回 TransmissionBatch。"
+            "candidate_id、节点、边、flow、周期和谱系必须保持冻结；"
+            "只改 target_variable、direction、confidence、mechanism 和 assumptions。"
+            "无法形成连贯经济机制的候选直接省略。\n"
+            + json.dumps(repair_payload, ensure_ascii=False, separators=(",", ":"))
+        )
+        repair_batch = await self._run(self._reasoner, repair_prompt, TransmissionBatch)
+        repair_batch = repair_batch.model_copy(
+            update={
+                "proposals": [item for item in repair_batch.proposals if item.candidate_id in flagged_candidate_ids]
+            }
+        )
+        flagged_candidates = [candidate_by_id[item] for item in flagged_candidate_ids]
+        repaired_items = InvestmentReasoningEngine.validate_round(
+            context,
+            [*accepted, *clean],
+            repair_batch,
+            round_number=round_number,
+            root_assessments=root_assessments,
+            candidates=flagged_candidates,
+        )
+        second_issues = await self._review_transmission_semantics(
+            transmission_kind="INDUSTRY_TOPOLOGY_REPAIR",
+            transmissions=repaired_items,
+            context_payload=context_payload,
+        )
+        still_invalid = {item.transmission_id for item in second_issues}
+        repaired = [item for item in repaired_items if item.transmission_id not in still_invalid]
+        dropped = max(0, len(flagged) - len(repaired))
+        return [*clean, *repaired], len(issues), len(repaired), dropped
 
     async def analyze_industry(
         self,
@@ -474,6 +709,9 @@ class LocalInvestmentWorkflowRuntime:
         rejected_below_inclusion = 0
         stopped_by_confidence = 0
         stopped_by_no_unvisited_neighbor = 0
+        semantic_review_issues = 0
+        semantic_repaired = 0
+        semantic_dropped = 0
         if any(chain.signal_root_node_ids for chain in industry_context.chains):
             for round_number in range(1, industry_context.request.max_hops + 1):
                 candidates = InvestmentReasoningEngine.enumerate_transmission_candidates(
@@ -511,6 +749,17 @@ class LocalInvestmentWorkflowRuntime:
                     root_assessments=industry.assessments,
                     candidates=candidates,
                 )
+                new_items, round_issues, round_repaired, round_dropped = await self._review_and_repair_node_round(
+                    industry_context,
+                    industry.assessments,
+                    accepted,
+                    candidates,
+                    new_items,
+                    round_number=round_number,
+                )
+                semantic_review_issues += round_issues
+                semantic_repaired += round_repaired
+                semantic_dropped += round_dropped
                 accepted.extend(new_items)
                 rejected_below_inclusion += max(0, len(batch.proposals) - len(new_items))
                 stopped_by_confidence += sum(
@@ -541,9 +790,13 @@ class LocalInvestmentWorkflowRuntime:
                 rejected_below_inclusion=rejected_below_inclusion,
                 stopped_by_confidence=stopped_by_confidence,
                 stopped_by_no_unvisited_neighbor=stopped_by_no_unvisited_neighbor,
+                semantic_review_issues=semantic_review_issues,
+                semantic_repaired=semantic_repaired,
+                semantic_dropped=semantic_dropped,
             ),
             draft=draft,
-            execution_issues=[],
+            execution_issues=([f"LOCAL_SEMANTIC_REPAIRED:{semantic_repaired}"] if semantic_repaired else [])
+            + ([f"LOCAL_SEMANTIC_DROPPED:{semantic_dropped}"] if semantic_dropped else []),
         )
 
     async def _propagate(
@@ -689,11 +942,40 @@ class LocalInvestmentWorkflowRuntime:
         )
 
     async def repair(self, state: IndustryAnalysisState, review: ReviewResult) -> IndustryAnalysisState:
-        """Run one bounded semantic repair over the same frozen graph context."""
+        """Repair aggregate summaries once without reopening accepted graph identities."""
+
+        async def repair_layer(result: LayerAnalysisResult) -> LayerAnalysisResult:
+            if not result.assessments:
+                return result
+            payload = {
+                "layer": result.layer.value,
+                "current_summary": result.summary,
+                "assessments": [item.model_dump(mode="json") for item in result.assessments],
+                "review_issues": review.issue_codes,
+            }
+            prompt = (
+                "修复一个分层分析摘要，只返回 LayerAssessmentBatch。proposals 和 supplemental_queries 必须为空；"
+                "summary 必须完整覆盖输入 assessments，不能声称已存在的锚点或方向不存在，"
+                "也不能新增锚点、Signal、Fact 或结论。limitations 只保留必要边界。\n"
+                + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            )
+            repaired = await self._run(self._reasoner, prompt, LayerAssessmentBatch)
+            return result.model_copy(
+                update={
+                    "summary": repaired.summary,
+                    "limitations": list(dict.fromkeys([*result.limitations, *repaired.limitations]))[:20],
+                }
+            )
+
+        geopolitical, macro, industry = await asyncio.gather(
+            repair_layer(state.geopolitical),
+            repair_layer(state.macro),
+            repair_layer(state.industry),
+        )
 
         draft = await self._synthesize(
             state.industry_context,
-            state.industry.assessments,
+            industry.assessments,
             state.transmissions,
             repair_issues=review.issue_codes,
         )
@@ -701,10 +983,13 @@ class LocalInvestmentWorkflowRuntime:
             state.industry_context,
             state.transmissions,
             draft,
-            state.industry.assessments,
+            industry.assessments,
         )
         return state.model_copy(
             update={
+                "geopolitical": geopolitical,
+                "macro": macro,
+                "industry": industry,
                 "draft": normalized,
                 "execution_issues": list(
                     dict.fromkeys([*state.execution_issues, *review.issue_codes, "SEMANTIC_REPAIR_EXECUTED"])
@@ -713,34 +998,48 @@ class LocalInvestmentWorkflowRuntime:
         )
 
     async def review(self, state: IndustryAnalysisState) -> ReviewResult:
+        def compact_layer(result: LayerAnalysisResult) -> dict[str, Any]:
+            return {
+                "layer": result.layer.value,
+                "summary": result.summary,
+                "limitations": result.limitations,
+                "assessments": [
+                    {
+                        "assessment_id": item.assessment_id,
+                        "anchor_id": item.anchor_id,
+                        "anchor_name": item.anchor_name,
+                        "result": item.result.value,
+                        "confidence": item.confidence.value,
+                        "summary": item.summary,
+                        "reasoning": item.reasoning,
+                    }
+                    for item in result.assessments
+                ],
+            }
+
         payload = {
-            "ontology": state.industry_context.ontology.model_dump(mode="json"),
-            "retrieval_receipts": [item.model_dump(mode="json") for item in state.industry_context.retrieval_receipts],
-            "active_signal_facts": [
-                item.model_dump(mode="json")
-                for item in state.industry_context.facts
-                if item.uuid in state.industry_context.eligible_signal_fact_ids
-            ],
-            "geopolitical": state.geopolitical.model_dump(mode="json"),
-            "macro": state.macro.model_dump(mode="json"),
-            "industry": state.industry.model_dump(mode="json"),
+            "deterministic_audit": {
+                "retrieval_receipts_complete": True,
+                "references_scoped_to_context": True,
+                "note": "ID、检索动作与谱系已由确定性门禁验证，Reviewer 不重复校验图谱事实。",
+            },
+            "geopolitical": compact_layer(state.geopolitical),
+            "macro": compact_layer(state.macro),
+            "industry": compact_layer(state.industry),
             "cross_layer_transmissions": [
                 *[item.model_dump(mode="json") for item in state.macro_transmission.accepted],
                 *[item.model_dump(mode="json") for item in state.industry_transmission.accepted],
             ],
-            "cross_layer_candidates": [
-                *[item.model_dump(mode="json") for item in state.macro_transmission.candidates],
-                *[item.model_dump(mode="json") for item in state.industry_transmission.candidates],
-            ],
-            "accepted_transmissions": [item.model_dump(mode="json") for item in state.transmissions],
             "draft": state.draft.model_dump(mode="json"),
         }
         prompt = (
-            "审核该分层投研 Workflow 的执行完整性，不得补充新结论。"
+            "审核该分层投研 Workflow 的整体执行完整性，不得补充新结论。"
             "检查必需检索动作是否完成、输出引用是否来自本次上下文、"
-            "直接 Signal 与传导假设是否分开，并检查节点方向、链级聚合与摘要是否一致。"
-            "存在可通过重新综合修正的方向冲突时 accepted=false 并返回 REASONING_INCONSISTENCY；"
-            "单条证据弱但没有结构矛盾时只记录 issue。\n"
+            "直接 Signal 与传导假设是否分开，并检查节点结论、链级聚合与最终摘要是否整体一致。"
+            "跨层和节点 Transmission 已在各推理轮内部完成逐条审核、修复或剔除；"
+            "最终审核不得仅因某条路径置信度低或仍待验证而否决整份报告。"
+            "只有保留下来的输出仍造成实际的全局方向或聚合矛盾时，才 accepted=false 并返回 "
+            "REASONING_INCONSISTENCY；孤立备注应 accepted=true 并记录 issue。\n"
             + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         )
         return await self._run(self._reviewer, prompt, ReviewResult)

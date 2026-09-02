@@ -46,6 +46,8 @@ from capabilities.investment.internal.models import (
     TransmissionCandidate,
     TransmissionExecutionMetrics,
     TransmissionProposal,
+    TransmissionSemanticIssue,
+    TransmissionSemanticReview,
     Trend,
 )
 
@@ -112,6 +114,8 @@ __all__ = [
     "TransmissionCandidate",
     "TransmissionExecutionMetrics",
     "TransmissionProposal",
+    "TransmissionSemanticIssue",
+    "TransmissionSemanticReview",
     "Trend",
     "configure_investment_workflow_runtime",
     "create_local_investment_workflow_runtime",

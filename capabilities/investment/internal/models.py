@@ -424,6 +424,26 @@ class TransmissionBatch(FrozenModel):
     stopped_reason: str | None = Field(default=None, max_length=500)
 
 
+class TransmissionSemanticIssue(FrozenModel):
+    """One concrete semantic defect attached to an otherwise valid transmission."""
+
+    transmission_id: str = Field(min_length=1, max_length=100)
+    issue_code: Literal[
+        "VARIABLE_TRANSITION_INCONSISTENT",
+        "MECHANISM_DIRECTION_INCONSISTENT",
+        "UNJUSTIFIED_EVIDENCE_REUSE",
+        "OTHER",
+    ]
+    critique: str = Field(min_length=1, max_length=1200)
+    repair_instruction: str = Field(min_length=1, max_length=1200)
+
+
+class TransmissionSemanticReview(FrozenModel):
+    """Sparse local review: only defective transmissions are returned."""
+
+    issues: list[TransmissionSemanticIssue] = Field(default_factory=list, max_length=MAX_RUN_PROPOSALS)
+
+
 class TransmissionExecutionMetrics(FrozenModel):
     inclusion_threshold: float = Field(default=TRANSMISSION_INCLUSION_THRESHOLD, ge=0, le=1)
     continuation_threshold: float = Field(default=TRANSMISSION_CONTINUATION_THRESHOLD, ge=0, le=1)
@@ -433,6 +453,9 @@ class TransmissionExecutionMetrics(FrozenModel):
     rejected_below_inclusion: int = Field(default=0, ge=0)
     stopped_by_confidence: int = Field(default=0, ge=0)
     stopped_by_no_unvisited_neighbor: int = Field(default=0, ge=0)
+    semantic_review_issues: int = Field(default=0, ge=0)
+    semantic_repaired: int = Field(default=0, ge=0)
+    semantic_dropped: int = Field(default=0, ge=0)
 
 
 class NodeTrendView(FrozenModel):

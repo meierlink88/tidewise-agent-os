@@ -32,6 +32,8 @@ from capabilities.investment import (
     ChainNodeSnapshot,
     ChainTrendView,
     Confidence,
+    CrossLayerTransmissionBatch,
+    CrossLayerTransmissionProposal,
     Direction,
     EventSnapshot,
     FactSnapshot,
@@ -60,7 +62,10 @@ from capabilities.investment import (
     ReviewResult,
     TopologyEdgeSnapshot,
     TransmissionBatch,
+    TransmissionCandidate,
     TransmissionProposal,
+    TransmissionSemanticIssue,
+    TransmissionSemanticReview,
     Trend,
     configure_investment_workflow_runtime,
 )
@@ -796,6 +801,166 @@ class LayerAssessmentContractTest(unittest.TestCase):
         self.assertEqual(accepted, [])
 
 
+class LocalTransmissionSemanticReviewTest(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def _node_fixture() -> tuple[
+        InvestmentAnalysisContext,
+        list[TransmissionCandidate],
+        list[AcceptedTransmission],
+        TransmissionProposal,
+    ]:
+        gate = InvestmentReasoningGateTest()
+        fact = gate._active_signal()
+        context = gate._context(fact)
+        candidates = InvestmentReasoningEngine.enumerate_transmission_candidates(
+            context,
+            [],
+            round_number=1,
+        )
+        candidate = candidates[0]
+        proposal = gate._proposal(fact.uuid).proposals[0].model_copy(update={"candidate_id": candidate.candidate_id})
+        accepted = InvestmentReasoningEngine.validate_round(
+            context,
+            [],
+            TransmissionBatch(proposals=[proposal]),
+            round_number=1,
+            candidates=[candidate],
+        )
+        return context, [candidate], accepted, proposal
+
+    async def test_node_transmission_is_repaired_before_it_enters_the_next_round(self) -> None:
+        context, candidates, accepted, proposal = self._node_fixture()
+        issue = TransmissionSemanticIssue(
+            transmission_id=accepted[0].transmission_id,
+            issue_code="VARIABLE_TRANSITION_INCONSISTENT",
+            critique="机制描述的是需求扩张，但目标变量和方向写成供给下降。",
+            repair_instruction="将目标变量改为需求并使用上升方向。",
+        )
+        repaired_proposal = proposal.model_copy(
+            update={
+                "target_variable": "下游需求",
+                "direction": Direction.UP,
+                "mechanism": "上游供给改善降低投入约束，从而释放下游需求。",
+            }
+        )
+        runtime = LocalInvestmentWorkflowRuntime(cast(Any, None), cast(Agent, object()), cast(Agent, object()))
+        runtime._run = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[
+                TransmissionSemanticReview(issues=[issue]),
+                TransmissionBatch(proposals=[repaired_proposal]),
+                TransmissionSemanticReview(),
+            ]
+        )
+
+        clean, issue_count, repaired_count, dropped_count = await runtime._review_and_repair_node_round(
+            context,
+            [],
+            [],
+            candidates,
+            accepted,
+            round_number=1,
+        )
+
+        self.assertEqual((issue_count, repaired_count, dropped_count), (1, 1, 0))
+        self.assertEqual(len(clean), 1)
+        self.assertEqual(clean[0].target_variable, "下游需求")
+        self.assertEqual(clean[0].direction, Direction.UP)
+        self.assertNotEqual(clean[0].transmission_id, accepted[0].transmission_id)
+
+    async def test_node_transmission_still_inconsistent_after_repair_is_dropped(self) -> None:
+        context, candidates, accepted, proposal = self._node_fixture()
+        first_issue = TransmissionSemanticIssue(
+            transmission_id=accepted[0].transmission_id,
+            issue_code="MECHANISM_DIRECTION_INCONSISTENT",
+            critique="机制与方向相反。",
+            repair_instruction="统一机制与方向。",
+        )
+        repaired_proposal = proposal.model_copy(update={"mechanism": "仍然无法解释目标方向。"})
+        repaired = InvestmentReasoningEngine.validate_round(
+            context,
+            [],
+            TransmissionBatch(proposals=[repaired_proposal]),
+            round_number=1,
+            candidates=candidates,
+        )[0]
+        second_issue = first_issue.model_copy(update={"transmission_id": repaired.transmission_id})
+        runtime = LocalInvestmentWorkflowRuntime(cast(Any, None), cast(Agent, object()), cast(Agent, object()))
+        runtime._run = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[
+                TransmissionSemanticReview(issues=[first_issue]),
+                TransmissionBatch(proposals=[repaired_proposal]),
+                TransmissionSemanticReview(issues=[second_issue]),
+            ]
+        )
+
+        clean, issue_count, repaired_count, dropped_count = await runtime._review_and_repair_node_round(
+            context,
+            [],
+            [],
+            candidates,
+            accepted,
+            round_number=1,
+        )
+
+        self.assertEqual(clean, [])
+        self.assertEqual((issue_count, repaired_count, dropped_count), (1, 0, 1))
+
+    async def test_cross_layer_transmission_is_locally_repaired_before_downstream_use(self) -> None:
+        fixture = LayerAssessmentContractTest()
+        fixture.setUp()
+        context = fixture._layer_context(ImpactLayer.MACRO_ECONOMIC)
+        source = InvestmentReasoningEngine.build_layer_assessments(
+            fixture._layer_context(ImpactLayer.GEOPOLITICAL),
+            fixture._geo_batch(),
+            layer=ImpactLayer.GEOPOLITICAL,
+        )[0]
+        target = source.model_copy(
+            update={
+                "assessment_id": "assessment-macro",
+                "layer": ImpactLayer.MACRO_ECONOMIC,
+                "anchor_id": fixture.macro_anchor.business_id,
+                "anchor_name": fixture.macro_anchor.name,
+                "anchor_type": "MacroEconomic",
+                "summary": "通胀预期上升。",
+            }
+        )
+        original = CrossLayerTransmissionProposal(
+            source_assessment_id=source.assessment_id,
+            target_assessment_id=target.assessment_id,
+            mechanism_fact_ids=[fixture.mechanism.uuid],
+            logic="能源风险下降会推高通胀，方向表述矛盾。",
+            confidence=Confidence.MEDIUM,
+            status="已闭合",
+        )
+        result = InvestmentReasoningEngine.validate_cross_layer_batch(
+            context,
+            [source],
+            [target],
+            CrossLayerTransmissionBatch(proposals=[original]),
+        )
+        issue = TransmissionSemanticIssue(
+            transmission_id=result.accepted[0].transmission_id,
+            issue_code="MECHANISM_DIRECTION_INCONSISTENT",
+            critique="能源风险方向和通胀方向之间的逻辑相反。",
+            repair_instruction="改为能源风险上升通过油价推高通胀。",
+        )
+        repaired = original.model_copy(update={"logic": "能源供应风险上升通过油价推高通胀预期。"})
+        runtime = LocalInvestmentWorkflowRuntime(cast(Any, None), cast(Agent, object()), cast(Agent, object()))
+        runtime._run = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[
+                TransmissionSemanticReview(issues=[issue]),
+                CrossLayerTransmissionBatch(proposals=[repaired]),
+                TransmissionSemanticReview(),
+            ]
+        )
+
+        reviewed = await runtime._review_and_repair_cross_layer(context, [source], [target], result)
+
+        self.assertEqual(len(reviewed.accepted), 1)
+        self.assertEqual(reviewed.accepted[0].logic, repaired.logic)
+        self.assertIn("LOCAL_SEMANTIC_REPAIRED:1", reviewed.limitations)
+
+
 class InvestmentWorkflowShapeTest(unittest.TestCase):
     def test_malformed_node_trend_is_normalized_without_aborting_the_workflow(self) -> None:
         raw = SimpleNamespace(
@@ -890,7 +1055,7 @@ class InvestmentWorkflowShapeTest(unittest.TestCase):
     def test_http_natural_language_contract_is_owned_by_prepare_not_workflow_input_schema(self) -> None:
         workflow = _seed_workflow(cast(Agent, object()), cast(Agent, object()))
 
-        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 9)
+        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 10)
         self.assertIsNone(workflow.input_schema)
         self.assertIs(cast(list[Step], workflow.steps)[0].executor, prepare_investment_context)
 

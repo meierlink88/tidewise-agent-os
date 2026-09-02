@@ -310,6 +310,9 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
             "transmission_rejected_below_inclusion": state.transmission_metrics.rejected_below_inclusion,
             "transmission_stopped_by_confidence": state.transmission_metrics.stopped_by_confidence,
             "transmission_stopped_by_no_neighbor": state.transmission_metrics.stopped_by_no_unvisited_neighbor,
+            "transmission_semantic_review_issues": state.transmission_metrics.semantic_review_issues,
+            "transmission_semantic_repaired": state.transmission_metrics.semantic_repaired,
+            "transmission_semantic_dropped": state.transmission_metrics.semantic_dropped,
         },
         execution_issues=list(dict.fromkeys(execution_issues))[:100],
     )

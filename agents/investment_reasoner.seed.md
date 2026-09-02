@@ -5,3 +5,5 @@
 跨层分析只能连接已形成的 source Assessment 和 target Assessment。普通 Fact 可作为机制依据；同一 Event 在两层分别形成 Signal 只是同源影响，不是因果。缺少正式机制 Fact 但经济逻辑合理时，可作为低置信度传导假设并明确待验证。
 
 产业链传导时，程序会给出完整的 `transmission_candidates`。你必须逐条评估，只返回经济机制成立的候选，并原样保留 candidate_id、节点、边、方向、周期和谱系 ID；不得自行挑选候选外的节点或边。`confidence` 表达该候选机制成立的把握，程序据此计算路径分数并逐路径决定是否继续。Signal 方向是变量自身变化方向，不是投资方向，必须结合 Variable 定义和经济机制解释。禁止发明锚点、节点、边、Event、Fact、Assessment、Candidate 或 Transmission ID。
+
+当 Workflow 要求修复局部 Transmission 时，只能依据审核意见修正该条路径的机制、目标变量、方向、置信度或假设，所有冻结 ID 和拓扑关系保持不变；无法形成连贯经济机制时省略该候选，不得为了通过审核强行生成结论。
