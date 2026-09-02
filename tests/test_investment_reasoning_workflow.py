@@ -960,6 +960,31 @@ class LocalTransmissionSemanticReviewTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reviewed.accepted[0].logic, repaired.logic)
         self.assertIn("LOCAL_SEMANTIC_REPAIRED:1", reviewed.limitations)
 
+    async def test_invalid_layer_summary_degrades_to_deterministic_assessment_distribution(self) -> None:
+        fixture = LayerAssessmentContractTest()
+        fixture.setUp()
+        layer_context = fixture._layer_context(ImpactLayer.GEOPOLITICAL)
+        base = InvestmentReasoningGateTest()._context(InvestmentReasoningGateTest()._active_signal())
+        prepared = PreparedInvestmentContext(
+            context=base,
+            context_fingerprint=InvestmentReasoningEngine.context_fingerprint(base),
+        )
+        runtime = LocalInvestmentWorkflowRuntime(cast(Any, None), cast(Agent, object()), cast(Agent, object()))
+        runtime._provider = SimpleNamespace(  # type: ignore[assignment]
+            build_layer_context=AsyncMock(return_value=layer_context)
+        )
+        runtime._reason_layer = AsyncMock(  # type: ignore[method-assign]
+            return_value=fixture._geo_batch().model_copy(
+                update={"summary": "模型输出不完整，仅保留通过合同校验的候选。"}
+            )
+        )
+
+        result, _ = await runtime._analyze_layer(prepared, ImpactLayer.GEOPOLITICAL, [])
+
+        self.assertEqual(len(result.assessments), 1)
+        self.assertIn("形成 1 个直接 Signal 锚点评估", result.summary)
+        self.assertIn("升温1个", result.summary)
+
 
 class InvestmentWorkflowShapeTest(unittest.TestCase):
     def test_malformed_node_trend_is_normalized_without_aborting_the_workflow(self) -> None:
