@@ -8,6 +8,7 @@ from agents.event_identity import EVENT_IDENTITY_AGENT_ID, load_event_identity_a
 from agents.event_signal_analyst import EVENT_SIGNAL_ANALYST_AGENT_ID, load_event_signal_analyst_agent
 from agents.evidence_extractor import EVIDENCE_EXTRACTOR_AGENT_ID, load_evidence_extractor_agent
 from agents.investment_reasoner import INVESTMENT_REASONER_AGENT_ID, load_investment_reasoner_agent
+from agents.investment_report_writer import INVESTMENT_REPORT_WRITER_AGENT_ID, load_investment_report_writer_agent
 from agents.investment_reviewer import INVESTMENT_REVIEWER_AGENT_ID, load_investment_reviewer_agent
 from agents.tidewise_assistant import tidewise_assistant
 from agents.title_curator import TITLE_CURATOR_AGENT_ID, load_title_curator_agent
@@ -88,6 +89,7 @@ from capabilities.investment import (
     MacroAnalysisState,
     PreparedInvestmentContext,
     ReasoningTraceNode,
+    ReportNarrativeBatch,
     ReviewedInvestmentState,
     ReviewResult,
     TransmissionBatch,
@@ -128,6 +130,8 @@ class TidewiseRegistry(Registry):
             return load_event_signal_analyst_agent(self).agent
         if agent_id == INVESTMENT_REASONER_AGENT_ID:
             return load_investment_reasoner_agent(self)
+        if agent_id == INVESTMENT_REPORT_WRITER_AGENT_ID:
+            return load_investment_report_writer_agent(self)
         if agent_id == INVESTMENT_REVIEWER_AGENT_ID:
             return load_investment_reviewer_agent(self)
         return None
@@ -159,6 +163,7 @@ registry = TidewiseRegistry(
         InvestmentReasoningInput,
         InvestmentAnalysisContext,
         PreparedInvestmentContext,
+        ReportNarrativeBatch,
         ReasoningTraceNode,
         LayerAnalysisContext,
         LayerAssessmentBatch,

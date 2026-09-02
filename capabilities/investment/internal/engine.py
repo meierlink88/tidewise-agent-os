@@ -45,22 +45,6 @@ class InvestmentReasoningEngine:
 
     TRANSMISSION_INCLUSION_THRESHOLD = DEFAULT_TRANSMISSION_INCLUSION_THRESHOLD
     TRANSMISSION_CONTINUATION_THRESHOLD = DEFAULT_TRANSMISSION_CONTINUATION_THRESHOLD
-    CROSS_LAYER_SELF_REJECTION_MARKERS = (
-        "机制不成立",
-        "不作为有效",
-        "不构成显著",
-        "不构成影响",
-        "非因果桥梁",
-        "仅保留为背景",
-        "证据不足以确证",
-        "故省略",
-        "OMITTED_NO_MECHANISM",
-    )
-
-    @classmethod
-    def _cross_layer_proposal_rejects_own_mechanism(cls, logic: str, status: str) -> bool:
-        text = f"{logic}\n{status}"
-        return any(marker in text for marker in cls.CROSS_LAYER_SELF_REJECTION_MARKERS)
 
     @staticmethod
     def context_fingerprint(context: InvestmentAnalysisContext) -> str:
@@ -220,16 +204,6 @@ class InvestmentReasoningEngine:
             bridge = mechanisms[0] if mechanisms else None
             same_source = bool(set(source.root_event_ids).intersection(target.root_event_ids))
             confidence = cls._minimum_confidence([proposal.confidence, source.confidence, target.confidence])
-            if cls._cross_layer_proposal_rejects_own_mechanism(proposal.logic, proposal.status):
-                candidates.append(
-                    CandidateCrossLayerMechanism(
-                        **proposal.model_dump(exclude={"mechanism_fact_ids", "confidence"}),
-                        mechanism_fact_ids=[item.uuid for item in mechanisms],
-                        confidence=cls._degrade_confidence(confidence),
-                        reason="模型输出自述该跨层机制尚未成立，已降级为待验证候选。",
-                    )
-                )
-                continue
             if bridge is not None:
                 relation_type = "CROSS_LAYER"
                 mechanism_ids = [bridge.uuid]

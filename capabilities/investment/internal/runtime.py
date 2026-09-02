@@ -13,6 +13,7 @@ from capabilities.investment.internal.models import (
     PreparedInvestmentContext,
     ReviewResult,
 )
+from capabilities.investment.internal.report_contract import InvestmentReportArtifact
 
 
 class InvestmentWorkflowRuntime(Protocol):
@@ -47,6 +48,11 @@ class InvestmentWorkflowRuntime(Protocol):
         state: IndustryAnalysisState,
         review: ReviewResult,
     ) -> IndustryAnalysisState: ...
+
+    async def write_and_edit_report(
+        self,
+        report: InvestmentReportArtifact,
+    ) -> InvestmentReportArtifact: ...
 
     async def close(self) -> None: ...
 

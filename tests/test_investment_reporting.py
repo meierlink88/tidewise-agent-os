@@ -5,6 +5,10 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
+from unittest.mock import AsyncMock
+
+from agno.agent import Agent
 
 from capabilities.investment import (
     AcceptedCrossLayerTransmission,
@@ -27,11 +31,19 @@ from capabilities.investment import (
     LayerAssessment,
     NodeTrendView,
     ReasoningOntologyContext,
+    ReportNarrativeBatch,
+    ReportNarrativeRewrite,
     ReviewResult,
     TopologyEdgeSnapshot,
     Trend,
 )
-from capabilities.investment.internal.reporting import EventEvidenceIndex, InvestmentReportAssembler
+from capabilities.investment.internal.local_runtime import LocalInvestmentWorkflowRuntime
+from capabilities.investment.internal.reporting import (
+    EventEvidenceIndex,
+    InvestmentReportAssembler,
+    apply_report_narratives,
+    extract_report_narratives,
+)
 
 
 class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
@@ -415,7 +427,7 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("同链相邻节点缺少直接变量信号与经营观测", uncertainty)
         self.assertNotIn("NO_SIGNAL_LINEAGE", uncertainty)
 
-    def test_report_rebuilds_reader_facing_node_reasoning_without_audit_tokens(self) -> None:
+    def test_agent_narrative_overlay_cannot_change_frozen_business_fields(self) -> None:
         analysis, context = self._fixture()
         chain = analysis.draft.chains[0]
         direct, inferred = chain.nodes
@@ -445,13 +457,72 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
         )
 
         artifact = InvestmentReportAssembler(EventEvidenceIndex(self.event_root)).assemble(analysis, context)
-        report_chain = artifact.content.industry_chains[0]
-        report_text = "\n".join([report_chain.conclusion, *(item.reasoning for item in report_chain.nodes)])
+        fields = extract_report_narratives(artifact)
+        chain_conclusion = next(
+            field for field in fields if field.path[-1] == "conclusion" and "industry_chains" in field.path
+        )
+        before_chain = artifact.content.industry_chains[0]
+        before_node = before_chain.nodes[0]
 
-        for internal_token in ("ASSESS-", "TX-", "WARMING", "AGAINST_EDGE", "Signal Fact"):
-            self.assertNotIn(internal_token, report_text)
-        self.assertIn("市场需求上升", report_chain.nodes[0].reasoning)
-        self.assertIn("运输受限会继续影响批发交付", report_chain.nodes[1].reasoning)
+        polished = apply_report_narratives(
+            artifact,
+            fields,
+            ReportNarrativeBatch(
+                rewrites=[
+                    ReportNarrativeRewrite(
+                        key=chain_conclusion.key,
+                        text="运输需求变化首先影响油品运输，并可能沿真实链路传到批发交付。",
+                    ),
+                    ReportNarrativeRewrite(key="copy-9999", text="未知字段应被忽略。"),
+                ]
+            ),
+        )
+        after_chain = polished.content.industry_chains[0]
+        after_node = after_chain.nodes[0]
+
+        self.assertEqual(after_chain.conclusion, "运输需求变化首先影响油品运输，并可能沿真实链路传到批发交付。")
+        self.assertEqual(after_chain.result, before_chain.result)
+        self.assertEqual(after_chain.time_window, before_chain.time_window)
+        self.assertEqual(after_chain.confidence, before_chain.confidence)
+        self.assertEqual(after_node.result, before_node.result)
+        self.assertEqual(after_node.nature, before_node.nature)
+        self.assertEqual(after_node.time_window, before_node.time_window)
+        self.assertEqual(after_node.confidence, before_node.confidence)
+        self.assertEqual(after_node.evidence_refs, before_node.evidence_refs)
+        self.assertEqual(after_node.reasoning, before_node.reasoning)
+        self.assertEqual(polished.content.report_cards[-1].conclusion, after_chain.conclusion)
+
+    async def test_report_writer_runs_before_reviewer_and_reviewer_returns_final_copy(self) -> None:
+        analysis, context = self._fixture()
+        artifact = InvestmentReportAssembler(EventEvidenceIndex(self.event_root)).assemble(analysis, context)
+        runtime = LocalInvestmentWorkflowRuntime(
+            cast(Any, None),
+            Agent(id="investment-reasoner"),
+            Agent(id="investment-reviewer"),
+            Agent(id="investment-report-writer"),
+        )
+        calls: list[str] = []
+
+        async def rewrite(agent: Agent, prompt: str, model: type[ReportNarrativeBatch]) -> ReportNarrativeBatch:
+            calls.append(agent.id or "")
+            payload = json.loads(prompt.rsplit("\n", 1)[-1])
+            prefix = "编辑润色" if agent.id == "investment-reviewer" else "撰稿改写"
+            return model(
+                rewrites=[
+                    ReportNarrativeRewrite(key=item["key"], text=f"{prefix}：{item['current_text']}")
+                    for item in payload["fields"]
+                ]
+            )
+
+        runtime._run = AsyncMock(side_effect=rewrite)  # type: ignore[method-assign]
+        final = await runtime.write_and_edit_report(artifact)
+
+        self.assertEqual(calls, ["investment-report-writer", "investment-reviewer"])
+        self.assertTrue(final.content.geopolitics.conclusion.startswith("编辑润色：撰稿改写："))
+        self.assertEqual(final.content.geopolitics.result, artifact.content.geopolitics.result)
+        self.assertEqual(final.content.geopolitics.time_window, artifact.content.geopolitics.time_window)
+        self.assertEqual(final.content.geopolitics.confidence, artifact.content.geopolitics.confidence)
+        self.assertEqual(final.content.geopolitics.evidence_refs, artifact.content.geopolitics.evidence_refs)
 
 
 if __name__ == "__main__":

@@ -32,6 +32,8 @@ from capabilities.investment.internal.models import (
     NodeAnalysisBatch,
     NodeTrendView,
     PreparedInvestmentContext,
+    ReportNarrativeBatch,
+    ReportNarrativeRewrite,
     ReviewResult,
     TransmissionBatch,
     TransmissionCandidate,
@@ -40,11 +42,14 @@ from capabilities.investment.internal.models import (
     TransmissionSemanticIssue,
     TransmissionSemanticReview,
 )
+from capabilities.investment.internal.report_contract import InvestmentReportArtifact
+from capabilities.investment.internal.reporting import apply_report_narratives, extract_report_narratives
 from sematica.graphiti.investment import GraphitiInvestmentReader
 from sematica.graphiti.runtime import create_agentos_graphiti
 
 LAYER_REASONING_BATCH_SIZE = 100
 TRANSMISSION_REVIEW_BATCH_SIZE = 50
+REPORT_NARRATIVE_BATCH_SIZE = 40
 
 
 def _raw_payload(value: Any) -> Any:
@@ -164,6 +169,9 @@ def _tolerant_payload[ModelT: BaseModel](value: Any, model: type[ModelT]) -> Mod
                 "review_summary": "审核模型输出不合规，工作流已进入安全降级。",
             }
         )
+    if model is ReportNarrativeBatch:
+        rewrites, _ = _valid_items(raw.get("rewrites"), ReportNarrativeRewrite)
+        return model.model_validate({"rewrites": [item.model_dump(mode="json") for item in rewrites]})
     raise ValueError(f"unsupported tolerant investment output model: {model.__name__}")
 
 
@@ -180,10 +188,17 @@ def _payload[ModelT: BaseModel](value: Any, model: type[ModelT]) -> ModelT:
 class LocalInvestmentWorkflowRuntime:
     """Run bounded model calls while deterministic Functions own state transitions."""
 
-    def __init__(self, graphiti, reasoner: Agent, reviewer: Agent) -> None:
+    def __init__(
+        self,
+        graphiti,
+        reasoner: Agent,
+        reviewer: Agent,
+        report_writer: Agent | None = None,
+    ) -> None:
         self._graphiti = graphiti
         self._provider = InvestmentContextBuilder(GraphitiInvestmentReader(graphiti))
         self._reasoner = reasoner
+        self._report_writer = report_writer or reasoner
         self._reviewer = reviewer
         self._slots = asyncio.Semaphore(3)
 
@@ -1051,6 +1066,48 @@ class LocalInvestmentWorkflowRuntime:
         )
         return await self._run(self._reviewer, prompt, ReviewResult)
 
+    async def write_and_edit_report(self, report: InvestmentReportArtifact) -> InvestmentReportArtifact:
+        """Let Agents write report prose while the immutable report contract owns all business fields."""
+
+        async def rewrite(
+            source: InvestmentReportArtifact,
+            agent: Agent,
+            instruction: str,
+        ) -> InvestmentReportArtifact:
+            fields = extract_report_narratives(source)
+            if not fields:
+                return source
+            calls = []
+            for offset in range(0, len(fields), REPORT_NARRATIVE_BATCH_SIZE):
+                chunk = fields[offset : offset + REPORT_NARRATIVE_BATCH_SIZE]
+                prompt = (
+                    instruction + "只返回 ReportNarrativeBatch，rewrites 对输入中的每个 key 返回一次；"
+                    "key 必须原样保留，text 只写最终中文文案。"
+                    "locked_business_fields 是不可改变的方向、时间窗口、置信度、依据性质和 Evidence 引用。"
+                    "不得新增事实、锚点、传导关系或投资结论。\n"
+                    + json.dumps(
+                        {"fields": [field.prompt_payload() for field in chunk]},
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                )
+                calls.append(self._run(agent, prompt, ReportNarrativeBatch))
+            batches = await asyncio.gather(*calls)
+            merged = ReportNarrativeBatch(rewrites=[item for batch in batches for item in batch.rewrites])
+            return apply_report_narratives(source, fields, merged)
+
+        written = await rewrite(
+            report,
+            self._report_writer,
+            "以专业金融分析师面向普通投研读者的方式重写报告字段。"
+            "保留明确业务含义，解释事实、影响和传导，不使用系统实现或调试口吻。",
+        )
+        return await rewrite(
+            written,
+            self._reviewer,
+            "直接润色报告中机械、生硬或技术化的表达。保持原结论及其强弱边界，不解释审核过程，不输出修改说明。",
+        )
+
     async def close(self) -> None:
         await self._graphiti.close()
 
@@ -1058,8 +1115,9 @@ class LocalInvestmentWorkflowRuntime:
 def create_local_investment_workflow_runtime(
     model: Any,
     reasoner: Agent,
+    report_writer: Agent,
     reviewer: Agent,
 ) -> LocalInvestmentWorkflowRuntime:
     """Compose one app-owned Graphiti client with the published Agent components."""
 
-    return LocalInvestmentWorkflowRuntime(create_agentos_graphiti(model), reasoner, reviewer)
+    return LocalInvestmentWorkflowRuntime(create_agentos_graphiti(model), reasoner, reviewer, report_writer)

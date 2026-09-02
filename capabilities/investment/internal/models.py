@@ -502,6 +502,17 @@ class ReviewResult(FrozenModel):
     review_summary: str = Field(min_length=1, max_length=2000)
 
 
+class ReportNarrativeRewrite(FrozenModel):
+    """One reader-facing text field rewritten without reopening frozen conclusions."""
+
+    key: str = Field(pattern=r"^copy-[0-9]{4}$")
+    text: str = Field(min_length=1, max_length=10_000)
+
+
+class ReportNarrativeBatch(FrozenModel):
+    rewrites: list[ReportNarrativeRewrite] = Field(default_factory=list, max_length=60)
+
+
 class ReasoningTraceNode(FrozenModel):
     node_id: str
     node_type: Literal["EVENT", "FACT", "SIGNAL", "LAYER_ASSESSMENT", "TRANSMISSION", "NODE_CONCLUSION"]

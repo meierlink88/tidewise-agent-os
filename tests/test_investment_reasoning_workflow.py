@@ -20,6 +20,10 @@ from agents.investment_reasoner import (
     INVESTMENT_REASONER_CONTRACT_VERSION,
     ensure_investment_reasoner_agent,
 )
+from agents.investment_report_writer import (
+    INVESTMENT_REPORT_WRITER_CONTRACT_VERSION,
+    ensure_investment_report_writer_agent,
+)
 from agents.investment_reviewer import (
     INVESTMENT_REVIEWER_CONTRACT_VERSION,
     ensure_investment_reviewer_agent,
@@ -979,45 +983,6 @@ class LocalTransmissionSemanticReviewTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reviewed.accepted[0].logic, repaired.logic)
         self.assertIn("LOCAL_SEMANTIC_REPAIRED:1", reviewed.limitations)
 
-    def test_cross_layer_proposal_that_rejects_its_own_mechanism_is_not_published(self) -> None:
-        fixture = LayerAssessmentContractTest()
-        fixture.setUp()
-        context = fixture._layer_context(ImpactLayer.MACRO_ECONOMIC)
-        source = InvestmentReasoningEngine.build_layer_assessments(
-            fixture._layer_context(ImpactLayer.GEOPOLITICAL),
-            fixture._geo_batch(),
-            layer=ImpactLayer.GEOPOLITICAL,
-        )[0]
-        target = source.model_copy(
-            update={
-                "assessment_id": "assessment-macro-self-rejected",
-                "layer": ImpactLayer.MACRO_ECONOMIC,
-                "anchor_id": fixture.macro_anchor.business_id,
-                "anchor_name": fixture.macro_anchor.name,
-                "anchor_type": "MacroEconomic",
-                "summary": "通胀预期上升。",
-            }
-        )
-        proposal = CrossLayerTransmissionProposal(
-            source_assessment_id=source.assessment_id,
-            target_assessment_id=target.assessment_id,
-            mechanism_fact_ids=[fixture.mechanism.uuid],
-            logic="当前缺少必要中间环节，因此该机制不成立。",
-            confidence=Confidence.LOW,
-            status="仅保留为背景说明。",
-        )
-
-        result = InvestmentReasoningEngine.validate_cross_layer_batch(
-            context,
-            [source],
-            [target],
-            CrossLayerTransmissionBatch(proposals=[proposal]),
-        )
-
-        self.assertEqual(result.accepted, [])
-        self.assertEqual(len(result.candidates), 1)
-        self.assertIn("尚未成立", result.candidates[0].reason)
-
     async def test_invalid_layer_summary_degrades_to_deterministic_assessment_distribution(self) -> None:
         fixture = LayerAssessmentContractTest()
         fixture.setUp()
@@ -1138,20 +1103,22 @@ class InvestmentWorkflowShapeTest(unittest.TestCase):
     def test_http_natural_language_contract_is_owned_by_prepare_not_workflow_input_schema(self) -> None:
         workflow = _seed_workflow(cast(Agent, object()), cast(Agent, object()))
 
-        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 10)
+        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 11)
         self.assertIsNone(workflow.input_schema)
         self.assertIs(cast(list[Step], workflow.steps)[0].executor, prepare_investment_context)
 
     def test_workflow_has_no_planner_or_company_dependency(self) -> None:
         reasoner = Agent(id="investment-reasoner")
+        report_writer = Agent(id="investment-report-writer")
         reviewer = Agent(id="investment-reviewer")
 
-        workflow = _seed_workflow(reasoner, reviewer)
+        workflow = _seed_workflow(reasoner, reviewer, report_writer)
 
         self.assertEqual(
             workflow.dependencies,
             {
                 "reasoner_agent_id": "investment-reasoner",
+                "report_writer_agent_id": "investment-report-writer",
                 "reviewer_agent_id": "investment-reviewer",
             },
         )
@@ -1169,6 +1136,13 @@ class InvestmentComponentLifecycleTest(unittest.TestCase):
                 "investment_reasoner_contract_version",
                 INVESTMENT_REASONER_CONTRACT_VERSION,
                 "Investment Reasoner",
+            ),
+            (
+                "agents.investment_report_writer",
+                ensure_investment_report_writer_agent,
+                "investment_report_writer_contract_version",
+                INVESTMENT_REPORT_WRITER_CONTRACT_VERSION,
+                "Investment Report Writer",
             ),
             (
                 "agents.investment_reviewer",
@@ -1199,15 +1173,18 @@ class InvestmentComponentLifecycleTest(unittest.TestCase):
                     notes=f"{name} contract migration {contract_version}",
                 )
 
-    def test_registry_resolves_only_the_two_runtime_investment_agents(self) -> None:
+    def test_registry_resolves_only_the_three_runtime_investment_agents(self) -> None:
         registry = TidewiseRegistry(name="Investment Registry Test")
         reasoner = Agent(id="investment-reasoner")
+        report_writer = Agent(id="investment-report-writer")
         reviewer = Agent(id="investment-reviewer")
         with (
             patch("app.registry.load_investment_reasoner_agent", return_value=reasoner),
+            patch("app.registry.load_investment_report_writer_agent", return_value=report_writer),
             patch("app.registry.load_investment_reviewer_agent", return_value=reviewer),
         ):
             self.assertIs(registry.get_agent("investment-reasoner"), reasoner)
+            self.assertIs(registry.get_agent("investment-report-writer"), report_writer)
             self.assertIs(registry.get_agent("investment-reviewer"), reviewer)
             self.assertIsNone(registry.get_agent("investment-planner"))
 
@@ -1222,10 +1199,15 @@ class InvestmentComponentLifecycleTest(unittest.TestCase):
             }
         }
         reasoner = Agent(id="investment-reasoner", db=None)
+        report_writer = Agent(id="investment-report-writer", db=None)
         reviewer = Agent(id="investment-reviewer", db=None)
         with (
             patch("workflows.investment_reasoning.get_postgres_db", return_value=db),
             patch("workflows.investment_reasoning.load_investment_reasoner_agent", return_value=reasoner),
+            patch(
+                "workflows.investment_reasoning.load_investment_report_writer_agent",
+                return_value=report_writer,
+            ),
             patch("workflows.investment_reasoning.load_investment_reviewer_agent", return_value=reviewer),
             patch.object(Workflow, "save", autospec=True, return_value=8) as saved,
         ):
@@ -1241,6 +1223,7 @@ class InvestmentComponentLifecycleTest(unittest.TestCase):
             migrated.dependencies,
             {
                 "reasoner_agent_id": "investment-reasoner",
+                "report_writer_agent_id": "investment-report-writer",
                 "reviewer_agent_id": "investment-reviewer",
             },
         )
@@ -2290,6 +2273,7 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             "ensure_event_identity_agent",
             "ensure_event_signal_analyst_agent",
             "ensure_investment_reasoner_agent",
+            "ensure_investment_report_writer_agent",
             "ensure_investment_reviewer_agent",
             "ensure_raw_collection_workflow",
             "retire_collection_query_planner_agent",
@@ -2303,6 +2287,9 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             stack.enter_context(patch.object(main.registry, "get_model", return_value=object()))
             stack.enter_context(patch.object(main, "create_local_event_workflow_runtime", return_value=event_runtime))
             stack.enter_context(patch.object(main, "load_investment_reasoner_agent", return_value=Agent(id="reasoner")))
+            stack.enter_context(
+                patch.object(main, "load_investment_report_writer_agent", return_value=Agent(id="report-writer"))
+            )
             stack.enter_context(patch.object(main, "load_investment_reviewer_agent", return_value=Agent(id="reviewer")))
             stack.enter_context(
                 patch.object(
@@ -2330,6 +2317,7 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             "ensure_event_identity_agent",
             "ensure_event_signal_analyst_agent",
             "ensure_investment_reasoner_agent",
+            "ensure_investment_report_writer_agent",
             "ensure_investment_reviewer_agent",
             "ensure_raw_collection_workflow",
             "retire_collection_query_planner_agent",
@@ -2343,6 +2331,9 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             stack.enter_context(patch.object(main.registry, "get_model", return_value=object()))
             stack.enter_context(patch.object(main, "create_local_event_workflow_runtime", return_value=event_runtime))
             stack.enter_context(patch.object(main, "load_investment_reasoner_agent", return_value=Agent(id="reasoner")))
+            stack.enter_context(
+                patch.object(main, "load_investment_report_writer_agent", return_value=Agent(id="report-writer"))
+            )
             stack.enter_context(patch.object(main, "load_investment_reviewer_agent", return_value=Agent(id="reviewer")))
             stack.enter_context(
                 patch.object(main, "create_local_investment_workflow_runtime", return_value=investment_runtime)

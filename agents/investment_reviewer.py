@@ -11,7 +11,7 @@ from capabilities.investment import ReviewResult
 from db import get_postgres_db
 
 INVESTMENT_REVIEWER_AGENT_ID = "investment-reviewer"
-INVESTMENT_REVIEWER_CONTRACT_VERSION = 6
+INVESTMENT_REVIEWER_CONTRACT_VERSION = 7
 _PROMPT = Path(__file__).with_name("investment_reviewer.seed.md")
 
 

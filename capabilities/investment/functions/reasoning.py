@@ -377,6 +377,7 @@ async def generate_investment_report(step_input: StepInput, run_context: RunCont
             ),
             success=True,
         )
+    package = await investment_workflow_runtime().write_and_edit_report(package)
     path = await asyncio.to_thread(write_report_artifact, analysis.workflow_run_id, package)
     return StepOutput(
         content=InvestmentReportWorkflowOutput(

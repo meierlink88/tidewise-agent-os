@@ -44,6 +44,13 @@ manifest:
     quick_prompts:
       - "根据给定 Signal Fact 和拓扑推导产业链节点变化"
 
+  investment-report-writer:
+    description: "将已审核的投研结论写成固定结构、面向读者的中文报告，不改变方向、周期、置信度和依据。"
+    quick_prompts:
+      - "把这组已审核的投研结论写成自然中文"
+      - "保持关键业务字段不变，优化报告表达"
+      - "整理节点影响和传导逻辑的读者版说明"
+
   investment-reviewer:
     description: "审核投研结论的 Signal 根、拓扑传导、周期和证据完整性。"
     quick_prompts:
