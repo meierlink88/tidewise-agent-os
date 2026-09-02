@@ -6,11 +6,15 @@ import hashlib
 import json
 
 from capabilities.investment.internal.models import (
+    AcceptedCrossLayerTransmission,
     AcceptedImpactClaim,
     AcceptedTransmission,
     AnalysisDraft,
+    CandidateCrossLayerMechanism,
     ChainTrendView,
     Confidence,
+    CrossLayerAnalysisResult,
+    CrossLayerTransmissionBatch,
     Direction,
     FactSnapshot,
     Horizon,
@@ -266,6 +270,94 @@ class InvestmentReasoningEngine:
             json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()[:20]
         return f"CLAIM-{digest}"
+
+    @classmethod
+    def validate_cross_layer_batch(
+        cls,
+        context: LayerAnalysisContext,
+        source_claims: list[AcceptedImpactClaim],
+        target_claims: list[AcceptedImpactClaim],
+        batch: CrossLayerTransmissionBatch,
+    ) -> CrossLayerAnalysisResult:
+        """Separate causal bridges from same-source context and unresolved hypotheses."""
+
+        sources = {item.claim_id: item for item in source_claims}
+        targets = {item.claim_id: item for item in target_claims}
+        facts = {item.uuid: item for item in context.facts}
+        accepted: list[AcceptedCrossLayerTransmission] = []
+        candidates: list[CandidateCrossLayerMechanism] = []
+        seen: set[tuple[str, str]] = set()
+        for proposal in batch.proposals:
+            source = sources.get(proposal.source_claim_id)
+            target = targets.get(proposal.target_claim_id)
+            if source is None or target is None or target.layer != context.layer:
+                continue
+            key = (source.claim_id, target.claim_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            mechanisms = [
+                facts[item]
+                for item in proposal.mechanism_fact_ids
+                if item in facts
+                and facts[item].kind == "ORDINARY"
+                and cls._fact_is_valid_at(facts[item], context.decision_at)
+            ]
+            bridge = next(
+                (
+                    fact
+                    for fact in mechanisms
+                    if cls._fact_touches_anchor(fact, source.anchor_id, source.anchor_id)
+                    and cls._fact_touches_anchor(fact, target.anchor_id, target.anchor_id)
+                ),
+                None,
+            )
+            same_source = bool(set(source.root_event_ids).intersection(target.root_event_ids))
+            confidence = cls._minimum_confidence([proposal.confidence, source.confidence, target.confidence])
+            if bridge is not None:
+                relation_type = "CROSS_LAYER"
+                mechanism_ids = [bridge.uuid]
+            elif same_source:
+                relation_type = "SAME_SOURCE_SIGNAL"
+                mechanism_ids = []
+                confidence = cls._degrade_confidence(confidence)
+            else:
+                candidates.append(
+                    CandidateCrossLayerMechanism(
+                        **proposal.model_dump(exclude={"mechanism_fact_ids", "confidence"}),
+                        mechanism_fact_ids=[item.uuid for item in mechanisms],
+                        confidence=cls._degrade_confidence(confidence),
+                        reason="缺少连接上下层真实锚点的普通 Fact，保留为待验证机制。",
+                    )
+                )
+                continue
+            payload = {
+                "source_claim_id": source.claim_id,
+                "target_claim_id": target.claim_id,
+                "mechanism_fact_ids": mechanism_ids,
+                "logic": proposal.logic,
+                "relation_type": relation_type,
+            }
+            digest = hashlib.sha256(
+                json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()[:20]
+            accepted.append(
+                AcceptedCrossLayerTransmission(
+                    **proposal.model_dump(exclude={"mechanism_fact_ids", "confidence"}),
+                    mechanism_fact_ids=mechanism_ids,
+                    confidence=confidence,
+                    transmission_id=f"XLT-{digest}",
+                    source_layer=source.layer,
+                    target_layer=target.layer,
+                    relation_type=relation_type,
+                )
+            )
+        return CrossLayerAnalysisResult(
+            target_layer=context.layer,
+            accepted=accepted,
+            candidates=candidates,
+            limitations=list(dict.fromkeys(batch.limitations))[:20],
+        )
 
     @classmethod
     def validate_round(

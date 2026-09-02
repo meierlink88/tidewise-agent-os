@@ -7,7 +7,7 @@ import json
 from typing import Any
 
 from agno.agent import Agent
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from capabilities.investment.internal.context import InvestmentContextBuilder
 from capabilities.investment.internal.engine import InvestmentReasoningEngine
@@ -17,6 +17,10 @@ from capabilities.investment.internal.models import (
     AnalysisDraft,
     ChainTrendView,
     Confidence,
+    CrossLayerAnalysisResult,
+    CrossLayerTransmissionBatch,
+    CrossLayerTransmissionProposal,
+    ImpactClaimProposal,
     ImpactLayer,
     IndustryAnalysisState,
     InvestmentAnalysisContext,
@@ -25,21 +29,132 @@ from capabilities.investment.internal.models import (
     LayerAnalysisResult,
     LayerImpactBatch,
     NodeAnalysisBatch,
+    NodeTrendView,
     PreparedInvestmentContext,
     ReviewResult,
     TransmissionBatch,
+    TransmissionProposal,
 )
 from sematica.graphiti.investment import GraphitiInvestmentReader
 from sematica.graphiti.runtime import create_agentos_graphiti
+
+
+def _raw_payload(value: Any) -> Any:
+    content = getattr(value, "content", value)
+    if isinstance(content, str):
+        stripped = content.strip()
+        if stripped.startswith("```"):
+            lines = stripped.splitlines()
+            stripped = "\n".join(lines[1:-1]).strip()
+        return json.loads(stripped)
+    return content
+
+
+def _valid_items[ModelT: BaseModel](values: Any, model: type[ModelT]) -> tuple[list[ModelT], int]:
+    accepted: list[ModelT] = []
+    rejected = 0
+    for value in values if isinstance(values, list) else []:
+        try:
+            accepted.append(model.model_validate(value))
+        except ValidationError:
+            rejected += 1
+    return accepted, rejected
+
+
+def _trend_value(value: Any) -> Any:
+    if isinstance(value, dict) and len(value) == 1:
+        return next(iter(value))
+    return value
+
+
+def _string_list(value: Any, *, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item.strip()][:limit]
+
+
+def _tolerant_payload[ModelT: BaseModel](value: Any, model: type[ModelT]) -> ModelT:
+    """Keep valid semantic items and degrade malformed model output instead of aborting a run."""
+
+    try:
+        raw = _raw_payload(value)
+    except (json.JSONDecodeError, TypeError):
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    if model is NodeAnalysisBatch:
+        normalized = []
+        for item in raw.get("nodes", []) if isinstance(raw.get("nodes"), list) else []:
+            if not isinstance(item, dict):
+                continue
+            normalized.append(
+                {
+                    **item,
+                    "short": _trend_value(item.get("short")),
+                    "medium": _trend_value(item.get("medium")),
+                    "long": _trend_value(item.get("long")),
+                }
+            )
+        nodes, _ = _valid_items(normalized, NodeTrendView)
+        return model.model_validate({"nodes": [item.model_dump(mode="json") for item in nodes]})
+    if model is LayerImpactBatch:
+        layer_proposals, layer_rejected = _valid_items(raw.get("proposals"), ImpactClaimProposal)
+        layer_limitations = _string_list(raw.get("limitations"), limit=19)
+        if layer_rejected:
+            layer_limitations.append("LLM_OUTPUT_ITEM_REJECTED")
+        layer_summary = raw.get("summary")
+        return model.model_validate(
+            {
+                "proposals": [item.model_dump(mode="json") for item in layer_proposals],
+                "supplemental_queries": _string_list(raw.get("supplemental_queries"), limit=4),
+                "summary": layer_summary
+                if isinstance(layer_summary, str) and layer_summary.strip()
+                else "模型输出不完整，仅保留通过合同校验的候选。",
+                "limitations": layer_limitations,
+            }
+        )
+    if model is TransmissionBatch:
+        transmission_proposals, _ = _valid_items(raw.get("proposals"), TransmissionProposal)
+        stopped_reason = raw.get("stopped_reason")
+        return model.model_validate(
+            {
+                "proposals": [item.model_dump(mode="json") for item in transmission_proposals],
+                "stopped_reason": stopped_reason
+                if isinstance(stopped_reason, str) and stopped_reason.strip()
+                else "LLM_OUTPUT_ITEM_REJECTED",
+            }
+        )
+    if model is CrossLayerTransmissionBatch:
+        cross_layer_proposals, cross_layer_rejected = _valid_items(raw.get("proposals"), CrossLayerTransmissionProposal)
+        cross_layer_limitations = _string_list(raw.get("limitations"), limit=19)
+        if cross_layer_rejected:
+            cross_layer_limitations.append("LLM_OUTPUT_ITEM_REJECTED")
+        return model.model_validate(
+            {
+                "proposals": [item.model_dump(mode="json") for item in cross_layer_proposals],
+                "limitations": cross_layer_limitations,
+            }
+        )
+    if model is ReviewResult:
+        return model.model_validate(
+            {
+                "accepted": False,
+                "confidence": Confidence.LOW,
+                "issue_codes": ["REVIEW_OUTPUT_INVALID"],
+                "review_summary": "审核模型输出不合规，工作流已进入安全降级。",
+            }
+        )
+    raise ValueError(f"unsupported tolerant investment output model: {model.__name__}")
 
 
 def _payload[ModelT: BaseModel](value: Any, model: type[ModelT]) -> ModelT:
     content = getattr(value, "content", value)
     if isinstance(content, model):
         return content
-    if isinstance(content, str):
-        return model.model_validate_json(content)
-    return model.model_validate(content)
+    try:
+        return model.model_validate(_raw_payload(content))
+    except (ValidationError, json.JSONDecodeError, TypeError):
+        return _tolerant_payload(content, model)
 
 
 class LocalInvestmentWorkflowRuntime:
@@ -56,7 +171,7 @@ class LocalInvestmentWorkflowRuntime:
         return await self._provider.build(request)
 
     async def _run[ModelT: BaseModel](self, agent: Agent, prompt: str, model: type[ModelT]) -> ModelT:
-        call_agent = agent.deep_copy(update={"db": None})
+        call_agent = agent.deep_copy(update={"db": None, "parse_response": False})
         async with self._slots:
             output = await call_agent.arun(prompt, stream=False, output_schema=model)
         return _payload(output, model)
@@ -69,13 +184,14 @@ class LocalInvestmentWorkflowRuntime:
         self,
         prepared: PreparedInvestmentContext,
         geopolitical: LayerAnalysisResult,
-    ) -> LayerAnalysisResult:
-        result, _ = await self._analyze_layer(
+    ) -> tuple[LayerAnalysisResult, CrossLayerAnalysisResult]:
+        result, context = await self._analyze_layer(
             prepared,
             ImpactLayer.MACRO_ECONOMIC,
             geopolitical.claims,
         )
-        return result
+        transmission = await self._analyze_cross_layer(context, geopolitical.claims, result.claims)
+        return result, transmission
 
     async def _analyze_layer(
         self,
@@ -190,14 +306,49 @@ class LocalInvestmentWorkflowRuntime:
         )
         return await self._run(self._reasoner, prompt, LayerImpactBatch)
 
+    async def _analyze_cross_layer(
+        self,
+        context: LayerAnalysisContext,
+        source_claims: list[AcceptedImpactClaim],
+        target_claims: list[AcceptedImpactClaim],
+    ) -> CrossLayerAnalysisResult:
+        if not source_claims or not target_claims:
+            return CrossLayerAnalysisResult(
+                target_layer=context.layer,
+                limitations=["NO_CLOSED_CROSS_LAYER_CLAIM_PAIR"],
+            )
+        payload = {
+            "target_layer": context.layer.value,
+            "source_claims": [item.model_dump(mode="json") for item in source_claims],
+            "target_claims": [item.model_dump(mode="json") for item in target_claims],
+            "ordinary_facts": [item.model_dump(mode="json") for item in context.facts if item.kind == "ORDINARY"],
+        }
+        prompt = (
+            "识别上层已接受结论如何影响本层已接受结论，只返回 CrossLayerTransmissionBatch。"
+            "source_claim_id 和 target_claim_id 只能引用输入；mechanism_fact_ids 只能引用输入中的普通 Fact。"
+            "同一 Event 在两层分别产生直接 Signal 只能说明同源影响，不能写成因果桥梁；"
+            "仍可用简洁逻辑说明上层结论如何帮助理解下层结论。"
+            "无法形成合理路径时不要提案，不得发明锚点或结论。\n"
+            + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        )
+        batch = await self._run(self._reasoner, prompt, CrossLayerTransmissionBatch)
+        return InvestmentReasoningEngine.validate_cross_layer_batch(
+            context,
+            source_claims,
+            target_claims,
+            batch,
+        )
+
     async def analyze_industry(
         self,
         prepared: PreparedInvestmentContext,
         geopolitical: LayerAnalysisResult,
         macro: LayerAnalysisResult,
+        macro_transmission: CrossLayerAnalysisResult | None = None,
     ) -> IndustryAnalysisState:
         parents = [*geopolitical.claims, *macro.claims]
         industry, layer_context = await self._analyze_layer(prepared, ImpactLayer.INDUSTRY, parents)
+        industry_transmission = await self._analyze_cross_layer(layer_context, parents, industry.claims)
         industry_context = await self._provider.expand_industry_context(
             prepared.context,
             layer_context,
@@ -243,6 +394,8 @@ class LocalInvestmentWorkflowRuntime:
             geopolitical=geopolitical,
             macro=macro,
             industry=industry,
+            macro_transmission=macro_transmission or CrossLayerAnalysisResult(target_layer=ImpactLayer.MACRO_ECONOMIC),
+            industry_transmission=industry_transmission,
             industry_context=industry_context,
             transmissions=accepted,
             rounds_executed=rounds,
@@ -388,6 +541,14 @@ class LocalInvestmentWorkflowRuntime:
             "geopolitical": state.geopolitical.model_dump(mode="json"),
             "macro": state.macro.model_dump(mode="json"),
             "industry": state.industry.model_dump(mode="json"),
+            "cross_layer_transmissions": [
+                *[item.model_dump(mode="json") for item in state.macro_transmission.accepted],
+                *[item.model_dump(mode="json") for item in state.industry_transmission.accepted],
+            ],
+            "cross_layer_candidates": [
+                *[item.model_dump(mode="json") for item in state.macro_transmission.candidates],
+                *[item.model_dump(mode="json") for item in state.industry_transmission.candidates],
+            ],
             "accepted_transmissions": [item.model_dump(mode="json") for item in state.transmissions],
             "draft": state.draft.model_dump(mode="json"),
         }

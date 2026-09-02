@@ -1,4 +1,4 @@
-"""Five deterministic Workflow Functions for layered investment reasoning."""
+"""Deterministic Workflow Functions for layered investment reasoning and Report generation."""
 
 from __future__ import annotations
 
@@ -12,31 +12,44 @@ from agno.workflow import StepInput, StepOutput
 from capabilities.investment.internal.engine import InvestmentReasoningEngine
 from capabilities.investment.internal.models import (
     Confidence,
+    CrossLayerAnalysisResult,
     GeopoliticalAnalysisState,
+    ImpactLayer,
     IndustryAnalysisState,
     InvestmentAnalysisRequest,
     InvestmentAnalysisResult,
     InvestmentConclusionArtifact,
     InvestmentReasoningInput,
+    InvestmentReportWorkflowOutput,
     LayerAnalysisResult,
     MacroAnalysisState,
     PreparedInvestmentContext,
+    ReviewedInvestmentState,
     ReviewResult,
     Trend,
 )
+from capabilities.investment.internal.reporting import InvestmentReportAssembler, ReportNotPublishable
 from capabilities.investment.internal.runtime import investment_workflow_runtime
-from capabilities.investment.internal.storage import conclusion_artifact_path, write_conclusion_artifact
+from capabilities.investment.internal.storage import (
+    conclusion_artifact_path,
+    write_conclusion_artifact,
+    write_report_artifact,
+)
 
 
-def _content(step_input: StepInput, name: str, model: type[Any]) -> Any:
-    output = step_input.get_step_output(name)
-    if output is None or output.content is None:
-        raise ValueError(f"required Workflow step output is missing: {name}")
-    if isinstance(output.content, model):
-        return output.content
-    if isinstance(output.content, str):
-        return model.model_validate_json(output.content)
-    return model.model_validate(output.content)
+def _content(step_input: StepInput, model: type[Any]) -> Any:
+    """Read only the direct predecessor, independent of its Studio display name."""
+
+    content = step_input.previous_step_content
+    if content is None:
+        content = step_input.get_last_step_content()
+    if content is None:
+        raise ValueError("required previous Workflow step output is missing")
+    if isinstance(content, model):
+        return content
+    if isinstance(content, str):
+        return model.model_validate_json(content)
+    return model.model_validate(content)
 
 
 def _reasoning_input(value: Any) -> InvestmentReasoningInput:
@@ -55,7 +68,7 @@ async def prepare_investment_context(step_input: StepInput, run_context: RunCont
         decision_at=datetime.now(UTC),
         forward_horizon_days=1095,
         min_anchor_matches=1,
-        max_chains=10,
+        max_chains=100,
         max_hops=3,
     )
     context = await investment_workflow_runtime().prepare(request)
@@ -70,7 +83,7 @@ async def prepare_investment_context(step_input: StepInput, run_context: RunCont
 async def analyze_geopolitical_impact(step_input: StepInput) -> StepOutput:
     """Analyze the frozen Events against the predefined geopolitical blueprint."""
 
-    prepared = _content(step_input, "prepare-investment-context", PreparedInvestmentContext)
+    prepared = _content(step_input, PreparedInvestmentContext)
     result = await investment_workflow_runtime().analyze_geopolitical(prepared)
     return StepOutput(content=GeopoliticalAnalysisState(prepared=prepared, geopolitical=result))
 
@@ -78,13 +91,19 @@ async def analyze_geopolitical_impact(step_input: StepInput) -> StepOutput:
 async def analyze_macro_impact(step_input: StepInput) -> StepOutput:
     """Analyze macro anchors using Events, Signals, and accepted geopolitical claims."""
 
-    state = _content(step_input, "analyze-geopolitical-impact", GeopoliticalAnalysisState)
-    result = await investment_workflow_runtime().analyze_macro(state.prepared, state.geopolitical)
+    state = _content(step_input, GeopoliticalAnalysisState)
+    response = await investment_workflow_runtime().analyze_macro(state.prepared, state.geopolitical)
+    if isinstance(response, tuple):
+        result, transmission = response
+    else:
+        result = response
+        transmission = CrossLayerAnalysisResult(target_layer=ImpactLayer.MACRO_ECONOMIC)
     return StepOutput(
         content=MacroAnalysisState(
             prepared=state.prepared,
             geopolitical=state.geopolitical,
             macro=result,
+            macro_transmission=transmission,
         )
     )
 
@@ -92,11 +111,12 @@ async def analyze_macro_impact(step_input: StepInput) -> StepOutput:
 async def analyze_industry_impact(step_input: StepInput) -> StepOutput:
     """Resolve industry candidates, load topology, propagate, and synthesize node trends."""
 
-    state = _content(step_input, "analyze-macro-impact", MacroAnalysisState)
+    state = _content(step_input, MacroAnalysisState)
     result = await investment_workflow_runtime().analyze_industry(
         state.prepared,
         state.geopolitical,
         state.macro,
+        state.macro_transmission,
     )
     if isinstance(result, LayerAnalysisResult):
         raise TypeError("investment runtime returned a layer result instead of IndustryAnalysisState")
@@ -157,7 +177,7 @@ def _safe_layer_result(result: LayerAnalysisResult, reason: str) -> LayerAnalysi
 async def review_and_finalize(step_input: StepInput, run_context: RunContext) -> StepOutput:
     """Apply deterministic lineage gates, then let the Reviewer check supported conclusions."""
 
-    state = _content(step_input, "analyze-industry-impact", IndustryAnalysisState)
+    state = _content(step_input, IndustryAnalysisState)
     draft = state.draft
     geopolitical = state.geopolitical
     macro = state.macro
@@ -191,30 +211,27 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
     else:
         review = await investment_workflow_runtime().review(state)
         if not review.accepted:
+            # Deterministic lineage gates already removed unsupported conclusions.
+            # The semantic Reviewer remains an audit signal; it must not erase an
+            # otherwise valid partial report or turn model uncertainty into a run failure.
             execution_issues.extend(review.issue_codes)
-            draft = InvestmentReasoningEngine.safe_fallback_draft(
-                state.industry_context,
-                "REVIEW_REJECTED_SAFE_FALLBACK",
-            )
-            review = ReviewResult(
-                accepted=True,
-                confidence=Confidence.LOW,
-                issue_codes=list(dict.fromkeys(execution_issues))[:30],
-                review_summary="审核未通过，已删除方向断言并降级为安全弃权。",
-            )
-            geopolitical = _safe_layer_result(geopolitical, "REVIEW_REJECTED_SAFE_FALLBACK")
-            macro = _safe_layer_result(macro, "REVIEW_REJECTED_SAFE_FALLBACK")
-            industry = _safe_layer_result(industry, "REVIEW_REJECTED_SAFE_FALLBACK")
-            transmissions = []
 
     layer_results = [geopolitical, macro, industry]
     result = InvestmentAnalysisResult(
         executor="agentos-investment-reasoning-workflow",
-        status="SUCCEEDED",
+        status="SUCCEEDED" if review.accepted else "NEEDS_REVIEW",
         context_fingerprint=state.prepared.context_fingerprint,
         geopolitical=geopolitical,
         macro=macro,
         industry=industry,
+        cross_layer_transmissions=[
+            *state.macro_transmission.accepted,
+            *state.industry_transmission.accepted,
+        ],
+        cross_layer_candidates=[
+            *state.macro_transmission.candidates,
+            *state.industry_transmission.candidates,
+        ],
         transmissions=transmissions,
         draft=draft,
         review=review,
@@ -264,4 +281,44 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
         conclusion_status="SUPPORTED" if has_supported_conclusion else "INSUFFICIENT_EVIDENCE",
     )
     await asyncio.to_thread(write_conclusion_artifact, artifact)
-    return StepOutput(content=artifact, success=True)
+    return StepOutput(
+        content=ReviewedInvestmentState(analysis=artifact, context=state.industry_context),
+        success=True,
+    )
+
+
+async def generate_investment_report(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Assemble and persist the fixed Report Artifact without an external service dependency."""
+
+    del run_context
+    reviewed = _content(step_input, ReviewedInvestmentState)
+    analysis = reviewed.analysis
+    try:
+        package = InvestmentReportAssembler().assemble(analysis, reviewed.context)
+    except ReportNotPublishable as exc:
+        return StepOutput(
+            content=InvestmentReportWorkflowOutput(
+                source_report_id=f"agentos-investment-{analysis.workflow_run_id}",
+                report_artifact_path="",
+                audit_artifact_path=analysis.artifact_path,
+                generation_status="SKIPPED",
+                reason=str(exc),
+            ),
+            success=True,
+        )
+    path = await asyncio.to_thread(write_report_artifact, analysis.workflow_run_id, package)
+    return StepOutput(
+        content=InvestmentReportWorkflowOutput(
+            source_report_id=package.source_report_id,
+            report_artifact_path=str(path),
+            audit_artifact_path=analysis.artifact_path,
+            generation_status="GENERATED",
+        ),
+        success=True,
+    )
+
+
+async def publish_investment_report(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Compatibility alias for previously stored Workflow versions; no external publication occurs."""
+
+    return await generate_investment_report(step_input, run_context)

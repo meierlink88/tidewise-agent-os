@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from capabilities.investment.internal.models import InvestmentConclusionArtifact
+from capabilities.investment.internal.report_contract import InvestmentReportArtifact
 
 
 def investment_artifact_root() -> Path:
@@ -28,6 +29,21 @@ def conclusion_artifact_path(workflow_run_id: str) -> Path:
     root = investment_artifact_root()
     if root != path and root not in path.parents:
         raise ValueError("Investment Conclusion Artifact path escapes its root")
+    return path
+
+
+def report_artifact_path(workflow_run_id: str) -> Path:
+    """Resolve the immutable product Report package path for one Workflow run."""
+
+    if not workflow_run_id or any(
+        character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
+        for character in workflow_run_id
+    ):
+        raise ValueError("workflow_run_id is not safe for an Artifact path")
+    path = (investment_artifact_root() / "reports" / f"{workflow_run_id}.json").resolve()
+    root = investment_artifact_root()
+    if root != path and root not in path.parents:
+        raise ValueError("Investment Report Artifact path escapes its root")
     return path
 
 
@@ -70,3 +86,15 @@ def read_conclusion_artifact(workflow_run_id: str) -> InvestmentConclusionArtifa
     return InvestmentConclusionArtifact.model_validate_json(
         conclusion_artifact_path(workflow_run_id).read_text(encoding="utf-8")
     )
+
+
+def write_report_artifact(workflow_run_id: str, report: InvestmentReportArtifact) -> Path:
+    """Atomically create one immutable AgentOS Report Artifact."""
+
+    path = report_artifact_path(workflow_run_id)
+    if _atomic_create_json(path, report.model_dump(mode="json")):
+        return path
+    existing = InvestmentReportArtifact.model_validate_json(path.read_text(encoding="utf-8"))
+    if existing != report:
+        raise ValueError("Investment Report Artifact identity conflict")
+    return path

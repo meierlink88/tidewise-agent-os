@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from capabilities.investment.internal.models import (
+    CrossLayerAnalysisResult,
     IndustryAnalysisState,
     InvestmentAnalysisContext,
     InvestmentAnalysisRequest,
@@ -26,13 +27,14 @@ class InvestmentWorkflowRuntime(Protocol):
         self,
         prepared: PreparedInvestmentContext,
         geopolitical: LayerAnalysisResult,
-    ) -> LayerAnalysisResult: ...
+    ) -> tuple[LayerAnalysisResult, CrossLayerAnalysisResult]: ...
 
     async def analyze_industry(
         self,
         prepared: PreparedInvestmentContext,
         geopolitical: LayerAnalysisResult,
         macro: LayerAnalysisResult,
+        macro_transmission: CrossLayerAnalysisResult | None = None,
     ) -> IndustryAnalysisState: ...
 
     async def review(

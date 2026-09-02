@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from agno.agent import Agent
 from agno.run import RunContext
-from agno.workflow import Step, StepInput, StepOutput, Workflow
+from agno.workflow import Step, StepInput, Workflow
 from pydantic import ValidationError
 
 from agents.investment_reasoner import (
@@ -24,7 +24,7 @@ from agents.investment_reviewer import (
     INVESTMENT_REVIEWER_CONTRACT_VERSION,
     ensure_investment_reviewer_agent,
 )
-from app.registry import TidewiseRegistry
+from app.registry import TidewiseRegistry, registry
 from capabilities.investment import (
     AcceptedImpactClaim,
     AcceptedTransmission,
@@ -44,7 +44,6 @@ from capabilities.investment import (
     IndustryChainSnapshot,
     InvestmentAnalysisContext,
     InvestmentAnalysisRequest,
-    InvestmentAnalysisResult,
     InvestmentAssessment,
     InvestmentConclusionArtifact,
     InvestmentReasoningInput,
@@ -52,8 +51,10 @@ from capabilities.investment import (
     LayerAnalysisResult,
     LayerImpactBatch,
     MacroAnalysisState,
+    NodeAnalysisBatch,
     NodeTrendView,
     PreparedInvestmentContext,
+    ReviewedInvestmentState,
     ReviewResult,
     TopologyEdgeSnapshot,
     TransmissionBatch,
@@ -65,12 +66,14 @@ from capabilities.investment.functions import (
     analyze_geopolitical_impact,
     analyze_industry_impact,
     analyze_macro_impact,
+    generate_investment_report,
     prepare_investment_context,
+    publish_investment_report,
     review_and_finalize,
 )
 from capabilities.investment.internal.context import InvestmentContextBuilder
 from capabilities.investment.internal.engine import InvestmentReasoningEngine
-from capabilities.investment.internal.local_runtime import LocalInvestmentWorkflowRuntime
+from capabilities.investment.internal.local_runtime import LocalInvestmentWorkflowRuntime, _payload
 from capabilities.investment.internal.storage import write_conclusion_artifact
 from sematica.graphiti.investment import GraphitiInvestmentReader
 from workflows.investment_reasoning import (
@@ -860,6 +863,52 @@ class LayeredImpactLineageGateTest(unittest.TestCase):
 
 
 class InvestmentWorkflowShapeTest(unittest.TestCase):
+    def test_malformed_node_trend_is_normalized_without_aborting_the_workflow(self) -> None:
+        raw = SimpleNamespace(
+            content=json.dumps(
+                {
+                    "nodes": [
+                        {
+                            "chain_id": "chain-1",
+                            "node_id": "node-1",
+                            "node_name": "刻蚀设备",
+                            "short": {"WARMING": "订单增加"},
+                            "medium": {"WARMING": "产能扩张"},
+                            "long": {"INSUFFICIENT_EVIDENCE": "无长期信号"},
+                            "confidence": "MEDIUM",
+                            "investment_assessment": "OPPORTUNITY_CANDIDATE",
+                            "rationale": "直接订单 Signal 支持短中期升温。",
+                            "supporting_fact_ids": ["fact-1"],
+                        },
+                        {"node_id": "invalid-node"},
+                    ]
+                },
+                ensure_ascii=False,
+            )
+        )
+
+        result = _payload(raw, NodeAnalysisBatch)
+
+        self.assertEqual(len(result.nodes), 1)
+        self.assertEqual(result.nodes[0].short, Trend.WARMING)
+        self.assertEqual(result.nodes[0].long, Trend.INSUFFICIENT_EVIDENCE)
+
+    def test_application_registry_can_rehydrate_every_workflow_function(self) -> None:
+        functions = [
+            prepare_investment_context,
+            analyze_geopolitical_impact,
+            analyze_macro_impact,
+            analyze_industry_impact,
+            review_and_finalize,
+            generate_investment_report,
+            publish_investment_report,
+        ]
+
+        self.assertEqual(
+            {function.__name__ for function in functions},
+            {function.__name__ for function in functions if registry.get_function(function.__name__) is not None},
+        )
+
     def test_schedule_natural_language_is_a_first_class_reasoning_input(self) -> None:
         message = "获取最近72小时全部Event，逐层分析对产业链的投研影响。"
 
@@ -869,7 +918,7 @@ class InvestmentWorkflowShapeTest(unittest.TestCase):
         self.assertEqual(parsed.event_window_hours, 72)
         self.assertFalse(parsed.include_company)
 
-    def test_workflow_has_five_fixed_business_stages(self) -> None:
+    def test_workflow_has_six_fixed_business_stages(self) -> None:
         workflow = _seed_workflow(cast(Agent, object()), cast(Agent, object()))
         steps = cast(list[Step], workflow.steps)
         self.assertEqual(
@@ -880,13 +929,14 @@ class InvestmentWorkflowShapeTest(unittest.TestCase):
                 "analyze-macro-impact",
                 "analyze-industry-impact",
                 "review-and-finalize",
+                "generate-investment-report",
             ],
         )
 
     def test_http_natural_language_contract_is_owned_by_prepare_not_workflow_input_schema(self) -> None:
         workflow = _seed_workflow(cast(Agent, object()), cast(Agent, object()))
 
-        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 4)
+        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 6)
         self.assertIsNone(workflow.input_schema)
         self.assertIs(cast(list[Step], workflow.steps)[0].executor, prepare_investment_context)
 
@@ -1040,8 +1090,9 @@ class _LayeredRuntime:
         prepared: PreparedInvestmentContext,
         geopolitical: LayerAnalysisResult,
         macro: LayerAnalysisResult,
+        macro_transmission=None,
     ) -> IndustryAnalysisState:
-        self.calls.append(("industry", (prepared, geopolitical, macro)))
+        self.calls.append(("industry", (prepared, geopolitical, macro, macro_transmission)))
         return IndustryAnalysisState(
             prepared=prepared,
             geopolitical=geopolitical,
@@ -1196,17 +1247,11 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         )
         configure_investment_workflow_runtime(runtime)
         try:
-            geo_output = await analyze_geopolitical_impact(
-                StepInput(previous_step_outputs={"prepare-investment-context": StepOutput(content=prepared)})
-            )
+            geo_output = await analyze_geopolitical_impact(StepInput(previous_step_content=prepared))
             geo_state = cast(GeopoliticalAnalysisState, geo_output.content)
-            macro_output = await analyze_macro_impact(
-                StepInput(previous_step_outputs={"analyze-geopolitical-impact": StepOutput(content=geo_state)})
-            )
+            macro_output = await analyze_macro_impact(StepInput(previous_step_content=geo_state))
             macro_state = cast(MacroAnalysisState, macro_output.content)
-            industry_output = await analyze_industry_impact(
-                StepInput(previous_step_outputs={"analyze-macro-impact": StepOutput(content=macro_state)})
-            )
+            industry_output = await analyze_industry_impact(StepInput(previous_step_content=macro_state))
             industry_state = cast(IndustryAnalysisState, industry_output.content)
         finally:
             configure_investment_workflow_runtime(None)
@@ -1236,13 +1281,13 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         configure_investment_workflow_runtime(SimpleNamespace(review=reviewer))
         try:
             output = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                StepInput(previous_step_content=state),
                 self._run_context("run-hard-gate"),
             )
         finally:
             configure_investment_workflow_runtime(None)
 
-        result = cast(InvestmentAnalysisResult, output.content)
+        result = cast(ReviewedInvestmentState, output.content).analysis
         reviewer.assert_not_awaited()
         for layer in (result.geopolitical, result.macro, result.industry):
             self.assertEqual(layer.claims, [])
@@ -1250,7 +1295,7 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.transmissions, [])
         self.assertFalse({"LAYER_CLAIM", "TRANSMISSION"}.intersection(item.node_type for item in result.reasoning_tree))
 
-    async def test_reviewer_rejection_clears_all_claims_facts_and_transmissions(self) -> None:
+    async def test_reviewer_rejection_is_advisory_after_deterministic_lineage_gate(self) -> None:
         state = self._finalization_state(
             claim_layers=(ImpactLayer.GEOPOLITICAL, ImpactLayer.MACRO_ECONOMIC, ImpactLayer.INDUSTRY),
             include_transmission=True,
@@ -1266,19 +1311,21 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         configure_investment_workflow_runtime(SimpleNamespace(review=reviewer))
         try:
             output = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                StepInput(previous_step_content=state),
                 self._run_context("run-review-rejection"),
             )
         finally:
             configure_investment_workflow_runtime(None)
 
-        result = cast(InvestmentAnalysisResult, output.content)
+        result = cast(ReviewedInvestmentState, output.content).analysis
         reviewer.assert_awaited_once_with(state)
-        for layer in (result.geopolitical, result.macro, result.industry):
-            self.assertEqual(layer.claims, [])
-            self.assertEqual(layer.supporting_facts, [])
-        self.assertEqual(result.transmissions, [])
-        self.assertFalse({"LAYER_CLAIM", "TRANSMISSION"}.intersection(item.node_type for item in result.reasoning_tree))
+        self.assertEqual(result.status, "NEEDS_REVIEW")
+        self.assertFalse(result.review.accepted)
+        self.assertTrue(result.geopolitical.claims)
+        self.assertTrue(result.macro.claims)
+        self.assertTrue(result.industry.claims)
+        self.assertTrue(result.transmissions)
+        self.assertTrue({"LAYER_CLAIM", "TRANSMISSION"}.intersection(item.node_type for item in result.reasoning_tree))
 
     async def test_any_layer_claim_or_transmission_requires_semantic_review(self) -> None:
         cases = [
@@ -1304,7 +1351,7 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
                 configure_investment_workflow_runtime(SimpleNamespace(review=reviewer))
                 try:
                     await review_and_finalize(
-                        StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                        StepInput(previous_step_content=state),
                         self._run_context(f"run-{label.lower()}"),
                     )
                 finally:
@@ -1416,13 +1463,13 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         configure_investment_workflow_runtime(runtime)
         try:
             output = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                StepInput(previous_step_content=state),
                 self._run_context("run-upper-layer-mechanism"),
             )
         finally:
             configure_investment_workflow_runtime(None)
 
-        result = cast(InvestmentAnalysisResult, output.content)
+        result = cast(ReviewedInvestmentState, output.content).analysis
         reviewer.assert_awaited_once()
         await_args = reviewer.await_args
         assert await_args is not None
@@ -1439,18 +1486,19 @@ class InvestmentWorkflowExecutionTest(unittest.IsolatedAsyncioTestCase):
         configure_investment_workflow_runtime(SimpleNamespace(review=AsyncMock()))
         try:
             first = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                StepInput(previous_step_content=state),
                 context,
             )
             second = await review_and_finalize(
-                StepInput(previous_step_outputs={"analyze-industry-impact": StepOutput(content=state)}),
+                StepInput(previous_step_content=state),
                 context,
             )
         finally:
             configure_investment_workflow_runtime(None)
 
-        artifact = cast(InvestmentConclusionArtifact, first.content)
-        self.assertEqual(second.content, artifact)
+        reviewed = cast(ReviewedInvestmentState, first.content)
+        artifact = reviewed.analysis
+        self.assertEqual(second.content, reviewed)
         self.assertEqual(artifact.schema_version, "investment-conclusion-artifact/v1")
         self.assertEqual(artifact.workflow_run_id, context.run_id)
         self.assertEqual(artifact.conclusion_status, "INSUFFICIENT_EVIDENCE")

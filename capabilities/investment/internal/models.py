@@ -97,7 +97,7 @@ class InvestmentAnalysisRequest(InvestmentReasoningInput):
 
     forward_horizon_days: int = Field(default=1095, ge=1, le=3650)
     min_anchor_matches: int = Field(default=1, ge=1, le=10)
-    max_chains: int = Field(default=10, ge=1, le=10)
+    max_chains: int = Field(default=100, ge=1, le=100)
     max_hops: int = Field(default=3, ge=1, le=3)
     decision_at: datetime
 
@@ -234,6 +234,40 @@ class LayerAnalysisResult(FrozenModel):
     retrieval_rounds: int = Field(default=1, ge=1, le=2)
 
 
+class CrossLayerTransmissionProposal(FrozenModel):
+    """One explicit upper-layer explanation for an accepted lower-layer claim."""
+
+    source_claim_id: str = Field(min_length=1)
+    target_claim_id: str = Field(min_length=1)
+    mechanism_fact_ids: list[str] = Field(default_factory=list, max_length=20)
+    logic: str = Field(min_length=1, max_length=1600)
+    confidence: Confidence
+    status: str = Field(min_length=1, max_length=500)
+
+
+class CrossLayerTransmissionBatch(FrozenModel):
+    proposals: list[CrossLayerTransmissionProposal] = Field(default_factory=list, max_length=100)
+    limitations: list[str] = Field(default_factory=list, max_length=20)
+
+
+class AcceptedCrossLayerTransmission(CrossLayerTransmissionProposal):
+    transmission_id: str
+    source_layer: ImpactLayer
+    target_layer: ImpactLayer
+    relation_type: Literal["CROSS_LAYER", "SAME_SOURCE_SIGNAL"]
+
+
+class CandidateCrossLayerMechanism(CrossLayerTransmissionProposal):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class CrossLayerAnalysisResult(FrozenModel):
+    target_layer: ImpactLayer
+    accepted: list[AcceptedCrossLayerTransmission] = Field(default_factory=list, max_length=100)
+    candidates: list[CandidateCrossLayerMechanism] = Field(default_factory=list, max_length=100)
+    limitations: list[str] = Field(default_factory=list, max_length=20)
+
+
 class ChainNodeSnapshot(FrozenModel):
     uuid: str
     business_id: str
@@ -271,7 +305,7 @@ class InvestmentAnalysisContext(FrozenModel):
     events: list[EventSnapshot] = Field(min_length=1, max_length=500)
     facts: list[FactSnapshot] = Field(default_factory=list, max_length=2000)
     anchors: list[AnalysisAnchorSnapshot] = Field(default_factory=list, max_length=500)
-    chains: list[IndustryChainSnapshot] = Field(default_factory=list, max_length=10)
+    chains: list[IndustryChainSnapshot] = Field(default_factory=list, max_length=100)
     retrieval_strategy: Literal["GRAPHITI_NATIVE_SEARCH_PLUS_EXACT_TEMPORAL_SCOPE"] = (
         "GRAPHITI_NATIVE_SEARCH_PLUS_EXACT_TEMPORAL_SCOPE"
     )
@@ -370,7 +404,7 @@ class ChainTrendView(FrozenModel):
 
 class AnalysisDraft(FrozenModel):
     one_sentence_conclusion: str = Field(min_length=1, max_length=2000)
-    chains: list[ChainTrendView] = Field(default_factory=list, max_length=10)
+    chains: list[ChainTrendView] = Field(default_factory=list, max_length=100)
     limitations: list[str] = Field(default_factory=list, max_length=20)
 
 
@@ -396,6 +430,8 @@ class InvestmentAnalysisResult(FrozenModel):
     geopolitical: LayerAnalysisResult
     macro: LayerAnalysisResult
     industry: LayerAnalysisResult
+    cross_layer_transmissions: list[AcceptedCrossLayerTransmission] = Field(default_factory=list, max_length=200)
+    cross_layer_candidates: list[CandidateCrossLayerMechanism] = Field(default_factory=list, max_length=200)
     transmissions: list[AcceptedTransmission]
     draft: AnalysisDraft
     review: ReviewResult
@@ -437,6 +473,9 @@ class MacroAnalysisState(FrozenModel):
     prepared: PreparedInvestmentContext
     geopolitical: LayerAnalysisResult
     macro: LayerAnalysisResult
+    macro_transmission: CrossLayerAnalysisResult = Field(
+        default_factory=lambda: CrossLayerAnalysisResult(target_layer=ImpactLayer.MACRO_ECONOMIC)
+    )
 
 
 class IndustryAnalysisState(FrozenModel):
@@ -444,8 +483,32 @@ class IndustryAnalysisState(FrozenModel):
     geopolitical: LayerAnalysisResult
     macro: LayerAnalysisResult
     industry: LayerAnalysisResult
+    macro_transmission: CrossLayerAnalysisResult = Field(
+        default_factory=lambda: CrossLayerAnalysisResult(target_layer=ImpactLayer.MACRO_ECONOMIC)
+    )
+    industry_transmission: CrossLayerAnalysisResult = Field(
+        default_factory=lambda: CrossLayerAnalysisResult(target_layer=ImpactLayer.INDUSTRY)
+    )
     industry_context: InvestmentAnalysisContext
     transmissions: list[AcceptedTransmission]
     rounds_executed: int = Field(ge=0, le=3)
     draft: AnalysisDraft
     execution_issues: list[str] = Field(default_factory=list)
+
+
+class ReviewedInvestmentState(FrozenModel):
+    """Rename-safe handoff from review/audit to deterministic Report generation."""
+
+    analysis: InvestmentConclusionArtifact
+    context: InvestmentAnalysisContext
+
+
+class InvestmentReportWorkflowOutput(FrozenModel):
+    """Small final Workflow product, separate from the full reasoning audit."""
+
+    schema_version: Literal["investment-report-workflow-output/v2"] = "investment-report-workflow-output/v2"
+    source_report_id: str
+    report_artifact_path: str
+    audit_artifact_path: str
+    generation_status: Literal["GENERATED", "SKIPPED"]
+    reason: str | None = None
