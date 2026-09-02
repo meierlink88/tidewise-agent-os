@@ -6,6 +6,12 @@ import hashlib
 import json
 
 from capabilities.investment.internal.models import (
+    TRANSMISSION_CONTINUATION_THRESHOLD as DEFAULT_TRANSMISSION_CONTINUATION_THRESHOLD,
+)
+from capabilities.investment.internal.models import (
+    TRANSMISSION_INCLUSION_THRESHOLD as DEFAULT_TRANSMISSION_INCLUSION_THRESHOLD,
+)
+from capabilities.investment.internal.models import (
     AcceptedCrossLayerTransmission,
     AcceptedTransmission,
     AnalysisDraft,
@@ -37,8 +43,8 @@ from capabilities.investment.internal.models import (
 class InvestmentReasoningEngine:
     """Validate Workflow outputs and normalize unsupported model conclusions."""
 
-    TRANSMISSION_INCLUSION_THRESHOLD = 0.40
-    TRANSMISSION_CONTINUATION_THRESHOLD = 0.65
+    TRANSMISSION_INCLUSION_THRESHOLD = DEFAULT_TRANSMISSION_INCLUSION_THRESHOLD
+    TRANSMISSION_CONTINUATION_THRESHOLD = DEFAULT_TRANSMISSION_CONTINUATION_THRESHOLD
 
     @staticmethod
     def context_fingerprint(context: InvestmentAnalysisContext) -> str:

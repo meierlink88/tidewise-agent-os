@@ -40,6 +40,8 @@ from capabilities.investment.internal.models import (
 from sematica.graphiti.investment import GraphitiInvestmentReader
 from sematica.graphiti.runtime import create_agentos_graphiti
 
+LAYER_REASONING_BATCH_SIZE = 100
+
 
 def _raw_payload(value: Any) -> Any:
     content = getattr(value, "content", value)
@@ -281,6 +283,54 @@ class LocalInvestmentWorkflowRuntime:
         )
 
     async def _reason_layer(self, context: LayerAnalysisContext) -> LayerAssessmentBatch:
+        if len(context.anchors) <= LAYER_REASONING_BATCH_SIZE:
+            return await self._reason_layer_once(context)
+
+        batches = []
+        for offset in range(0, len(context.anchors), LAYER_REASONING_BATCH_SIZE):
+            anchors = context.anchors[offset : offset + LAYER_REASONING_BATCH_SIZE]
+            anchor_uuids = {item.uuid for item in anchors}
+            anchor_ids = {item.business_id for item in anchors}
+            facts = [
+                fact
+                for fact in context.facts
+                if fact.source_uuid in anchor_uuids
+                or fact.target_uuid in anchor_uuids
+                or fact.source_business_id in anchor_ids
+                or fact.target_business_id in anchor_ids
+            ]
+            fact_ids = {item.uuid for item in facts}
+            direct_signal_fact_ids = [item for item in context.direct_signal_fact_ids if item in fact_ids]
+            receipt = context.retrieval_receipt.model_copy(
+                update={
+                    "anchor_ids": [item.business_id for item in anchors],
+                    "fact_ids": [item.uuid for item in facts],
+                    "direct_signal_fact_ids": direct_signal_fact_ids,
+                }
+            )
+            batches.append(
+                context.model_copy(
+                    update={
+                        "anchors": anchors,
+                        "facts": facts,
+                        "direct_signal_fact_ids": direct_signal_fact_ids,
+                        "retrieval_receipt": receipt,
+                    }
+                )
+            )
+        results = await asyncio.gather(*(self._reason_layer_once(batch) for batch in batches))
+        proposals_by_anchor = {proposal.anchor_id: proposal for result in results for proposal in result.proposals}
+        summaries = list(dict.fromkeys(result.summary for result in results if result.summary))
+        return LayerAssessmentBatch(
+            proposals=list(proposals_by_anchor.values()),
+            supplemental_queries=list(
+                dict.fromkeys(query for result in results for query in result.supplemental_queries)
+            )[:4],
+            summary="\n".join(summaries)[:1600] or "分批分析完成。",
+            limitations=list(dict.fromkeys(item for result in results for item in result.limitations))[:20],
+        )
+
+    async def _reason_layer_once(self, context: LayerAnalysisContext) -> LayerAssessmentBatch:
         layer_rules = {
             ImpactLayer.GEOPOLITICAL: ("只解读已检索的 GeopoliticRivalry 锚点及其直接 Signal。"),
             ImpactLayer.MACRO_ECONOMIC: (
@@ -335,12 +385,39 @@ class LocalInvestmentWorkflowRuntime:
             "无普通 Fact 但逻辑合理时保留为低置信度待验证传导，不得发明锚点。\n"
             + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         )
-        batch = await self._run(self._reasoner, prompt, CrossLayerTransmissionBatch)
-        return InvestmentReasoningEngine.validate_cross_layer_batch(
-            context,
-            source_assessments,
-            target_assessments,
-            batch,
+        target_batches = [
+            target_assessments[offset : offset + LAYER_REASONING_BATCH_SIZE]
+            for offset in range(0, len(target_assessments), LAYER_REASONING_BATCH_SIZE)
+        ]
+
+        async def analyze_batch(target_batch: list[LayerAssessment]) -> CrossLayerAnalysisResult:
+            batch_payload = {
+                **payload,
+                "target_assessments": [item.model_dump(mode="json") for item in target_batch],
+            }
+            batch_prompt = (
+                prompt.rsplit("\n", 1)[0]
+                + "\n"
+                + json.dumps(
+                    batch_payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+            batch = await self._run(self._reasoner, batch_prompt, CrossLayerTransmissionBatch)
+            return InvestmentReasoningEngine.validate_cross_layer_batch(
+                context,
+                source_assessments,
+                target_batch,
+                batch,
+            )
+
+        results = await asyncio.gather(*(analyze_batch(target_batch) for target_batch in target_batches))
+        return CrossLayerAnalysisResult(
+            target_layer=context.layer,
+            accepted=[item for result in results for item in result.accepted],
+            candidates=[item for result in results for item in result.candidates],
+            limitations=list(dict.fromkeys(item for result in results for item in result.limitations))[:20],
         )
 
     async def analyze_industry(

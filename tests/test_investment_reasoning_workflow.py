@@ -890,7 +890,7 @@ class InvestmentWorkflowShapeTest(unittest.TestCase):
     def test_http_natural_language_contract_is_owned_by_prepare_not_workflow_input_schema(self) -> None:
         workflow = _seed_workflow(cast(Agent, object()), cast(Agent, object()))
 
-        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 8)
+        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 9)
         self.assertIsNone(workflow.input_schema)
         self.assertIs(cast(list[Step], workflow.steps)[0].executor, prepare_investment_context)
 
@@ -1607,6 +1607,155 @@ class GraphitiInvestmentRetrievalTest(unittest.IsolatedAsyncioTestCase):
         reader.search_anchor_nodes.assert_not_awaited()
         reader.load_anchor_facts.assert_not_awaited()
 
+    async def test_chainnode_label_is_sufficient_to_expand_signal_rooted_chains(self) -> None:
+        gate = InvestmentReasoningGateTest()
+        signal = gate._active_signal().model_copy(update={"anchor_type": None})
+        node_anchor = AnalysisAnchorSnapshot(
+            uuid="node-a-uuid",
+            business_id="node-a",
+            name="上游",
+            entity_type="ChainNode",
+            source_event_ids=["event-1"],
+        )
+        base = gate._context(signal).model_copy(update={"anchors": [node_anchor], "chains": []})
+        reader = MagicMock()
+        reader.load_chain_candidates = AsyncMock(
+            return_value=[
+                {
+                    "uuid": "chain-uuid",
+                    "business_id": "chain-1",
+                    "name": "测试产业链",
+                    "matched_node_ids": ["node-a"],
+                }
+            ]
+        )
+        reader.load_chain_nodes = AsyncMock(
+            return_value=[
+                {
+                    "chain_id": "chain-1",
+                    "uuid": "node-a-uuid",
+                    "business_id": "node-a",
+                    "name": "上游",
+                    "stage": "UPSTREAM",
+                    "position": 1,
+                }
+            ]
+        )
+        reader.load_topology_edges = AsyncMock(return_value=[])
+        builder = InvestmentContextBuilder(cast(Any, reader))
+
+        layer_context = await builder.build_layer_context(base, ImpactLayer.INDUSTRY, [])
+        expanded = await builder.expand_industry_context(base, layer_context, [])
+
+        self.assertEqual([item.business_id for item in expanded.chains], ["chain-1"])
+        reader.load_chain_candidates.assert_awaited_once()
+
+    async def test_signal_rooted_chain_candidates_are_paged_without_total_truncation(self) -> None:
+        gate = InvestmentReasoningGateTest()
+        signal = gate._active_signal()
+        records = [
+            {
+                "uuid": f"chain-uuid-{index}",
+                "business_id": f"chain-{index:03d}",
+                "name": f"产业链 {index:03d}",
+                "matched_node_ids": ["node-a"],
+            }
+            for index in range(205)
+        ]
+
+        async def load_candidates(*args, limit: int, offset: int = 0, **kwargs):
+            del args, kwargs
+            return records[offset : offset + limit]
+
+        async def load_nodes(chain_ids: list[str], *, limit: int):
+            del limit
+            return [
+                {
+                    "chain_id": chain_id,
+                    "uuid": f"{chain_id}-node-uuid",
+                    "business_id": "node-a",
+                    "name": "上游",
+                    "stage": "UPSTREAM",
+                    "position": 1,
+                }
+                for chain_id in chain_ids
+            ]
+
+        reader = MagicMock()
+        reader.load_chain_candidates = AsyncMock(side_effect=load_candidates)
+        reader.load_chain_nodes = AsyncMock(side_effect=load_nodes)
+        reader.load_topology_edges = AsyncMock(return_value=[])
+        builder = InvestmentContextBuilder(cast(Any, reader))
+
+        chains = await builder._load_chains(
+            gate._context(signal).request,
+            {"node-a"},
+            set(),
+            [signal],
+            eligible_signal_fact_ids={signal.uuid},
+        )
+
+        self.assertEqual(len(chains), 205)
+        self.assertEqual(reader.load_chain_candidates.await_count, 3)
+
+    async def test_layer_reasoning_batches_more_than_one_hundred_signal_roots(self) -> None:
+        gate = InvestmentReasoningGateTest()
+        anchors = [
+            AnalysisAnchorSnapshot(
+                uuid=f"node-{index}-uuid",
+                business_id=f"node-{index}",
+                name=f"节点 {index}",
+                entity_type="ChainNode",
+            )
+            for index in range(205)
+        ]
+        context = LayerAnalysisContext(
+            layer=ImpactLayer.INDUSTRY,
+            decision_at=gate._context(gate._active_signal()).request.decision_at,
+            question="分析全部产业节点",
+            events=gate._context(gate._active_signal()).events,
+            anchors=anchors,
+            facts=[],
+            parent_assessments=[],
+            direct_signal_fact_ids=[],
+            ontology=LayerAssessmentContractTest._ontology(),
+            retrieval_receipt=RetrievalReceipt(
+                stage="INDUSTRY",
+                layer=ImpactLayer.INDUSTRY,
+                required_actions=["select_signal_root_anchors"],
+                completed_actions=["select_signal_root_anchors"],
+                anchor_ids=[item.business_id for item in anchors],
+            ),
+        )
+        runtime = object.__new__(LocalInvestmentWorkflowRuntime)
+        runtime._reasoner = MagicMock()
+        calls: list[int] = []
+
+        async def run(agent, prompt: str, model):
+            del agent, model
+            payload = json.loads(prompt.split("\n", 1)[1])
+            batch_anchors = payload["instances"]["anchors"]
+            calls.append(len(batch_anchors))
+            return LayerAssessmentBatch(
+                proposals=[
+                    LayerAssessmentProposal(
+                        anchor_id=item["business_id"],
+                        result=Trend.WARMING,
+                        confidence=Confidence.MEDIUM,
+                        summary=f"{item['name']}升温",
+                        reasoning="输入 Signal 支持该结论。",
+                    )
+                    for item in batch_anchors
+                ],
+                summary="批次分析完成。",
+            )
+
+        with patch.object(runtime, "_run", side_effect=run):
+            result = await runtime._reason_layer(context)
+
+        self.assertEqual(calls, [100, 100, 5])
+        self.assertEqual(len(result.proposals), 205)
+
     async def test_layer_queries_have_a_strict_budget_under_maximum_context(self) -> None:
         gate = InvestmentReasoningGateTest()
         base_signal = gate._active_signal()
@@ -1783,6 +1932,7 @@ class GraphitiInvestmentRetrievalTest(unittest.IsolatedAsyncioTestCase):
                             "summary": "事件提及一个标准产业链节点。",
                             "modality": "FACT",
                             "occurred_at": "2026-08-28T00:00:00Z",
+                            "evidence_ids": ["EVD11111111-1111-4111-8111-111111111111"],
                         }
                     ),
                     "valid_at": datetime(2026, 8, 28, 0, 0, tzinfo=UTC),
@@ -1817,6 +1967,7 @@ class GraphitiInvestmentRetrievalTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(context.chains, [])
         self.assertEqual([anchor.business_id for anchor in context.anchors], ["node-a"])
+        self.assertEqual(context.events[0].evidence_ids, ["EVD11111111-1111-4111-8111-111111111111"])
         reader.load_chain_candidates.assert_not_awaited()
         reader.load_chain_nodes.assert_not_awaited()
         reader.load_topology_edges.assert_not_awaited()

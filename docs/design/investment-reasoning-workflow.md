@@ -28,7 +28,7 @@ Event 进入 Graphiti 前后的分类、锚点匹配和直接 Signal Fact 构建
 }
 ```
 
-Agno 的 HTTP 层在配置 Workflow `input_schema` 时会先把原始 message 当 JSON 解码，因此本 Workflow 不在 Agno 入口声明 `input_schema`，而由第一个确定性 Function 把原始自然语言或 JSON 统一校验为 `InvestmentReasoningInput`。该合同必须拒绝未知字段和 `include_company=true`。为迁移现有本地 Schedule，可在一个兼容周期内接受包含明确“最近 N 小时”的旧中文 message；不得静默使用另一个隐藏时间窗。`decision_at`、产业链上限、检索预算和最多五跳由确定性代码控制，不接受 Schedule 覆盖。`event_window_hours` 最大支持 8760 小时，便于对同一历史 Event 范围做确定性重放；生产 Schedule 仍由 Control Panel 显式保持 48 小时等日常窗口。
+Agno 的 HTTP 层在配置 Workflow `input_schema` 时会先把原始 message 当 JSON 解码，因此本 Workflow 不在 Agno 入口声明 `input_schema`，而由第一个确定性 Function 把原始自然语言或 JSON 统一校验为 `InvestmentReasoningInput`。该合同必须拒绝未知字段和 `include_company=true`。为迁移现有本地 Schedule，可在一个兼容周期内接受包含明确“最近 N 小时”的旧中文 message；不得静默使用另一个隐藏时间窗。`decision_at`、检索预算、分页批量、运行安全上限和最多五跳由确定性代码控制，不接受 Schedule 覆盖。产业链候选必须分页读完当前 Signal 根所命中的全部真实链，禁止按某次报告的条数静默截断。`event_window_hours` 最大支持 8760 小时，便于对同一历史 Event 范围做确定性重放；生产 Schedule 仍由 Control Panel 显式保持 48 小时等日常窗口。
 
 ## 固定六步
 
@@ -97,12 +97,12 @@ generate-investment-report
 
 1. 从本次 Event 时间窗内有效的 `SIGNAL_ON → ChainNode` 精确确定 Signal 根节点；
 2. 只用这些 Signal 和与根节点直接相关的本次 Event Fact 形成节点评估，不执行宽泛产业锚点向量召回，也不批量加载候选锚点的全部 Fact；
-3. 通过真实 `ChainNodeBelongsToIndustryChain` 关系解析根节点所属的全部 `IndustryChain`；
+3. 通过真实 `ChainNodeBelongsToIndustryChain` 关系分页解析根节点所属的全部 `IndustryChain`；
 4. 每条候选链独立加载全部标准 `ChainNode` 和真实拓扑边；
 5. 程序从每个 Signal 根枚举全部真实相邻边，Reasoner 只评估固定候选，不得自行挑选节点或边；
 6. 路径分数达到 `0.40` 才保留为推理假设，达到 `0.65` 的单条路径才继续下一跳，最多五跳；
 7. 每条路径独立停止，某条低置信度路径不得阻断其他分支；
-8. 覆盖该链每个标准节点，分别生成短、中、长期趋势；
+8. 单层直接 Signal 根按固定批量分批交给 Reasoner，合并后必须覆盖该链每个标准节点，分别生成短、中、长期趋势；
 9. 由程序根据真实节点结果汇总产业链整体升温、降温、分化、无显著变化或证据不足。
 
 Event 语义相关不能单独选择产业链或启动方向判断。产业链结论必须由其真实成员节点的直接或受控传导结果汇总，不得使用链级 Signal 启动方向。交叉出现在多条产业链中的节点必须按 `(industry_chain_id, chain_node_id)` 分析，禁止跨链污染。全历史重放与日常时间窗使用同一数据准备顺序；扩大 Event 时间窗不得退化为“候选锚点全部 Fact”查询。
@@ -129,7 +129,7 @@ data/investment/conclusions/<workflow_run_id>.json
 
 ### 6. generate-investment-report
 
-将已审核的结果投影为已冻结的固定报告模板，原子写入 `data/investment/reports/<workflow_run_id>.json`。该 Step 不修改推理结论，不调用 Data Service；展示所需 Evidence ID 仅由 Event 的本地来源映射生成。
+将已审核的结果投影为已冻结的固定报告模板，原子写入 `data/investment/reports/<workflow_run_id>.json`。该 Step 不修改推理结论，不调用 Data Service；展示所需 Evidence ID 优先使用 Event Episode 内已冻结的 `evidence_ids`，本地 Event Artifact 仅作兼容回退，不再是报告生成的必要依赖。
 
 ## 分层评估、检索回执与传导
 

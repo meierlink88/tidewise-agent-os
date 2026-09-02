@@ -150,7 +150,7 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
                 )
             ],
         )
-        request = InvestmentAnalysisRequest(question="分析最近48小时事件", decision_at=self.NOW, max_chains=100)
+        request = InvestmentAnalysisRequest(question="分析最近48小时事件", decision_at=self.NOW)
         context = InvestmentAnalysisContext(
             request=request,
             events=[
@@ -314,6 +314,52 @@ class InvestmentReportingTest(unittest.IsolatedAsyncioTestCase):
             "上述传导为经路径评分筛选的推理假设",
             package.content.industry_chains[0].uncertainty.counterevidence_and_gap or "",
         )
+
+    def test_report_uses_evidence_frozen_in_event_snapshot_without_local_event_artifacts(self) -> None:
+        analysis, context = self._fixture()
+        evidence_by_event = {
+            "event-geo": self.GEO_EVIDENCE,
+            "event-macro": self.MACRO_EVIDENCE,
+            "event-node": self.NODE_EVIDENCE,
+        }
+        context = context.model_copy(
+            update={
+                "events": [
+                    EventSnapshot.model_validate(
+                        {
+                            **event.model_dump(mode="json"),
+                            "evidence_ids": [evidence_by_event[event.event_id]],
+                        }
+                    )
+                    for event in context.events
+                ]
+            }
+        )
+        empty_root = Path(self.temporary.name) / "empty-event-root"
+
+        package = InvestmentReportAssembler(EventEvidenceIndex(empty_root)).assemble(analysis, context)
+
+        self.assertEqual(package.content.geopolitics.anchors[0].evidence_refs[0].evidence_id, self.GEO_EVIDENCE)
+        self.assertEqual(
+            package.content.industry_chains[0].nodes[0].evidence_refs[0].evidence_id,
+            self.NODE_EVIDENCE,
+        )
+
+    def test_report_statistics_use_the_execution_thresholds(self) -> None:
+        analysis, context = self._fixture()
+        analysis = analysis.model_copy(
+            update={
+                "stage_metrics": {
+                    "transmission_inclusion_threshold": 0.51,
+                    "transmission_continuation_threshold": 0.76,
+                }
+            }
+        )
+
+        package = InvestmentReportAssembler(EventEvidenceIndex(self.event_root)).assemble(analysis, context)
+
+        self.assertEqual(package.content.statistics.adaptive_inclusion_threshold, 0.51)
+        self.assertEqual(package.content.statistics.adaptive_continuation_threshold, 0.76)
 
     def test_missing_upper_layer_anchors_keeps_fixed_sections_without_inventing_cards(self) -> None:
         analysis, context = self._fixture()

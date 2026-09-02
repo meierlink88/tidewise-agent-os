@@ -68,7 +68,6 @@ async def prepare_investment_context(step_input: StepInput, run_context: RunCont
         decision_at=datetime.now(UTC),
         forward_horizon_days=1095,
         min_anchor_matches=1,
-        max_chains=100,
         max_hops=5,
     )
     context = await investment_workflow_runtime().prepare(request)
@@ -303,6 +302,8 @@ async def review_and_finalize(step_input: StepInput, run_context: RunContext) ->
             "nodes": sum(len(item.nodes) for item in state.industry_context.chains),
             "topology_edges": sum(len(item.edges) for item in state.industry_context.chains),
             "transmission_rounds": state.rounds_executed,
+            "transmission_inclusion_threshold": state.transmission_metrics.inclusion_threshold,
+            "transmission_continuation_threshold": state.transmission_metrics.continuation_threshold,
             "accepted_transmissions": len(transmissions),
             "transmission_candidates_enumerated": state.transmission_metrics.candidates_enumerated,
             "transmission_candidates_evaluated": state.transmission_metrics.candidates_evaluated,

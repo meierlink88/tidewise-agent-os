@@ -30,13 +30,15 @@ from sematica.graphiti.investment import GraphitiInvestmentReader
 
 MAX_EVENTS = 500
 MAX_FACTS = 2000
-MAX_CHAIN_CANDIDATES = 100
+CHAIN_CANDIDATE_PAGE_SIZE = 100
+MAX_CHAINS_PER_RUN = 2000
 MAX_NODES_PER_CHAIN = 200
 MAX_EDGES_PER_CHAIN = 500
+TOPOLOGY_LOAD_CONCURRENCY = 4
 EVENTS_PER_NATIVE_QUERY = 20
 MAX_NATIVE_EVENT_FRAGMENT_LENGTH = 24
 MAX_LAYER_ANCHORS = 100
-MAX_LAYER_FACTS = 1200
+MAX_LAYER_FACTS = 2000
 MAX_LAYER_QUERIES = 25
 MAX_LAYER_QUERY_LENGTH = 500
 LAYER_EVENTS_PER_QUERY = 20
@@ -114,6 +116,14 @@ def _confidence(*values: str | None) -> Confidence | None:
         except ValueError:
             continue
     return min(normalized, key=rank.__getitem__) if normalized else None
+
+
+def _is_chain_node_signal(fact: FactSnapshot) -> bool:
+    """Recognize a ChainNode Signal from either normalized metadata or graph labels."""
+
+    return fact.kind == "SIGNAL" and (
+        fact.anchor_type == "ChainNode" or "ChainNode" in fact.source_labels or "ChainNode" in fact.target_labels
+    )
 
 
 class InvestmentContextBuilder:
@@ -304,6 +314,8 @@ class InvestmentContextBuilder:
         for fact in base.facts:
             if fact.uuid not in eligible_ids:
                 continue
+            if not _is_chain_node_signal(fact):
+                continue
             endpoints = [
                 (fact.source_uuid, fact.source_business_id, fact.source_name, fact.source_labels),
                 (fact.target_uuid, fact.target_business_id, fact.target_name, fact.target_labels),
@@ -343,7 +355,7 @@ class InvestmentContextBuilder:
                     ),
                 ),
             )
-        anchors = list(anchors_by_uuid.values())[:MAX_LAYER_ANCHORS]
+        anchors = list(anchors_by_uuid.values())
         selected_uuids = {item.uuid for item in anchors}
         selected_ids = {item.business_id for item in anchors}
         direct_signals = [
@@ -406,7 +418,7 @@ class InvestmentContextBuilder:
         anchor_node_ids: set[str] = set()
         direct_chain_ids: set[str] = set()
         eligible_signals = [
-            fact for fact in facts if fact.uuid in base.eligible_signal_fact_ids and fact.anchor_type == "ChainNode"
+            fact for fact in facts if fact.uuid in base.eligible_signal_fact_ids and _is_chain_node_signal(fact)
         ]
         signal_node_ids = {
             endpoint
@@ -616,6 +628,11 @@ class InvestmentContextBuilder:
                     modality=modality,
                     occurred_at=occurred_at,
                     effective_at=_native_datetime(semantic.get("effective_at")),
+                    evidence_ids=[
+                        item
+                        for item in content.get("evidence_ids", [])
+                        if isinstance(item, str) and item.startswith("EVD")
+                    ][:50],
                 )
             )
         if len(result) > MAX_EVENTS:
@@ -701,13 +718,22 @@ class InvestmentContextBuilder:
     ) -> list[IndustryChainSnapshot]:
         if not anchor_node_ids and not direct_chain_ids:
             return []
-        records = await self._reader.load_chain_candidates(
-            anchor_node_ids,
-            direct_chain_ids,
-            limit=MAX_CHAIN_CANDIDATES + 1,
-        )
-        if len(records) > MAX_CHAIN_CANDIDATES:
-            raise ValueError(f"investment chain candidate scope exceeds limit {MAX_CHAIN_CANDIDATES}")
+        records: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            page = await self._reader.load_chain_candidates(
+                anchor_node_ids,
+                direct_chain_ids,
+                limit=CHAIN_CANDIDATE_PAGE_SIZE,
+                offset=offset,
+            )
+            records.extend(page)
+            if len(records) > MAX_CHAINS_PER_RUN:
+                raise ValueError(f"investment chain scope exceeds safety limit {MAX_CHAINS_PER_RUN}")
+            if len(page) < CHAIN_CANDIDATE_PAGE_SIZE:
+                break
+            offset += len(page)
+        records = list({record["business_id"]: record for record in records}.values())
         candidates = sorted(
             (
                 {**record, "matched_node_ids": [item for item in record["matched_node_ids"] if item]}
@@ -716,18 +742,27 @@ class InvestmentContextBuilder:
                 or len([item for item in record["matched_node_ids"] if item]) >= request.min_anchor_matches
             ),
             key=lambda item: (-len(item["matched_node_ids"]), item["name"], item["business_id"]),
-        )[: request.max_chains]
+        )
         if not candidates:
             return []
         chain_ids = [item["business_id"] for item in candidates]
-        node_records, edge_records = await asyncio.gather(
-            self._reader.load_chain_nodes(chain_ids, limit=len(chain_ids) * MAX_NODES_PER_CHAIN + 1),
-            self._reader.load_topology_edges(chain_ids, limit=len(chain_ids) * MAX_EDGES_PER_CHAIN + 1),
-        )
-        if len(node_records) > len(chain_ids) * MAX_NODES_PER_CHAIN:
-            raise ValueError("investment topology node scope exceeds deterministic limit")
-        if len(edge_records) > len(chain_ids) * MAX_EDGES_PER_CHAIN:
-            raise ValueError("investment topology edge scope exceeds deterministic limit")
+        topology_slots = asyncio.Semaphore(TOPOLOGY_LOAD_CONCURRENCY)
+
+        async def load_topology(chain_id: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+            async with topology_slots:
+                node_page, edge_page = await asyncio.gather(
+                    self._reader.load_chain_nodes([chain_id], limit=MAX_NODES_PER_CHAIN + 1),
+                    self._reader.load_topology_edges([chain_id], limit=MAX_EDGES_PER_CHAIN + 1),
+                )
+            if len(node_page) > MAX_NODES_PER_CHAIN:
+                raise ValueError(f"investment chain {chain_id} exceeds {MAX_NODES_PER_CHAIN} nodes")
+            if len(edge_page) > MAX_EDGES_PER_CHAIN:
+                raise ValueError(f"investment chain {chain_id} exceeds {MAX_EDGES_PER_CHAIN} topology edges")
+            return node_page, edge_page
+
+        topology = await asyncio.gather(*(load_topology(chain_id) for chain_id in chain_ids))
+        node_records = [record for node_page, _ in topology for record in node_page]
+        edge_records = [record for _, edge_page in topology for record in edge_page]
         nodes_by_chain: dict[str, list[ChainNodeSnapshot]] = {item: [] for item in chain_ids}
         for record in node_records:
             nodes_by_chain[record["chain_id"]].append(

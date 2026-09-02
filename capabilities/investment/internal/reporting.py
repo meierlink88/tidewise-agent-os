@@ -10,6 +10,8 @@ from zoneinfo import ZoneInfo
 
 from capabilities.event.internal.storage import event_artifact_root
 from capabilities.investment.internal.models import (
+    TRANSMISSION_CONTINUATION_THRESHOLD,
+    TRANSMISSION_INCLUSION_THRESHOLD,
     Confidence,
     Direction,
     FactSnapshot,
@@ -178,6 +180,11 @@ class InvestmentReportAssembler:
         context: InvestmentAnalysisContext,
     ) -> InvestmentReportArtifact:
         event_evidence = self._evidence_index.load()
+        for event in context.events:
+            if event.evidence_ids:
+                event_evidence[event.event_id] = list(
+                    dict.fromkeys([*event.evidence_ids, *event_evidence.get(event.event_id, [])])
+                )
         fact_by_id = {item.uuid: item for item in context.facts}
         assessment_by_id = {
             item.assessment_id: item
@@ -254,8 +261,18 @@ class InvestmentReportAssembler:
                 signal_fact_count=sum(item.kind == "SIGNAL" for item in context.facts),
                 transmission_hypothesis_count=len(analysis.transmissions),
                 remaining_topology_pending_count=pending_nodes,
-                adaptive_inclusion_threshold=0.4,
-                adaptive_continuation_threshold=0.65,
+                adaptive_inclusion_threshold=float(
+                    analysis.stage_metrics.get(
+                        "transmission_inclusion_threshold",
+                        TRANSMISSION_INCLUSION_THRESHOLD,
+                    )
+                ),
+                adaptive_continuation_threshold=float(
+                    analysis.stage_metrics.get(
+                        "transmission_continuation_threshold",
+                        TRANSMISSION_CONTINUATION_THRESHOLD,
+                    )
+                ),
                 adaptive_hard_max_hops=context.request.max_hops,
                 adaptive_observed_max_hops=max((item.hop for item in analysis.transmissions), default=0),
                 adaptive_stopped_by_confidence=analysis.stage_metrics.get("transmission_stopped_by_confidence", 0),
@@ -586,7 +603,7 @@ class InvestmentReportAssembler:
                             "ChainNodeInputTo": "投入",
                             "ChainNodeIsComponentOf": "组成",
                             "ChainNodeDependsOn": "依赖",
-                        }[edge.name],
+                        }.get(edge.name, edge.name),
                     )
                 )
             direct_nodes = [item.name for item in nodes if item.nature.code == "direct_evidence"]
