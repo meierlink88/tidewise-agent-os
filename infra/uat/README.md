@@ -22,7 +22,7 @@ owns its persistence. PostgreSQL and Neo4j on DGX are dedicated AgentOS dependen
 
 The current Compose binds AgentOS only to `127.0.0.1:9081`. Before cutover, provision a reviewed TLS route or tunnel
 from the public `AGENTOS_EXTERNAL_URL` to that loopback listener. A release is accepted only when public `/health`
-returns the candidate commit in `X-Tidewise-Release`; this prevents a successful check against the old ECS instance.
+returns the candidate commit in `X-Tidewise-Release`; this prevents a successful check against an unintended backend.
 
 ## Security and persistence
 
@@ -74,21 +74,26 @@ Secrets:
 
 No Data Service database or object-storage variable/secret belongs in this environment.
 
-## State migration and cutover
+## Fresh initialization and cutover
 
-1. Keep the ECS AgentOS running and create a restorable AgentOS-only PostgreSQL dump through the old private runner.
-2. Transfer the encrypted dump to `/opt/tidewise/agentos-uat/backups`; verify its checksum before decrypting locally.
-3. Start only DGX PostgreSQL and restore the dump as `agent_os_uat_runtime`; do not copy Data Service databases.
-4. Start DGX Neo4j as a new AgentOS-exclusive graph. Populate authoritative graph inputs through supported AgentOS
-   commands/API paths; do not copy or mount the legacy OpenSPG/Data Service Neo4j volumes.
-5. Dispatch **Deploy UAT** with `stage_only` enabled. This proves internal health, auth, components, workflows,
-   schedules, MCP, Data API, Graphiti, restart recovery, volume persistence, and image digests without claiming cutover.
-6. Route public HTTPS `/agentos` to DGX and dispatch the same commit with `stage_only` disabled. The candidate SHA
-   header must match before the release is accepted.
-7. Observe the DGX release before retiring the ECS AgentOS. Retirement is a separate, explicitly authorized action.
+The DGX environment is a new UAT and never imports the legacy ECS database or Artifact directory. "Copy development"
+means promoting the Git-tracked Agent, Workflow, capability, manifest, and Schedule definitions after they have been
+reviewed and merged into `main`; it never copies a developer database, `.env`, secrets, or ignored local Artifacts.
+
+1. Merge the development change into `main` and wait for that exact commit's **Validate** run to succeed.
+2. Dispatch **Deploy UAT** from `main` with `dependencies_only=true`. This starts and verifies only fresh PostgreSQL
+   and AgentOS-exclusive Neo4j, proves named-volume persistence across restart, and proves that neither service
+   publishes a host port. AgentOS remains stopped.
+3. Dispatch the same validated commit with `dependencies_only=false` and `stage_only=true`. This deploys AgentOS,
+   applies the additive Agno migration to the fresh database, seeds code-defined default Schedules, and proves internal
+   health, auth, components, workflows, MCP, public Data API access, Graphiti, restart recovery, and image digests.
+4. Route public HTTPS `/agentos` to DGX and dispatch the same commit with `stage_only=false`. The candidate SHA header
+   must match before the release is accepted.
+5. Observe the DGX release. Any legacy ECS cleanup is outside this deployment and requires separate authorization.
 
 Run **Deploy UAT** manually from `main`. It accepts only a commit already validated on `main`, builds ARM64 images on
 DGX, deploys digest references, starts dedicated PostgreSQL and Neo4j, applies the additive Agno migration, and seeds
 default schedules only for the first DGX release. On candidate failure, it restores the prior AgentOS image/config;
 database state is not automatically rolled back. The last two release snapshots remain under the deployment state
-directory.
+directory. In `dependencies_only` mode it records only the dependency image and Compose snapshot; it does not create an
+AgentOS release snapshot or start the application.
