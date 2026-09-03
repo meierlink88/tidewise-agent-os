@@ -87,6 +87,9 @@ reviewed and merged into `main`; it never copies a developer database, `.env`, s
 3. Dispatch the same validated commit with `dependencies_only=false` and `stage_only=true`. This deploys AgentOS,
    applies the additive Agno migration to the fresh database, seeds code-defined default Schedules, and proves internal
    health, auth, components, workflows, MCP, public Data API access, Graphiti, restart recovery, and image digests.
+   The smoke check keeps workflow execution on a least-privilege temporary service account and uses a separate
+   five-minute administrator probe only to verify the unowned system Schedules through the authenticated API;
+   both accounts are deleted even when verification fails.
 4. Route public HTTPS `/agentos` to DGX and dispatch the same commit with `stage_only=false`. The candidate SHA header
    must match before the release is accepted.
 5. Observe the DGX release. Any legacy ECS cleanup is outside this deployment and requires separate authorization.

@@ -1,12 +1,16 @@
 import subprocess
 from pathlib import Path
-from unittest import TestCase
+from unittest import IsolatedAsyncioTestCase, TestCase
+from unittest.mock import AsyncMock, patch
 
 from agno.os import AgentOSBuiltinAuth
+from agno.os.middleware.user_scope import get_scoped_user_id
 from agno.os.scopes import has_required_scopes
 from fastmcp import FastMCP
+from starlette.requests import Request
 
-from scripts.smoke_uat import UAT_SMOKE_SERVICE_ACCOUNT_SCOPES
+from scripts import smoke_uat
+from scripts.smoke_uat import UAT_SCHEDULE_PROBE_SERVICE_ACCOUNT_SCOPES, UAT_SMOKE_SERVICE_ACCOUNT_SCOPES
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,7 +40,6 @@ class UatIngressContractTest(TestCase):
             "agents:read",
             "workflows:read",
             "workflows:run",
-            "schedules:read",
             "config:read",
         ]
 
@@ -47,6 +50,18 @@ class UatIngressContractTest(TestCase):
             )
         )
         self.assertNotIn("agent_os:admin", UAT_SMOKE_SERVICE_ACCOUNT_SCOPES)
+
+    def test_schedule_probe_is_unscoped_only_with_admin_scope(self) -> None:
+        regular_request = Request({"type": "http"})
+        regular_request.state.user_id = "sa:uat-deploy-smoke"
+        regular_request.state.scopes = list(UAT_SMOKE_SERVICE_ACCOUNT_SCOPES)
+        self.assertEqual(get_scoped_user_id(regular_request), "sa:uat-deploy-smoke")
+
+        schedule_request = Request({"type": "http"})
+        schedule_request.state.user_id = "sa:uat-schedule-probe"
+        schedule_request.state.scopes = list(UAT_SCHEDULE_PROBE_SERVICE_ACCOUNT_SCOPES)
+        self.assertIsNone(get_scoped_user_id(schedule_request))
+        self.assertEqual(UAT_SCHEDULE_PROBE_SERVICE_ACCOUNT_SCOPES, ["agent_os:admin"])
 
     def test_dgx_owns_agentos_dependencies_and_uses_public_data_api(self) -> None:
         compose = (REPOSITORY_ROOT / "infra/uat/docker-compose.yaml").read_text()
@@ -166,3 +181,30 @@ class UatIngressContractTest(TestCase):
 
         with self.assertRaisesRegex(ValueError, "Issuer URL must be HTTPS"):
             FastMCP(name="uat-contract", auth=auth).http_app(path="/mcp")
+
+
+class UatSmokeCleanupTest(IsolatedAsyncioTestCase):
+    async def test_removes_both_temporary_accounts_when_probe_fails(self) -> None:
+        class FakeDb:
+            def __init__(self) -> None:
+                self.created: list[dict] = []
+                self.deleted: list[str] = []
+
+            def create_service_account(self, account: dict) -> None:
+                self.created.append(account)
+
+            def delete_service_account(self, account_id: str) -> None:
+                self.deleted.append(account_id)
+
+        db = FakeDb()
+        probe = AsyncMock(side_effect=RuntimeError("probe failed"))
+
+        with patch.object(smoke_uat, "get_postgres_db", return_value=db), patch.object(smoke_uat, "_probe", probe):
+            with self.assertRaisesRegex(RuntimeError, "probe failed"):
+                await smoke_uat.main()
+
+        self.assertEqual(len(db.created), 2)
+        self.assertEqual({account["id"] for account in db.created}, set(db.deleted))
+        self.assertEqual(db.created[0]["scopes"], UAT_SMOKE_SERVICE_ACCOUNT_SCOPES)
+        self.assertEqual(db.created[1]["scopes"], UAT_SCHEDULE_PROBE_SERVICE_ACCOUNT_SCOPES)
+        probe.assert_awaited_once()
