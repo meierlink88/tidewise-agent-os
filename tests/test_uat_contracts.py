@@ -101,6 +101,12 @@ class UatIngressContractTest(TestCase):
         self.assertIn("--no-owner --no-acl", migration)
         self.assertIn("migration-complete.sha256", migration)
         self.assertIn("refusing destructive restore", migration)
+        self.assertIn("stage-postgres-client:", migration)
+        self.assertIn("docker save agentos-postgres-client:16", migration)
+        self.assertIn("sha256sum --check SHA256SUMS", migration)
+        self.assertIn("gzip -dc postgres-client-image.tar.gz | docker load", migration)
+        export_job = migration.split("  export-ecs:", 1)[1].split("  import-dgx:", 1)[0]
+        self.assertNotIn('docker pull --platform linux/amd64 "$POSTGRES_IMAGE"', export_job)
         self.assertNotIn("REASON_SERVICE", compose)
         self.assertNotIn("REASON_SERVICE", workflow)
         self.assertIn(
