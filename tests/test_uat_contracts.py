@@ -39,6 +39,9 @@ class UatIngressContractTest(TestCase):
         self.assertIn('"127.0.0.1:9081:9081"', compose)
         self.assertIn("postgres:", compose)
         self.assertIn("neo4j:", compose)
+        neo4j_service = compose.split("  neo4j:", 1)[1].split("  agentos:", 1)[0]
+        self.assertNotIn("\n      NEO4J_PASSWORD:", neo4j_service)
+        self.assertIn("$${NEO4J_AUTH#*/}", neo4j_service)
         self.assertIn("tidewise-agentos-uat-postgres-data", compose)
         self.assertIn("tidewise-agentos-uat-neo4j-data", compose)
         self.assertNotIn("ports:", compose.split("agentos:", 1)[0])

@@ -30,7 +30,6 @@ services:
     restart: unless-stopped
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
       NEO4J_server_memory_heap_initial__size: ${NEO4J_HEAP_INITIAL_SIZE:-1G}
       NEO4J_server_memory_heap_max__size: ${NEO4J_HEAP_MAX_SIZE:-4G}
       NEO4J_server_memory_pagecache_size: ${NEO4J_PAGECACHE_SIZE:-4G}
@@ -38,7 +37,7 @@ services:
       - agentos-neo4j-data:/data
       - agentos-neo4j-logs:/logs
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$$NEO4J_PASSWORD\" 'RETURN 1' >/dev/null"]
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$${NEO4J_AUTH#*/}\" 'RETURN 1' >/dev/null"]
       interval: 15s
       timeout: 10s
       retries: 20
