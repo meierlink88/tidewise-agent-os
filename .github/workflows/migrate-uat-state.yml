@@ -20,14 +20,44 @@ env:
   POSTGRES_IMAGE: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
 
 jobs:
+  stage-postgres-client:
+    name: Stage immutable AMD64 PostgreSQL client
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull and package the pinned client image
+        id: package
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          artifact_root="${RUNNER_TEMP}/postgres-client"
+          archive="${artifact_root}/postgres-client-image.tar.gz"
+          mkdir -p "$artifact_root"
+          docker pull --platform linux/amd64 "$POSTGRES_IMAGE"
+          [ "$(docker image inspect --format '{{.Architecture}}' "$POSTGRES_IMAGE")" = amd64 ]
+          docker tag "$POSTGRES_IMAGE" agentos-postgres-client:16
+          docker save agentos-postgres-client:16 | gzip -1 > "$archive"
+          test -s "$archive"
+          (cd "$artifact_root" && sha256sum postgres-client-image.tar.gz > SHA256SUMS)
+          echo "path=$artifact_root" >> "$GITHUB_OUTPUT"
+
+      - name: Upload short-lived PostgreSQL client image
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentos-postgres-client-${{ github.run_id }}
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
+          retention-days: 1
+
   export-ecs:
     name: Export encrypted AgentOS-only state from ECS
+    needs: stage-postgres-client
     runs-on: [self-hosted, linux, x64, tidewise-agentos-uat-ecs]
     environment: uat
     env:
       DB_HOST: ${{ vars.RDS_HOST }}
       DB_PASS: ${{ secrets.AGENTOS_DB_PASSWORD }}
       MIGRATION_PASSPHRASE: ${{ secrets.UAT_MIGRATION_PASSPHRASE }}
+      POSTGRES_CLIENT_IMAGE: agentos-postgres-client:16
     steps:
       - name: Validate explicit confirmation
         shell: bash
@@ -37,6 +67,21 @@ jobs:
           : "${DB_HOST:?RDS_HOST is required}"
           : "${DB_PASS:?AGENTOS_DB_PASSWORD is required}"
           : "${MIGRATION_PASSPHRASE:?UAT_MIGRATION_PASSPHRASE is required}"
+
+      - name: Download staged PostgreSQL client image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: agentos-postgres-client-${{ github.run_id }}
+          path: ${{ runner.temp }}/postgres-client
+
+      - name: Verify and load PostgreSQL client image
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/postgres-client"
+          sha256sum --check SHA256SUMS
+          gzip -dc postgres-client-image.tar.gz | docker load
+          [ "$(docker image inspect --format '{{.Architecture}}' "$POSTGRES_CLIENT_IMAGE")" = amd64 ]
 
       - name: Export and encrypt database plus local artifacts
         id: export
@@ -50,7 +95,7 @@ jobs:
           umask 077
           docker run --rm \
             -e PGPASSWORD="$DB_PASS" \
-            "$POSTGRES_IMAGE" \
+            "$POSTGRES_CLIENT_IMAGE" \
             pg_dump --host "$DB_HOST" --port 5432 --username agent_os_uat_runtime \
               --dbname agent_os_uat --clean --if-exists --no-owner --no-acl \
             | gzip -9 > "$migration_root/agent-os.sql.gz"
@@ -79,7 +124,10 @@ jobs:
       - name: Remove plaintext and encrypted temporary files
         if: always()
         shell: bash
-        run: rm -rf "${RUNNER_TEMP}"/agentos-uat-export.* "${RUNNER_TEMP}/agentos-uat-state.enc"
+        run: |
+          rm -rf "${RUNNER_TEMP}"/agentos-uat-export.* "${RUNNER_TEMP}/agentos-uat-state.enc" \
+            "${RUNNER_TEMP}/postgres-client"
+          docker image rm "$POSTGRES_CLIENT_IMAGE" >/dev/null 2>&1 || true
 
   import-dgx:
     name: Restore once into dedicated DGX volumes
