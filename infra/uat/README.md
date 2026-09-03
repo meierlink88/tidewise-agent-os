@@ -10,7 +10,7 @@ public HTTPS /agentos
         v
 DGX Spark (Linux ARM64)
 ├── AgentOS         127.0.0.1:9081 only
-├── PostgreSQL 16   AgentOS runtime state only; no host port
+├── PostgreSQL 17   AgentOS runtime state only; no host port
 └── Neo4j 5.26      AgentOS Graphiti only; no host port
         |
         +---- HTTPS + service token ----> Huawei Cloud public Data Service API
