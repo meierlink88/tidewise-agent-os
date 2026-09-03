@@ -109,6 +109,10 @@ class UatIngressContractTest(TestCase):
         self.assertNotIn("postgres:16@sha256:", workflow)
         self.assertIn("sha256sum --check SHA256SUMS", migration)
         self.assertIn("gzip -dc postgres-client-image.tar.gz | docker load", migration)
+        self.assertIn("docker run --rm --read-only --network none", migration)
+        self.assertIn("source=/opt/tidewise/agentos-uat,target=/source,readonly", migration)
+        self.assertIn("source=${migration_root},target=/export", migration)
+        self.assertIn("-C /source -czf /export/artifacts.tar.gz data", migration)
         export_job = migration.split("  export-ecs:", 1)[1].split("  import-dgx:", 1)[0]
         self.assertNotIn('docker pull --platform linux/amd64 "$POSTGRES_IMAGE"', export_job)
         self.assertNotIn("REASON_SERVICE", compose)
