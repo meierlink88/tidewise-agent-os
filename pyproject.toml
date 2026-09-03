@@ -11,7 +11,6 @@ dependencies = [
   "agno[os,mcp,slack,pgvector,psycopg]==3.0.1",
   "graphiti-core==0.29.3",
   "httpx==0.28.1",
-  "minio",
   "neo4j==6.2.0",
   "openai",
   "pydantic==2.13.4",

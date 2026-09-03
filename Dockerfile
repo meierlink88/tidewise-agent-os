@@ -21,7 +21,7 @@ RUN uv pip sync requirements.txt --system
 COPY . .
 
 # Run the API as an unprivileged, stable identity. Persistent UAT data is
-# prepared for this UID/GID during the one-time ECS bootstrap.
+# prepared for this UID/GID during the one-time host bootstrap.
 RUN groupadd --gid 10002 tidewise-agentos \
     && useradd --uid 10002 --gid 10002 --create-home --shell /usr/sbin/nologin tidewise-agentos \
     && chown -R 10002:10002 /app

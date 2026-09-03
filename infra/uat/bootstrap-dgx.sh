@@ -3,11 +3,11 @@
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "bootstrap-ecs.sh must be run manually as root" >&2
+  echo "bootstrap-dgx.sh must be run manually as root" >&2
   exit 1
 fi
-if [ "$(uname -s)" != Linux ] || [ "$(uname -m)" != x86_64 ]; then
-  echo "UAT bootstrap requires Linux x86_64" >&2
+if [ "$(uname -s)" != Linux ] || [ "$(uname -m)" != aarch64 ]; then
+  echo "DGX UAT bootstrap requires Linux aarch64" >&2
   exit 1
 fi
 
@@ -22,10 +22,13 @@ registration_token="${GITHUB_RUNNER_REGISTRATION_TOKEN:?GITHUB_RUNNER_REGISTRATI
 runner_archive="${ACTIONS_RUNNER_ARCHIVE:?ACTIONS_RUNNER_ARCHIVE is required}"
 runner_archive_sha256="${ACTIONS_RUNNER_ARCHIVE_SHA256:?ACTIONS_RUNNER_ARCHIVE_SHA256 is required}"
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y ca-certificates curl git python3 util-linux iproute2 docker.io docker-compose-v2
-systemctl enable --now docker.service
+# DGX Docker is NVIDIA-managed host infrastructure. Bootstrap validates it and
+# never replaces or upgrades it from distribution packages.
+for command in docker curl git python3 sha256sum flock ss openssl gzip tar; do
+  command -v "$command" >/dev/null || { echo "missing required command: $command" >&2; exit 1; }
+done
+docker info >/dev/null
+docker compose version >/dev/null
 
 if ! id "$deploy_user" >/dev/null 2>&1; then
   useradd --create-home --shell /bin/bash "$deploy_user"
@@ -45,7 +48,7 @@ fi
 usermod -aG docker "$deploy_user"
 usermod -aG "$runtime_group" "$deploy_user"
 
-install -d -m 0750 -o "$deploy_user" -g "$deploy_user" "$deploy_root" "$deploy_root/state"
+install -d -m 0750 -o "$deploy_user" -g "$deploy_user" "$deploy_root" "$deploy_root/state" "$deploy_root/backups"
 install -d -m 2770 -o "$deploy_user" -g "$runtime_group" "$deploy_root/data"
 install -m 0640 -o "$deploy_user" -g "$runtime_group" /dev/null "$deploy_root/jwt-jwks.json"
 
@@ -62,9 +65,8 @@ if [ ! -f "$runner_root/.runner" ]; then
       --url "$repository_url" \
       --token "$registration_token" \
       --name "$runner_name" \
-      --labels tidewise-agentos-uat-ecs \
+      --labels tidewise-agentos-uat-dgx \
       --unattended \
-      --disableupdate \
       --replace
   )
 fi
@@ -76,4 +78,4 @@ fi
   ./svc.sh start
 )
 
-echo "AgentOS UAT ECS bootstrap complete. Re-login before using new group memberships."
+echo "AgentOS UAT DGX bootstrap complete. Re-login before using new group memberships."

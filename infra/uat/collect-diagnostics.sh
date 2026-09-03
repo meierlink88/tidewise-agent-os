@@ -10,7 +10,7 @@ redact() {
   sed -E \
     -e 's/(Authorization: Bearer )[A-Za-z0-9._-]+/\1[REDACTED]/g' \
     -e 's#(postgresql[^:]*://[^:]+:)[^@]+@#\1[REDACTED]@#g' \
-    -e 's/(API_KEY|TOKEN|SECRET|DB_PASS)=([^[:space:]]+)/\1=[REDACTED]/gI'
+    -e 's/(API_KEY|TOKEN|SECRET|PASSWORD|DB_PASS)=([^[:space:]]+)/\1=[REDACTED]/gI'
 }
 
 compose=(docker compose --env-file "$runtime_env" --env-file "$images_env" -f "$compose_file")
@@ -18,3 +18,7 @@ echo "===== docker compose ps ====="
 "${compose[@]}" ps 2>&1 | redact
 echo "===== agentos logs ====="
 "${compose[@]}" logs --no-color --tail 300 agentos 2>&1 | redact
+echo "===== postgres logs ====="
+"${compose[@]}" logs --no-color --tail 150 postgres 2>&1 | redact
+echo "===== neo4j logs ====="
+"${compose[@]}" logs --no-color --tail 150 neo4j 2>&1 | redact

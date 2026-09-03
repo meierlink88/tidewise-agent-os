@@ -1,156 +1,94 @@
-# AgentOS UAT Deployment
+# AgentOS UAT on DGX Spark
 
-## Topology
+## Deployment boundary
 
-AgentOS is an independently deployed release unit on the same Huawei Cloud ECS used by Tidewise AI.
-It reuses the Huawei SWR registry, the PostgreSQL RDS instance, and the external `tidewise-uat`
-Docker network, while keeping its database, role, Compose project, data, runner state, and rollback state isolated.
-Raw Evidence publication also uses a pre-provisioned MinIO endpoint reachable from `tidewise-uat`; its
-`raw-evidence` bucket must allow direct browser downloads through the environment's public MinIO Base URL.
-Preflight writes one content-addressed canary through authenticated S3, reads it anonymously through that public Base
-URL with Markdown/inline response headers, and removes only that canary before deployment continues.
+DGX Spark is the AgentOS UAT host. It runs three isolated Compose services:
 
 ```text
-Huawei ECS
-├── Nginx :443                     # https://tideai.tripwise.cn/agentos/
-├── tidewise-uat                    # Tidewise AI Compose; data is internal at data:9011
-└── tidewise-agentos-uat            # AgentOS is loopback-only at 127.0.0.1:9081
-
-Huawei RDS PostgreSQL (private VPC endpoint only)
-└── agent_os_uat / agent_os_uat_runtime
+public HTTPS /agentos
+        |
+        v
+DGX Spark (Linux ARM64)
+├── AgentOS         127.0.0.1:9081 only
+├── PostgreSQL 16   AgentOS runtime state only; no host port
+└── Neo4j 5.26      AgentOS Graphiti only; no host port
+        |
+        +---- HTTPS + service token ----> Huawei Cloud public Data Service API
 ```
 
-The UAT port contract lives in `docker-compose.yaml`: Uvicorn listens on `9081`, Docker binds it only to
-`127.0.0.1:9081`, and the healthcheck uses that port. Shared Nginx terminates TLS and exposes
-`https://tideai.tripwise.cn/agentos`; `AGENTOS_INTERNAL_URL` remains `http://127.0.0.1:9081` for Scheduler callbacks.
-The same Nginx snippet also routes the RFC 9728 protected-resource and RFC 8414 authorization-server discovery URLs
-derived from the `/agentos/mcp` resource and `/agentos` issuer.
-Deployment checks resolve that public hostname to `127.0.0.1` on the ECS so they exercise local Nginx with normal TLS
-SNI and certificate verification without depending on unsupported public-IP NAT hairpin behavior.
+AgentOS never joins the Data Service Docker network and never receives Data Service PostgreSQL, MinIO, or other
+infrastructure credentials. Raw Evidence content is submitted in the versioned Data Service API request; Data Service
+owns its persistence. PostgreSQL and Neo4j on DGX are dedicated AgentOS dependencies and use explicit named volumes.
 
-## Security boundary
+The current Compose binds AgentOS only to `127.0.0.1:9081`. Before cutover, provision a reviewed TLS route or tunnel
+from the public `AGENTOS_EXTERNAL_URL` to that loopback listener. A release is accepted only when public `/health`
+returns the candidate commit in `X-Tidewise-Release`; this prevents a successful check against the old ECS instance.
 
-- RDS has no public endpoint. Its allowlist/security group permits PostgreSQL `5432` only from the ECS private address.
-- The AgentOS role owns only `agent_os_uat`; `DB_SSLMODE=require` is mandatory.
-- Data Service has no host port. AgentOS calls `http://data:9011` through `tidewise-uat` using a service token.
-- AgentOS resolves Event Candidates locally and connects directly to the existing Graphiti Neo4j through `tidewise-uat`.
-- AgentOS runs as UID/GID `10002:10002`, read-only root filesystem, dropped Linux capabilities, and `no-new-privileges`.
-- Docker does not publish `9081` on a public interface. Existing Nginx `443` is the only public AgentOS ingress.
-- JWT authorization remains mandatory. MCP OAuth is enabled only with an HTTPS issuer.
-- Runtime credentials are GitHub `uat` Secrets, written only to a mode `0600` temporary env file. They are never baked into images.
-- The JWKS is supplied as a base64 secret, decoded to `/opt/tidewise/agentos-uat/jwt-jwks.json` mode `0640` for the dedicated runtime group, and mounted read-only.
+## Security and persistence
 
-## One-time RDS initialization
+- AgentOS runs as UID/GID `10002:10002`, read-only root filesystem, no Linux capabilities, and no new privileges.
+- PostgreSQL and Neo4j have no published ports. Only AgentOS can reach them on `tidewise-agentos-uat-private`.
+- The Data Service base URL must be public HTTPS. Preflight rejects loopback/private DNS results and verifies an
+  authenticated, complete Source Snapshot through the candidate image.
+- All three images are immutable digest references and must resolve to `linux/arm64` on DGX.
+- PostgreSQL, Neo4j data, and Neo4j logs use `tidewise-agentos-uat-*` named volumes. Never run `docker compose down -v`.
+- Before an upgrade of an existing DGX release, deployment writes a compressed PostgreSQL dump under
+  `/opt/tidewise/agentos-uat/backups`. Back up the three named volumes to independent storage before host maintenance.
+- Runtime secrets live in the GitHub `uat` Environment and a mode `0600` temporary env file; they are not in images.
 
-Run as the RDS administrative owner through a private connection. Supply the password through the SQL client; do not
-put it in shell history or this repository.
+## One-time DGX bootstrap
 
-```sql
-CREATE ROLE agent_os_uat_runtime LOGIN;
-CREATE DATABASE agent_os_uat OWNER agent_os_uat_runtime;
-REVOKE ALL ON DATABASE agent_os_uat FROM PUBLIC;
-GRANT CONNECT, TEMPORARY ON DATABASE agent_os_uat TO agent_os_uat_runtime;
-```
-
-Set a strong password separately and confirm RDS automated backups/PITR before the first deployment. Every deployment
-stops AgentOS traffic, then runs `python -m scripts.migrate_agno_db` from the candidate image before starting it. The
-migration is additive and idempotent; Agno v3 preserves the legacy session `runs` data as rollback protection. The
-deployment never runs a down migration, removes the legacy runs column, or restores RDS automatically.
-
-## One-time ECS bootstrap
-
-The Tidewise AI `tidewise-deploy` user and `/opt/tidewise/uat` release root must already exist. Register a separate
-repository runner because the existing Tidewise AI runner is repository-scoped.
+DGX already owns its NVIDIA Docker installation. The bootstrap validates Docker/Compose and does not replace them.
+Download and checksum the official ARM64 GitHub Actions runner archive, then run:
 
 ```bash
 sudo env \
-  UAT_RUNNER_NAME=tidewise-agentos-uat-ecs \
+  UAT_RUNNER_NAME=tidewise-agentos-uat-dgx \
   GITHUB_REPOSITORY_URL=https://github.com/meierlink88/tidewise-agent-os \
   GITHUB_RUNNER_REGISTRATION_TOKEN='<short-lived-token>' \
-  ACTIONS_RUNNER_ARCHIVE=/tmp/actions-runner.tar.gz \
+  ACTIONS_RUNNER_ARCHIVE=/tmp/actions-runner-linux-arm64.tar.gz \
   ACTIONS_RUNNER_ARCHIVE_SHA256='<verified-sha256>' \
-  bash infra/uat/bootstrap-ecs.sh
+  bash infra/uat/bootstrap-dgx.sh
 ```
 
-The runner label is `tidewise-agentos-uat-ecs`; daily deployment does not require root or SSH access.
-Bootstrap registers it with GitHub's supported `--disableupdate` mode because large downloads from GitHub are slow on
-this ECS. Upgrade the runner archive explicitly during a maintenance window before its version falls out of support.
-
-Install the versioned AgentOS location into the existing `tideai.tripwise.cn` HTTPS server before the first release:
-
-```bash
-sudo install -m 0644 infra/uat/nginx-agentos-location.conf \
-  /etc/nginx/snippets/tidewise-agentos-uat.conf
-```
-
-Add the following line inside the existing `listen 443 ssl` server block, then validate and reload Nginx:
-
-```nginx
-include /etc/nginx/snippets/tidewise-agentos-uat.conf;
-```
-
-```bash
-sudo nginx -t
-sudo systemctl reload nginx
-curl -sS -D - -o /dev/null https://tideai.tripwise.cn/agentos/health \
-  | grep -i '^X-Tidewise-Upstream: agentos-uat'
-```
+The runner is registered with `tidewise-agentos-uat-dgx`. Bootstrap creates the deploy, state, backup, artifact, and
+JWKS paths but does not start a release.
 
 ## GitHub `uat` configuration
 
-Environment or repository Variables:
+Variables:
 
-- `SWR_REGISTRY`, `SWR_NAMESPACE`
-- `SWR_AGENTOS_REPOSITORY`, `SWR_AGENTOS_DEPLOY_REPOSITORY`
-- `UAT_AGENTOS_RUNNER_NAME`
-- `AGENTOS_EXTERNAL_URL` — `https://tideai.tripwise.cn/agentos`
-- `RDS_HOST` — Huawei RDS private hostname
-- `MINIO_ENDPOINT` — MinIO S3 API URL reachable from containers, including `http://` or `https://`
-- `RAW_EVIDENCE_PUBLIC_BASE_URL` — browser-facing MinIO Base URL; deployment verifies a canary through it
-- `NEO4J_URI` — Bolt URI of the existing UAT Graphiti Neo4j reachable from `tidewise-uat`
-- `NEO4J_USER` — Neo4j runtime user; defaults to `neo4j`
+- `SWR_REGISTRY`, `SWR_NAMESPACE`, `SWR_AGENTOS_REPOSITORY`, `SWR_AGENTOS_DEPLOY_REPOSITORY`
+- `UAT_AGENTOS_RUNNER_NAME` — `tidewise-agentos-uat-dgx`
+- `AGENTOS_EXTERNAL_URL` — public HTTPS issuer/base, normally `https://tideai.tripwise.cn/agentos`
+- `DATA_SERVICE_BASE_URL` — Huawei Cloud public API base, normally `https://tideai.tripwise.cn`
 - `GRAPHITI_EMBEDDING_BASE_URL`, `GRAPHITI_EMBEDDING_MODEL`, `GRAPHITI_EMBEDDING_DIM`
-  — embedding provider configuration used by the in-process Graphiti SDK
-- `EVENT_EXTRACTION_BATCH_SIZE` — optional `1..50` Event extraction batch size; defaults to `20`
-- `CONTROL_PLANE_JWT_VERIFICATION_KEY` — PEM public key generated for the UAT OS connection in Agno Control Plane
+- `EVENT_EXTRACTION_BATCH_SIZE` and `CONTROL_PLANE_JWT_VERIFICATION_KEY`
 
 Secrets:
 
-- `SWR_USERNAME`, `SWR_PASSWORD` — push credentials
-- `SWR_PULL_USERNAME`, `SWR_PULL_PASSWORD` — ECS read-only credentials
-- `AGENTOS_DB_PASSWORD`, `DEEPSEEK_API_KEY`, `DATA_SERVICE_TOKEN`, `NEO4J_PASSWORD`
-- `GRAPHITI_EMBEDDING_API_KEY`
-- `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`
-- `JWT_JWKS_BASE64`
+- `SWR_USERNAME`, `SWR_PASSWORD`, `SWR_PULL_USERNAME`, `SWR_PULL_PASSWORD`
+- `AGENTOS_DB_PASSWORD`, `NEO4J_PASSWORD`, `DEEPSEEK_API_KEY`, `DATA_SERVICE_TOKEN`
+- `GRAPHITI_EMBEDDING_API_KEY`, `JWT_JWKS_BASE64`
 - optional `MCP_CONNECT_SECRET`, `AGENTOS_MCP_SIGNING_KEY`
 
-Create the JWKS secret without printing it:
+No Data Service database or object-storage variable/secret belongs in this environment.
 
-```bash
-base64 < agentos-uat-jwks.json | gh secret set JWT_JWKS_BASE64 --env uat
-```
+## State migration and cutover
 
-The Control Plane public key is additive: Agno validates its JWTs with `JWT_VERIFICATION_KEY` while retaining
-`JWT_JWKS_FILE` for existing identity-provider keys. Store only the public key as the UAT Environment variable;
-never store the corresponding private signing key in this repository or on the AgentOS host.
+1. Keep the ECS AgentOS running and create a restorable AgentOS-only PostgreSQL dump through the old private runner.
+2. Transfer the encrypted dump to `/opt/tidewise/agentos-uat/backups`; verify its checksum before decrypting locally.
+3. Start only DGX PostgreSQL and restore the dump as `agent_os_uat_runtime`; do not copy Data Service databases.
+4. Start DGX Neo4j as a new AgentOS-exclusive graph. Populate authoritative graph inputs through supported AgentOS
+   commands/API paths; do not copy or mount the legacy OpenSPG/Data Service Neo4j volumes.
+5. Dispatch **Deploy UAT** with `stage_only` enabled. This proves internal health, auth, components, workflows,
+   schedules, MCP, Data API, Graphiti, restart recovery, volume persistence, and image digests without claiming cutover.
+6. Route public HTTPS `/agentos` to DGX and dispatch the same commit with `stage_only` disabled. The candidate SHA
+   header must match before the release is accepted.
+7. Observe the DGX release before retiring the ECS AgentOS. Retirement is a separate, explicitly authorized action.
 
-## Release and rollback
-
-Run **Deploy UAT** manually from the `main` workflow ref. The workflow validates that the chosen commit belongs to
-`main` and has a successful `Validate` run, builds AMD64 images on a GitHub-hosted runner, pushes them to SWR, and
-deploys immutable digest references on the ECS runner.
-
-GitHub concurrency prevents two AgentOS deploy jobs. The ECS script also locks both
-`/opt/tidewise/uat/deploy.lock` and `/opt/tidewise/agentos-uat/deploy.lock`, preventing overlap with Tidewise AI.
-On the first deployment only, the ECS script explicitly seeds missing Schedule defaults before verification. Later
-deployments and application restarts preserve PostgreSQL/Control Panel Schedule configuration. After deployment it
-verifies external health/auth, Agents, Workflows, unique required Schedule endpoints, `local-ping`, MCP, and restart
-recovery.
-
-Before deploying the first release that introduces Event Extraction into an existing UAT database, create exactly
-one enabled Schedule for `/workflows/event-extraction/runs` in Control Panel (recommended cron `* * * * *`, timezone
-`Asia/Shanghai`). Application startup and later deployments intentionally do not rewrite Schedule-owned state.
-
-If verification fails, the previous successful image/runtime/Compose snapshot is restored automatically. Database
-state is not rolled back. Candidate logs are sanitized and captured before rollback removes the container. The last
-two successful release identities remain under `/opt/tidewise/agentos-uat/state/`.
+Run **Deploy UAT** manually from `main`. It accepts only a commit already validated on `main`, builds ARM64 images on
+DGX, deploys digest references, starts dedicated PostgreSQL and Neo4j, applies the additive Agno migration, and seeds
+default schedules only for the first DGX release. On candidate failure, it restores the prior AgentOS image/config;
+database state is not automatically rolled back. The last two release snapshots remain under the deployment state
+directory.

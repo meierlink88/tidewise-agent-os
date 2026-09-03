@@ -7,6 +7,11 @@ on:
         description: Optional full commit SHA from main; defaults to latest main.
         required: false
         type: string
+      stage_only:
+        description: Start and verify DGX internally before the public ingress cutover.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -79,8 +84,8 @@ jobs:
             }
 
   build-and-push:
-    name: Build and publish SWR images
-    runs-on: ubuntu-latest
+    name: Build and publish ARM64 SWR images on DGX
+    runs-on: [self-hosted, linux, ARM64, tidewise-agentos-uat-dgx]
     needs: resolve-release
     environment: uat
     outputs:
@@ -128,7 +133,7 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          platforms: linux/amd64
+          platforms: linux/arm64
           push: true
           provenance: false
           tags: ${{ steps.tags.outputs.agentos_tag }}
@@ -140,7 +145,7 @@ jobs:
         with:
           context: infra/uat
           file: infra/uat/deploy-bundle.Dockerfile
-          platforms: linux/amd64
+          platforms: linux/arm64
           push: true
           provenance: false
           tags: ${{ steps.tags.outputs.deploy_bundle_tag }}
@@ -163,8 +168,8 @@ jobs:
           echo "deploy_bundle_image=${BUNDLE_TAG}@${BUNDLE_DIGEST}" >> "$GITHUB_OUTPUT"
 
   deploy:
-    name: Deploy to UAT ECS
-    runs-on: [self-hosted, linux, x64, tidewise-agentos-uat-ecs]
+    name: Deploy to UAT DGX Spark
+    runs-on: [self-hosted, linux, ARM64, tidewise-agentos-uat-dgx]
     needs: [resolve-release, build-and-push]
     environment: uat
     env:
@@ -172,30 +177,22 @@ jobs:
       SWR_REGISTRY: ${{ vars.SWR_REGISTRY }}
       UAT_RUNNER_NAME: ${{ vars.UAT_AGENTOS_RUNNER_NAME }}
       AGENTOS_EXTERNAL_URL: ${{ vars.AGENTOS_EXTERNAL_URL }}
-      DB_HOST: ${{ vars.RDS_HOST }}
-      DB_PORT: "5432"
-      DB_USER: agent_os_uat_runtime
-      DB_DATABASE: agent_os_uat
-      DB_SSLMODE: require
+      DATA_SERVICE_BASE_URL: ${{ vars.DATA_SERVICE_BASE_URL }}
+      STAGE_ONLY: ${{ inputs.stage_only }}
       RELEASE_SHA: ${{ needs.resolve-release.outputs.commit_sha }}
       AGENTOS_IMAGE: ${{ needs.build-and-push.outputs.agentos_image }}
       DEPLOY_BUNDLE_IMAGE: ${{ needs.build-and-push.outputs.deploy_bundle_image }}
+      POSTGRES_IMAGE: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+      NEO4J_IMAGE: neo4j:5.26.28-community@sha256:ff32db30b2baff97971e441b46bfd9c832c1b62c970398ef579244c06b21d357
       DB_PASS: ${{ secrets.AGENTOS_DB_PASSWORD }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       DATA_SERVICE_TOKEN: ${{ secrets.DATA_SERVICE_TOKEN }}
       EVENT_EXTRACTION_BATCH_SIZE: ${{ vars.EVENT_EXTRACTION_BATCH_SIZE || '20' }}
-      NEO4J_URI: ${{ vars.NEO4J_URI }}
-      NEO4J_USER: ${{ vars.NEO4J_USER || 'neo4j' }}
       NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
       GRAPHITI_EMBEDDING_API_KEY: ${{ secrets.GRAPHITI_EMBEDDING_API_KEY }}
       GRAPHITI_EMBEDDING_BASE_URL: ${{ vars.GRAPHITI_EMBEDDING_BASE_URL }}
       GRAPHITI_EMBEDDING_MODEL: ${{ vars.GRAPHITI_EMBEDDING_MODEL }}
       GRAPHITI_EMBEDDING_DIM: ${{ vars.GRAPHITI_EMBEDDING_DIM || '1024' }}
-      MINIO_ENDPOINT: ${{ vars.MINIO_ENDPOINT }}
-      MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
-      MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
-      RAW_EVIDENCE_BUCKET: raw-evidence
-      RAW_EVIDENCE_PUBLIC_BASE_URL: ${{ vars.RAW_EVIDENCE_PUBLIC_BASE_URL }}
       MCP_CONNECT_SECRET: ${{ secrets.MCP_CONNECT_SECRET }}
       AGENTOS_MCP_SIGNING_KEY: ${{ secrets.AGENTOS_MCP_SIGNING_KEY }}
       JWT_JWKS_BASE64: ${{ secrets.JWT_JWKS_BASE64 }}
@@ -245,13 +242,11 @@ jobs:
           import sys
 
           names = (
-              "AGENTOS_EXTERNAL_URL", "DB_HOST", "DB_PORT", "DB_USER", "DB_PASS", "DB_DATABASE", "DB_SSLMODE",
+              "AGENTOS_EXTERNAL_URL", "DATA_SERVICE_BASE_URL", "RELEASE_SHA", "DB_PASS",
               "DEEPSEEK_API_KEY", "DATA_SERVICE_TOKEN", "EVENT_EXTRACTION_BATCH_SIZE",
-              "NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD",
+              "NEO4J_PASSWORD",
               "GRAPHITI_EMBEDDING_API_KEY", "GRAPHITI_EMBEDDING_BASE_URL",
               "GRAPHITI_EMBEDDING_MODEL", "GRAPHITI_EMBEDDING_DIM",
-              "MINIO_ENDPOINT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY",
-              "RAW_EVIDENCE_BUCKET",
               "MCP_CONNECT_SECRET", "AGENTOS_MCP_SIGNING_KEY",
           )
           lines = []
@@ -272,7 +267,11 @@ jobs:
           lines.extend(("AGENTOS_DATA_DIR=/opt/tidewise/agentos-uat/data", "AGENTOS_JWKS_FILE=/opt/tidewise/agentos-uat/jwt-jwks.json"))
           pathlib.Path(sys.argv[1]).write_text("\n".join(lines) + "\n")
           PY
-          printf 'AGENTOS_IMAGE=%s\n' "$AGENTOS_IMAGE" > "$images_env"
+          {
+            printf 'AGENTOS_IMAGE=%s\n' "$AGENTOS_IMAGE"
+            printf 'POSTGRES_IMAGE=%s\n' "$POSTGRES_IMAGE"
+            printf 'NEO4J_IMAGE=%s\n' "$NEO4J_IMAGE"
+          } > "$images_env"
           printf '%s' "$JWT_JWKS_BASE64" | base64 --decode > "$jwks_tmp"
           python3 -m json.tool "$jwks_tmp" >/dev/null
           install -m 0640 "$jwks_tmp" "${DEPLOY_ROOT}/jwt-jwks.json"
@@ -281,14 +280,16 @@ jobs:
           echo "runtime_env=$runtime_env" >> "$GITHUB_OUTPUT"
           echo "images_env=$images_env" >> "$GITHUB_OUTPUT"
 
-      - name: Pull candidate image
+      - name: Pull immutable ARM64 images
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$AGENTOS_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "AgentOS image must use a digest" >&2; exit 1; }
-          docker pull "$AGENTOS_IMAGE"
+          for image in "$AGENTOS_IMAGE" "$POSTGRES_IMAGE" "$NEO4J_IMAGE"; do
+            [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "image must use a digest" >&2; exit 1; }
+            docker pull "$image"
+          done
 
-      - name: Preflight ECS, RDS, network and Data Service
+      - name: Preflight DGX, public Data Service and dedicated dependencies
         shell: bash
         run: ${{ steps.bundle.outputs.root }}/preflight.sh
 
