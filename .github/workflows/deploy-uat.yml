@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      dependencies_only:
+        description: Deploy and verify only fresh DGX PostgreSQL and Neo4j; do not start AgentOS.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -302,7 +307,17 @@ jobs:
           -f "${{ steps.bundle.outputs.compose }}"
           config --quiet
 
+      - name: Deploy and verify fresh dependencies
+        if: ${{ inputs.dependencies_only }}
+        shell: bash
+        env:
+          RUNTIME_ENV: ${{ steps.runtime.outputs.runtime_env }}
+          CANDIDATE_IMAGES: ${{ steps.runtime.outputs.images_env }}
+          COMPOSE_FILE: ${{ steps.bundle.outputs.compose }}
+        run: ${{ steps.bundle.outputs.root }}/deploy-dependencies.sh
+
       - name: Deploy and verify release
+        if: ${{ ! inputs.dependencies_only }}
         shell: bash
         env:
           RUNTIME_ENV: ${{ steps.runtime.outputs.runtime_env }}

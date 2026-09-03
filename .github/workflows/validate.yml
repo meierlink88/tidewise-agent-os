@@ -62,8 +62,8 @@ jobs:
 
       - name: Validate UAT deployment contracts
         run: |
-          bash -n infra/uat/bootstrap-dgx.sh infra/uat/preflight.sh infra/uat/deploy.sh infra/uat/collect-diagnostics.sh
-          python -c 'import pathlib, yaml; yaml.safe_load(pathlib.Path(".github/workflows/migrate-uat-state.yml").read_text())'
+          bash -n infra/uat/bootstrap-dgx.sh infra/uat/preflight.sh infra/uat/deploy-dependencies.sh infra/uat/deploy.sh infra/uat/collect-diagnostics.sh
+          python -c 'import pathlib, yaml; yaml.safe_load(pathlib.Path(".github/workflows/deploy-uat.yml").read_text())'
           docker compose --env-file infra/uat/.env.example -f infra/uat/docker-compose.yaml config --quiet
           test "$(docker compose --env-file infra/uat/.env.example -f infra/uat/docker-compose.yaml config --format json | jq -r '.services.agentos.ports[0].host_ip')" = 127.0.0.1
           test "$(docker compose --env-file infra/uat/.env.example -f infra/uat/docker-compose.yaml config --format json | jq -r '.services.postgres.ports // empty')" = ""
@@ -77,6 +77,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/agentos-deploy-bundle"
           docker cp "${bundle_container}:/bundle/." "${RUNNER_TEMP}/agentos-deploy-bundle"
           test -x "${RUNNER_TEMP}/agentos-deploy-bundle/preflight.sh"
+          test -x "${RUNNER_TEMP}/agentos-deploy-bundle/deploy-dependencies.sh"
           docker rm -f "$bundle_container"
           trap - EXIT
 
