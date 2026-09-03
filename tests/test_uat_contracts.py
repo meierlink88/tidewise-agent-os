@@ -151,6 +151,8 @@ class UatIngressContractTest(TestCase):
         self.assertIn("--load", workflow)
         self.assertIn('echo "AGENTOS_IMAGE=$image_id" >> "$GITHUB_ENV"', workflow)
         self.assertIn("org.opencontainers.image.revision", workflow)
+        self.assertIn('{{index .Config.Labels "org.opencontainers.image.revision"}}', workflow)
+        self.assertNotIn(r"{{index .Config.Labels \"org.opencontainers.image.revision\"}}", workflow)
         self.assertNotIn("SWR_", workflow)
         self.assertNotIn("docker/login-action", workflow)
         self.assertNotIn("docker/build-push-action", workflow)

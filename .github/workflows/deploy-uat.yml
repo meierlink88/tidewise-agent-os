@@ -140,7 +140,7 @@ jobs:
           [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "invalid local image ID" >&2; exit 1; }
           [ "$(docker image inspect --format '{{.Architecture}}' "$image_id")" = arm64 ] \
             || { echo "local AgentOS image is not arm64" >&2; exit 1; }
-          [ "$(docker image inspect --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' "$image_id")" = "$RELEASE_SHA" ] \
+          [ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_id")" = "$RELEASE_SHA" ] \
             || { echo "local AgentOS image revision does not match release" >&2; exit 1; }
           echo "AGENTOS_IMAGE=$image_id" >> "$GITHUB_ENV"
           echo "PASS local-agentos-image ${RELEASE_SHA} ${image_id}"
