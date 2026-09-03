@@ -4,7 +4,7 @@ set -euo pipefail
 
 deployment_root="${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
 expected_runner="${UAT_RUNNER_NAME:?UAT_RUNNER_NAME is required}"
-swr_registry="${SWR_REGISTRY:?SWR_REGISTRY is required}"
+release_sha="${RELEASE_SHA:?RELEASE_SHA is required}"
 runtime_gid="10002"
 
 pass() { echo "PASS $1"; }
@@ -14,6 +14,7 @@ fail() { echo "FAIL $1: $2" >&2; exit 1; }
 [ "$(uname -m)" = aarch64 ] || fail architecture "expected aarch64"
 [ "$(id -un)" = tidewise-deploy ] || fail deploy-user "expected tidewise-deploy"
 [ "${RUNNER_NAME:-}" = "$expected_runner" ] || fail runner-name "expected $expected_runner"
+[[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || fail release-sha "expected a full lowercase Git commit SHA"
 pass dgx-runtime-identity
 
 for command in docker curl python3 sha256sum flock ss; do
@@ -37,20 +38,23 @@ available_kb="$(df -Pk "$deployment_root" | awk 'NR == 2 {print $4}')"
 [ "$available_kb" -ge 20971520 ] || fail disk-space "at least 20 GiB is required"
 pass deployment-storage
 
-swr_status="$(curl --silent --show-error --connect-timeout 5 --max-time 15 --output /dev/null --write-out '%{http_code}' "https://${swr_registry}/v2/")"
-case "$swr_status" in
-  200|401) pass swr-registry-endpoint ;;
-  *) fail swr-registry-endpoint "unexpected HTTP status $swr_status" ;;
-esac
+agentos_image="${AGENTOS_IMAGE:-}"
+[[ "$agentos_image" =~ ^sha256:[0-9a-f]{64}$ ]] \
+  || fail immutable-image "AGENTOS_IMAGE must be a local image ID"
+docker image inspect "$agentos_image" >/dev/null || fail image-present "AGENTOS_IMAGE is not built locally"
+[ "$(docker image inspect --format '{{.Architecture}}' "$agentos_image")" = arm64 ] \
+  || fail image-architecture "AGENTOS_IMAGE is not arm64"
+[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$agentos_image")" = "$release_sha" ] \
+  || fail image-revision "AGENTOS_IMAGE does not match RELEASE_SHA"
 
-for image_var in AGENTOS_IMAGE POSTGRES_IMAGE NEO4J_IMAGE; do
+for image_var in POSTGRES_IMAGE NEO4J_IMAGE; do
   image="${!image_var:-}"
   [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]] || fail immutable-image "$image_var must use a digest"
   docker image inspect "$image" >/dev/null || fail image-present "$image_var is not pulled"
   [ "$(docker image inspect --format '{{.Architecture}}' "$image")" = arm64 ] \
     || fail image-architecture "$image_var is not arm64"
 done
-pass immutable-arm64-images
+pass immutable-local-agentos-and-arm64-dependencies
 
 python3 - <<'PY'
 import ipaddress

@@ -71,15 +71,10 @@ jobs:
           grep -Fq 'capture_candidate_diagnostics' infra/uat/deploy.sh
           grep -Fq 'python -m scripts.migrate_agno_db' infra/uat/deploy.sh
           grep -Fq 'x-tidewise-release' infra/uat/deploy.sh
-          docker build -t tidewise-agentos-deploy-bundle:ci -f infra/uat/deploy-bundle.Dockerfile infra/uat
-          bundle_container="$(docker create tidewise-agentos-deploy-bundle:ci /bin/true)"
-          trap 'docker rm -f "$bundle_container" >/dev/null 2>&1 || true' EXIT
-          mkdir -p "${RUNNER_TEMP}/agentos-deploy-bundle"
-          docker cp "${bundle_container}:/bundle/." "${RUNNER_TEMP}/agentos-deploy-bundle"
-          test -x "${RUNNER_TEMP}/agentos-deploy-bundle/preflight.sh"
-          test -x "${RUNNER_TEMP}/agentos-deploy-bundle/deploy-dependencies.sh"
-          docker rm -f "$bundle_container"
-          trap - EXIT
+          test -x infra/uat/preflight.sh
+          test -x infra/uat/deploy-dependencies.sh
+          test -x infra/uat/deploy.sh
+          test -x infra/uat/collect-diagnostics.sh
 
       - name: Build the immutable runtime image
         run: docker build -t tidewise-agent-os:ci .

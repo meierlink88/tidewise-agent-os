@@ -150,8 +150,8 @@ Company 投影的关系门禁、无 Episode 写入边界和可恢复操作见
 
 ## UAT
 
-AgentOS 通过独立 GitHub Action 发布到与 Tidewise AI 共用的华为云 ECS。发布复用 SWR、RDS
-Instance 和外部 `tidewise-uat` Docker 网络，但使用独立的 `agent_os_uat` 数据库、Compose
-项目、持久化目录和回滚状态。UAT 应用端口在 Compose 中固定为仅回环可见的 `9081`，
-公网通过 `https://tideai.tripwise.cn/agentos` 访问；部署只允许从 `main` 手工触发，并使用镜像 digest。完整操作见
+AgentOS 通过独立 GitHub Action 发布到 DGX Spark。DGX 自托管 Runner 从已验证的 `main` 精确提交
+直接构建 ARM64 镜像，再由本机 Docker Compose 启动 AgentOS、独立 PostgreSQL 和 AgentOS 专属 Neo4j；
+发布不依赖华为云 SWR 或旧 ECS。UAT 应用端口在 Compose 中固定为仅回环可见的 `9081`，公网通过
+`https://tideai.tripwise.cn/agentos` 访问；部署只允许从 `main` 手工触发，并使用本地 image ID 固定构建产物。完整操作见
 [infra/uat/README.md](infra/uat/README.md)。
