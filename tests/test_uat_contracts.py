@@ -54,6 +54,7 @@ class UatIngressContractTest(TestCase):
         preflight = (REPOSITORY_ROOT / "infra/uat/preflight.sh").read_text()
         deploy_dependencies = (REPOSITORY_ROOT / "infra/uat/deploy-dependencies.sh").read_text()
         deploy = (REPOSITORY_ROOT / "infra/uat/deploy.sh").read_text()
+        entrypoint = (REPOSITORY_ROOT / "scripts/entrypoint.sh").read_text()
         workflow = (REPOSITORY_ROOT / ".github/workflows/deploy-uat.yml").read_text()
 
         self.assertIn('"127.0.0.1:9081:9081"', compose)
@@ -91,6 +92,15 @@ class UatIngressContractTest(TestCase):
         self.assertIn('lines.append(f"JWT_VERIFICATION_KEY={json.dumps(verification_key)}")', workflow)
         self.assertIn('if [ ! -s "$current_sha" ]; then', deploy)
         self.assertIn("python -m scripts.seed_schedules", deploy)
+        first_release = deploy.split(
+            'migrate_candidate_database "$runtime_env" "$candidate_images" "$candidate_compose"',
+            1,
+        )[1].split('verify_release "$runtime_env"', 1)[0]
+        self.assertLess(first_release.index("python -m scripts.seed_schedules"), first_release.index("up -d --wait"))
+        self.assertIn("run --rm --no-deps agentos", first_release)
+        self.assertNotIn("dockerize", entrypoint)
+        self.assertIn("socket.create_connection", entrypoint)
+        self.assertIn("time.monotonic() + 300", entrypoint)
         self.assertIn(
             "NEO4J_URI: bolt://neo4j:7687",
             compose,
