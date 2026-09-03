@@ -168,6 +168,16 @@ agent_os = AgentOS(
 )
 app = agent_os.get_app()
 
+release_sha = getenv("AGENTOS_RELEASE_SHA", "").strip()
+
+
+@app.middleware("http")
+async def expose_release_identity(request, call_next):  # type: ignore[no-untyped-def]
+    response = await call_next(request)
+    if release_sha:
+        response.headers["X-Tidewise-Release"] = release_sha
+    return response
+
 
 if __name__ == "__main__":
     agent_os.serve(app="app.main:app", reload=False)

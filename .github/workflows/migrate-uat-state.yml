@@ -1,0 +1,155 @@
+name: Migrate UAT state to DGX
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type MIGRATE_AGENTOS_UAT_TO_DGX to run the one-time state copy.
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: agentos-uat-state-migration
+  cancel-in-progress: false
+
+env:
+  POSTGRES_IMAGE: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+
+jobs:
+  export-ecs:
+    name: Export encrypted AgentOS-only state from ECS
+    runs-on: [self-hosted, linux, x64, tidewise-agentos-uat-ecs]
+    environment: uat
+    env:
+      DB_HOST: ${{ vars.RDS_HOST }}
+      DB_PASS: ${{ secrets.AGENTOS_DB_PASSWORD }}
+      MIGRATION_PASSPHRASE: ${{ secrets.UAT_MIGRATION_PASSPHRASE }}
+    steps:
+      - name: Validate explicit confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "${{ inputs.confirmation }}" = MIGRATE_AGENTOS_UAT_TO_DGX ]
+          : "${DB_HOST:?RDS_HOST is required}"
+          : "${DB_PASS:?AGENTOS_DB_PASSWORD is required}"
+          : "${MIGRATION_PASSPHRASE:?UAT_MIGRATION_PASSPHRASE is required}"
+
+      - name: Export and encrypt database plus local artifacts
+        id: export
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          migration_root="$(mktemp -d "${RUNNER_TEMP}/agentos-uat-export.XXXXXX")"
+          encrypted="${RUNNER_TEMP}/agentos-uat-state.enc"
+          cleanup() { rm -rf "$migration_root" "$encrypted"; }
+          trap cleanup ERR
+          umask 077
+          docker run --rm \
+            -e PGPASSWORD="$DB_PASS" \
+            "$POSTGRES_IMAGE" \
+            pg_dump --host "$DB_HOST" --port 5432 --username agent_os_uat_runtime \
+              --dbname agent_os_uat --clean --if-exists --no-owner --no-acl \
+            | gzip -9 > "$migration_root/agent-os.sql.gz"
+          test -s "$migration_root/agent-os.sql.gz"
+          if [ -d /opt/tidewise/agentos-uat/data ]; then
+            tar -C /opt/tidewise/agentos-uat -czf "$migration_root/artifacts.tar.gz" data
+          else
+            tar -czf "$migration_root/artifacts.tar.gz" --files-from /dev/null
+          fi
+          sha256sum "$migration_root/agent-os.sql.gz" "$migration_root/artifacts.tar.gz" \
+            > "$migration_root/SHA256SUMS"
+          tar -C "$migration_root" -cf - agent-os.sql.gz artifacts.tar.gz SHA256SUMS \
+            | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
+                -pass env:MIGRATION_PASSPHRASE -out "$encrypted"
+          test -s "$encrypted"
+          echo "file=$encrypted" >> "$GITHUB_OUTPUT"
+
+      - name: Upload short-lived encrypted state
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: agentos-uat-state-${{ github.run_id }}
+          path: ${{ steps.export.outputs.file }}
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Remove plaintext and encrypted temporary files
+        if: always()
+        shell: bash
+        run: rm -rf "${RUNNER_TEMP}"/agentos-uat-export.* "${RUNNER_TEMP}/agentos-uat-state.enc"
+
+  import-dgx:
+    name: Restore once into dedicated DGX volumes
+    needs: export-ecs
+    runs-on: [self-hosted, linux, ARM64, tidewise-agentos-uat-dgx]
+    environment: uat
+    env:
+      DEPLOY_ROOT: /opt/tidewise/agentos-uat
+      DB_PASS: ${{ secrets.AGENTOS_DB_PASSWORD }}
+      MIGRATION_PASSPHRASE: ${{ secrets.UAT_MIGRATION_PASSPHRASE }}
+    steps:
+      - name: Download encrypted state
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: agentos-uat-state-${{ github.run_id }}
+          path: ${{ runner.temp }}/agentos-uat-state
+
+      - name: Restore only into a fresh AgentOS UAT target
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          marker="${DEPLOY_ROOT}/state/migration-complete.sha256"
+          encrypted="${RUNNER_TEMP}/agentos-uat-state/agentos-uat-state.enc"
+          restore_root="$(mktemp -d "${RUNNER_TEMP}/agentos-uat-restore.XXXXXX")"
+          container=agentos-uat-postgres-migration
+          network=tidewise-agentos-uat-private
+          volume=tidewise-agentos-uat-postgres-data
+          created_volume=false
+          cleanup() {
+            docker rm -f "$container" >/dev/null 2>&1 || true
+            rm -rf "$restore_root" "${RUNNER_TEMP}/agentos-uat-state"
+          }
+          rollback_fresh_volume() {
+            cleanup
+            if [ "$created_volume" = true ]; then docker volume rm "$volume" >/dev/null 2>&1 || true; fi
+          }
+          trap rollback_fresh_volume ERR
+          [ ! -e "$marker" ] || { echo "migration already completed" >&2; exit 1; }
+          [ -s "$encrypted" ]
+          [ -z "$(docker ps -aq --filter label=com.docker.compose.project=tidewise-agentos-uat)" ] \
+            || { echo "DGX AgentOS Compose already exists; refusing destructive restore" >&2; exit 1; }
+          [ -z "$(find "${DEPLOY_ROOT}/data" -mindepth 1 -maxdepth 1 -print -quit)" ] \
+            || { echo "DGX AgentOS artifact directory is not empty" >&2; exit 1; }
+          if docker volume inspect "$volume" >/dev/null 2>&1; then
+            echo "DGX AgentOS PostgreSQL volume already exists" >&2
+            exit 1
+          fi
+          docker volume create "$volume" >/dev/null
+          created_volume=true
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
+            -pass env:MIGRATION_PASSPHRASE -in "$encrypted" \
+            | tar -C "$restore_root" -xf -
+          (cd "$restore_root" && sha256sum --check SHA256SUMS)
+          docker network inspect "$network" >/dev/null 2>&1 || docker network create "$network" >/dev/null
+          docker run -d --name "$container" --network "$network" \
+            -e POSTGRES_USER=agent_os_uat_runtime -e POSTGRES_PASSWORD="$DB_PASS" -e POSTGRES_DB=agent_os_uat \
+            -v "${volume}:/var/lib/postgresql/data" "$POSTGRES_IMAGE" >/dev/null
+          for attempt in $(seq 1 60); do
+            if docker exec "$container" pg_isready -U agent_os_uat_runtime -d agent_os_uat >/dev/null 2>&1; then break; fi
+            [ "$attempt" -lt 60 ] || { docker logs "$container"; exit 1; }
+            sleep 2
+          done
+          gzip -dc "$restore_root/agent-os.sql.gz" \
+            | docker exec -i "$container" psql --set ON_ERROR_STOP=1 -U agent_os_uat_runtime -d agent_os_uat
+          tar -C "${DEPLOY_ROOT}" -xzf "$restore_root/artifacts.tar.gz"
+          chgrp -R tidewise-agentos "${DEPLOY_ROOT}/data"
+          chmod 2770 "${DEPLOY_ROOT}/data"
+          sha256sum "$encrypted" | awk '{print $1}' > "$marker"
+          chmod 0640 "$marker"
+          created_volume=false
+          cleanup
+          trap - ERR
+          echo "PASS migrated-agentos-uat-state-to-dgx"

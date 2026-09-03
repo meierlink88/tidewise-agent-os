@@ -90,17 +90,16 @@ Agent 或 Workflow。
 管理。应用启动仅按 Workflow endpoint 做只读缺失、重复和启停检查，不创建或覆盖 Schedule，
 因此 Control Panel 中的改名和其他运行配置会跨容器重启保留。
 
-采集结果默认位于项目根目录 `data/collector/`，其中接受的文章在 manifest 可见前还会以同一
-`documents/YYYY/MM/DD/<document-sha256>.md` 内容寻址对象键幂等发布到 MinIO `raw-evidence` bucket：
+采集结果默认位于项目根目录 `data/collector/`。接受的文章在 manifest 可见前以
+`documents/YYYY/MM/DD/<document-sha256>.md` 内容寻址路径幂等写入本地 Artifact：
 
 - `documents/`：接受的原始资讯 Markdown。
 - `runs/<run_id>/`：候选账本、汇总和 manifest。
 - `indexes/title-dedup-index.tsv`：新版标题跨运行去重索引；历史 `dedup-index.tsv` 仅保留为只读 URL 兼容索引。
 
-`data/` 已被 Git 忽略。可通过 `.env` 的 `COLLECTOR_DATA_DIR` 替换宿主机目录。MinIO bucket 需要预先创建并允许
-浏览器下载；`MINIO_ENDPOINT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY` 只用于对象发布。Data Service
-的 `raw_text` 保存 `/{bucket}/{object_key}`，例如 `/raw-evidence/documents/2026/08/15/<sha256>.md`，不保存环境
-Base URL。浏览器使用 MinIO 对外 Base URL 与该路径直接拼接。
+`data/` 已被 Git 忽略。可通过 `.env` 的 `COLLECTOR_DATA_DIR` 替换宿主机目录。Evidence Extraction
+通过版本化 Data Service API 提交完整 Raw Evidence 正文；AgentOS 不连接 Data Service 的 PostgreSQL、MinIO
+或其他基础设施，也不持有这些基础设施的凭据。Data Service 独占服务端持久化与对外读取策略。
 
 确定性 Function 使用 `DATA_SERVICE_TOKEN` 从 Data Service 读取一次完整 active Source Snapshot，
 并行执行 Web Search、API 和 RSS 三类采集组。这三类能力不向 Agent Registry 注册为 Tool。

@@ -75,11 +75,6 @@ from workflows.evidence_extraction import (
 )
 
 
-class AcceptingRawDocumentStore:
-    def publish_markdown(self, *, bucket: str, object_key: str, content: bytes, sha256: str) -> None:
-        del bucket, object_key, content, sha256
-
-
 class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
     CATEGORY_ID = "EVC15bec7e3-998c-5434-aa5d-29712c4c67cf"
 
@@ -174,7 +169,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             CollectionRequest(objective="采集最近2小时服务器订单"),
             completed_at=now + timedelta(minutes=2),
         )
-        publish_artifact_set(prepared, document_store=AcceptingRawDocumentStore())
+        publish_artifact_set(prepared)
 
     @staticmethod
     def _draft() -> EvidenceExtractionDraft:
@@ -492,9 +487,8 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         publication = self._validated(self._prepared())
         self.assertEqual(
             publication.raw_evidence.raw_text,
-            "/raw-evidence/documents/2026/08/11/c6fe9177b96308182802eb456d47768b06d890fa96b9e08f159a0f6fd2470128.md",
+            "示例公司公告签署10亿元服务器订单，合同期限为三年。",
         )
-        self.assertNotIn("示例公司公告签署10亿元服务器订单", publication.raw_evidence.raw_text)
         self.assertTrue(publication.raw_evidence.publication_key.startswith("agentos.raw-evidence.v1:"))
         self.assertLessEqual(len(publication.raw_evidence.publication_key), 128)
         self.assertNotIn("raw_evidence_id", publication.raw_evidence.model_dump(mode="json"))
@@ -870,9 +864,8 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raw_payload["raw_evidence"]["category_ids"], [self.CATEGORY_ID])
         self.assertEqual(
             raw_payload["raw_evidence"]["raw_text"],
-            "/raw-evidence/documents/2026/08/11/c6fe9177b96308182802eb456d47768b06d890fa96b9e08f159a0f6fd2470128.md",
+            "示例公司公告签署10亿元服务器订单，合同期限为三年。",
         )
-        self.assertNotIn("10亿元服务器订单", raw_payload["raw_evidence"]["raw_text"])
         evidence_endpoint, evidence_payload = mocked.call_args_list[1].args
         self.assertEqual(evidence_endpoint, "evidence-publications")
         self.assertEqual(evidence_payload["raw_evidence_id"], raw_evidence_id)

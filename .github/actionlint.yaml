@@ -1,3 +1,3 @@
 self-hosted-runner:
   labels:
-    - tidewise-agentos-uat-ecs
+    - tidewise-agentos-uat-dgx
