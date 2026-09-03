@@ -98,6 +98,10 @@ jobs:
       UAT_RUNNER_NAME: ${{ vars.UAT_AGENTOS_RUNNER_NAME }}
       AGENTOS_EXTERNAL_URL: ${{ vars.AGENTOS_EXTERNAL_URL }}
       DATA_SERVICE_BASE_URL: ${{ vars.DATA_SERVICE_BASE_URL }}
+      UAT_LAN_BIND_ADDRESS: ${{ vars.UAT_LAN_BIND_ADDRESS }}
+      POSTGRES_LAN_PORT: ${{ vars.POSTGRES_LAN_PORT }}
+      NEO4J_HTTP_LAN_PORT: ${{ vars.NEO4J_HTTP_LAN_PORT }}
+      NEO4J_BOLT_LAN_PORT: ${{ vars.NEO4J_BOLT_LAN_PORT }}
       STAGE_ONLY: ${{ inputs.stage_only }}
       RELEASE_SHA: ${{ needs.resolve-release.outputs.commit_sha }}
       AGENTOS_LOCAL_REPOSITORY: tidewise-agentos-uat
@@ -163,6 +167,8 @@ jobs:
 
           names = (
               "AGENTOS_EXTERNAL_URL", "DATA_SERVICE_BASE_URL", "RELEASE_SHA", "DB_PASS",
+              "UAT_LAN_BIND_ADDRESS", "POSTGRES_LAN_PORT",
+              "NEO4J_HTTP_LAN_PORT", "NEO4J_BOLT_LAN_PORT",
               "DEEPSEEK_API_KEY", "DATA_SERVICE_TOKEN", "EVENT_EXTRACTION_BATCH_SIZE",
               "NEO4J_PASSWORD",
               "GRAPHITI_EMBEDDING_API_KEY", "GRAPHITI_EMBEDDING_BASE_URL",

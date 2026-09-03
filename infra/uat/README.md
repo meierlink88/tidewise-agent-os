@@ -10,8 +10,8 @@ public HTTPS /agentos
         v
 DGX Spark (Linux ARM64)
 ├── AgentOS         127.0.0.1:9081 only
-├── PostgreSQL 17   AgentOS runtime state only; no host port
-└── Neo4j 5.26      AgentOS Graphiti only; no host port
+├── PostgreSQL 17   192.168.0.53:15432 (protected LAN)
+└── Neo4j 5.26      192.168.0.53:7474/7687 (protected LAN)
         |
         +---- HTTPS + service token ----> Huawei Cloud public Data Service API
 ```
@@ -27,7 +27,9 @@ returns the candidate commit in `X-Tidewise-Release`; this prevents a successful
 ## Security and persistence
 
 - AgentOS runs as UID/GID `10002:10002`, read-only root filesystem, no Linux capabilities, and no new privileges.
-- PostgreSQL and Neo4j have no published ports. Only AgentOS can reach them on `tidewise-agentos-uat-private`.
+- PostgreSQL and Neo4j publish only to the configured private DGX LAN address for user-approved administration;
+  they must never bind `0.0.0.0` or a public address. PostgreSQL keeps SCRAM-SHA-256 host authentication and Neo4j
+  keeps password authentication. AgentOS continues to use both services over `tidewise-agentos-uat-private`.
 - The Data Service base URL must be public HTTPS. Preflight rejects loopback/private DNS results and verifies an
   authenticated, complete Source Snapshot through the candidate image.
 - AgentOS is built on DGX from the validated `main` commit and Compose receives its immutable local image ID.
@@ -62,6 +64,8 @@ Variables:
 - `UAT_AGENTOS_RUNNER_NAME` — `tidewise-agentos-uat-dgx`
 - `AGENTOS_EXTERNAL_URL` — public HTTPS issuer/base, normally `https://tideai.tripwise.cn/agentos`
 - `DATA_SERVICE_BASE_URL` — Huawei Cloud public API base, normally `https://tideai.tripwise.cn`
+- `UAT_LAN_BIND_ADDRESS` — DGX protected-LAN address, currently `192.168.0.53`
+- `POSTGRES_LAN_PORT`, `NEO4J_HTTP_LAN_PORT`, `NEO4J_BOLT_LAN_PORT` — currently `15432`, `7474`, `7687`
 - `GRAPHITI_EMBEDDING_BASE_URL`, `GRAPHITI_EMBEDDING_MODEL`, `GRAPHITI_EMBEDDING_DIM`
 - `EVENT_EXTRACTION_BATCH_SIZE` and `CONTROL_PLANE_JWT_VERIFICATION_KEY`
 
@@ -81,8 +85,8 @@ reviewed and merged into `main`; it never copies a developer database, `.env`, s
 
 1. Merge the development change into `main` and wait for that exact commit's **Validate** run to succeed.
 2. Dispatch **Deploy UAT** from `main` with `dependencies_only=true`. This starts and verifies only fresh PostgreSQL
-   and AgentOS-exclusive Neo4j, proves named-volume persistence across restart, and proves that neither service
-   publishes a host port. AgentOS remains stopped.
+   and AgentOS-exclusive Neo4j, proves named-volume persistence across restart, and proves the exact protected-LAN
+   bindings for both services. AgentOS remains stopped.
 3. Dispatch the same validated commit with `dependencies_only=false` and `stage_only=true`. This deploys AgentOS,
    applies the additive Agno migration to the fresh database, seeds code-defined default Schedules, and proves internal
    health, auth, components, workflows, MCP, public Data API access, Graphiti, restart recovery, and image identity.

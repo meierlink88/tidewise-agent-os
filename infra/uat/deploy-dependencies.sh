@@ -47,21 +47,9 @@ neo4j_before="$(neo4j_identity)"
 
 postgres_container="$("${compose[@]}" ps -q postgres)"
 neo4j_container="$("${compose[@]}" ps -q neo4j)"
-python3 - "$postgres_container" "$neo4j_container" <<'PY'
-import json
-import subprocess
-import sys
-
-for container_id in sys.argv[1:]:
-    ports = json.loads(
-        subprocess.check_output(
-            ["docker", "inspect", "--format", "{{json .NetworkSettings.Ports}}", container_id],
-            text=True,
-        )
-    )
-    if any(bindings for bindings in ports.values()):
-        raise SystemExit("FAIL dependency-ports: a host port is published")
-PY
+python3 "$(dirname "$0")/verify-dependency-ports.py" \
+  "$postgres_container" "$neo4j_container" "$UAT_LAN_BIND_ADDRESS" \
+  "$POSTGRES_LAN_PORT" "$NEO4J_HTTP_LAN_PORT" "$NEO4J_BOLT_LAN_PORT"
 
 docker inspect --format '{{range .Mounts}}{{println .Name .Destination}}{{end}}' "$postgres_container" \
   | grep -Fqx 'tidewise-agentos-uat-postgres-data /var/lib/postgresql/data'
@@ -72,6 +60,12 @@ docker inspect --format '{{range .Mounts}}{{println .Name .Destination}}{{end}}'
 
 "${compose[@]}" restart postgres neo4j
 "${compose[@]}" up -d --wait --wait-timeout 240 postgres neo4j
+
+postgres_container="$("${compose[@]}" ps -q postgres)"
+neo4j_container="$("${compose[@]}" ps -q neo4j)"
+python3 "$(dirname "$0")/verify-dependency-ports.py" \
+  "$postgres_container" "$neo4j_container" "$UAT_LAN_BIND_ADDRESS" \
+  "$POSTGRES_LAN_PORT" "$NEO4J_HTTP_LAN_PORT" "$NEO4J_BOLT_LAN_PORT"
 
 [ "$(postgres_identity)" = "$postgres_before" ] \
   || { echo "FAIL postgres-restart-persistence: identity changed" >&2; exit 1; }

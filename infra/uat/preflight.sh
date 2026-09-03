@@ -17,7 +17,7 @@ fail() { echo "FAIL $1: $2" >&2; exit 1; }
 [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || fail release-sha "expected a full lowercase Git commit SHA"
 pass dgx-runtime-identity
 
-for command in docker curl python3 sha256sum flock ss; do
+for command in docker curl python3 sha256sum flock ss ip; do
   command -v "$command" >/dev/null || fail dependency "$command is missing"
 done
 docker info >/dev/null || fail docker-engine "docker info failed"
@@ -79,8 +79,58 @@ for _family, _type, _proto, _canon, sockaddr in socket.getaddrinfo(data.hostname
     address = ipaddress.ip_address(sockaddr[0])
     if address.is_private or address.is_loopback or address.is_link_local:
         raise SystemExit(f"FAIL data-service-url: {data.hostname} resolved to non-public address")
+
+lan_address = ipaddress.ip_address(os.environ["UAT_LAN_BIND_ADDRESS"])
+if (
+    lan_address.version != 4
+    or not lan_address.is_private
+    or lan_address.is_loopback
+    or lan_address.is_link_local
+    or lan_address.is_unspecified
+):
+    raise SystemExit("FAIL uat-lan-bind: a specific private IPv4 address is required")
+
+ports = []
+for name in ("POSTGRES_LAN_PORT", "NEO4J_HTTP_LAN_PORT", "NEO4J_BOLT_LAN_PORT"):
+    try:
+        port = int(os.environ[name])
+    except ValueError as exc:
+        raise SystemExit(f"FAIL uat-lan-port: {name} must be an integer") from exc
+    if not 1 <= port <= 65535:
+        raise SystemExit(f"FAIL uat-lan-port: {name} is outside 1..65535")
+    ports.append(port)
+if len(set(ports)) != len(ports) or 9081 in ports:
+    raise SystemExit("FAIL uat-lan-port: dependency ports must be unique and must not use 9081")
 PY
-pass public-https-contracts
+pass public-https-and-lan-contracts
+
+ip -o -4 addr show | awk '{split($4, address, "/"); print address[1]}' \
+  | grep -Fqx "$UAT_LAN_BIND_ADDRESS" \
+  || fail uat-lan-bind "$UAT_LAN_BIND_ADDRESS is not assigned to this DGX host"
+
+check_dependency_port_owner() {
+  local port="$1"
+  local expected_service="$2"
+  local container_ids
+  local project
+  local service
+  container_ids="$(docker ps --filter "publish=${port}" --format '{{.ID}}')"
+  while read -r container_id; do
+    [ -z "$container_id" ] && continue
+    project="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container_id")"
+    service="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.service" }}' "$container_id")"
+    [ "$project" = tidewise-agentos-uat ] && [ "$service" = "$expected_service" ] \
+      || fail "port-${port}" "published by a container outside tidewise-agentos-uat/${expected_service}"
+  done <<< "$container_ids"
+  if [ -z "$container_ids" ] && [ -n "$(ss -H -ltn "sport = :${port}")" ]; then
+    fail "port-${port}" "occupied by a non-Docker listener"
+  fi
+}
+
+check_dependency_port_owner "$POSTGRES_LAN_PORT" postgres
+check_dependency_port_owner "$NEO4J_HTTP_LAN_PORT" neo4j
+check_dependency_port_owner "$NEO4J_BOLT_LAN_PORT" neo4j
+pass protected-lan-dependency-ports
 
 : "${DATA_SERVICE_TOKEN:?DATA_SERVICE_TOKEN is required}"
 docker run --rm \

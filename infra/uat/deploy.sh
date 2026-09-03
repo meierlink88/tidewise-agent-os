@@ -112,6 +112,11 @@ trap 'on_error $?' ERR
 
 compose_for "$runtime_env" "$candidate_images" "$candidate_compose" config --quiet
 compose_for "$runtime_env" "$candidate_images" "$candidate_compose" up -d --wait --wait-timeout 240 postgres neo4j
+postgres_container="$(compose_for "$runtime_env" "$candidate_images" "$candidate_compose" ps -q postgres)"
+neo4j_container="$(compose_for "$runtime_env" "$candidate_images" "$candidate_compose" ps -q neo4j)"
+python3 "$(dirname "$0")/verify-dependency-ports.py" \
+  "$postgres_container" "$neo4j_container" "$UAT_LAN_BIND_ADDRESS" \
+  "$POSTGRES_LAN_PORT" "$NEO4J_HTTP_LAN_PORT" "$NEO4J_BOLT_LAN_PORT"
 if [ -s "$current_sha" ]; then
   backup_file="${deployment_root}/backups/agent-os-${release_sha}.sql.gz"
   compose_for "$runtime_env" "$candidate_images" "$candidate_compose" exec -T postgres \
