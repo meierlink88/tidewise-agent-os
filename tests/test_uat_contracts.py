@@ -69,6 +69,7 @@ class UatIngressContractTest(TestCase):
         preflight = (REPOSITORY_ROOT / "infra/uat/preflight.sh").read_text()
         deploy_dependencies = (REPOSITORY_ROOT / "infra/uat/deploy-dependencies.sh").read_text()
         deploy = (REPOSITORY_ROOT / "infra/uat/deploy.sh").read_text()
+        port_verifier = REPOSITORY_ROOT / "infra/uat/verify-dependency-ports.py"
         entrypoint = (REPOSITORY_ROOT / "scripts/entrypoint.sh").read_text()
         workflow = (REPOSITORY_ROOT / ".github/workflows/deploy-uat.yml").read_text()
 
@@ -80,7 +81,10 @@ class UatIngressContractTest(TestCase):
         self.assertIn("$${NEO4J_AUTH#*/}", neo4j_service)
         self.assertIn("tidewise-agentos-uat-postgres-data", compose)
         self.assertIn("tidewise-agentos-uat-neo4j-data", compose)
-        self.assertNotIn("ports:", compose.split("agentos:", 1)[0])
+        self.assertIn("published: ${POSTGRES_LAN_PORT:?POSTGRES_LAN_PORT is required}", compose)
+        self.assertIn("published: ${NEO4J_HTTP_LAN_PORT:?NEO4J_HTTP_LAN_PORT is required}", compose)
+        self.assertIn("published: ${NEO4J_BOLT_LAN_PORT:?NEO4J_BOLT_LAN_PORT is required}", compose)
+        self.assertEqual(compose.count("host_ip: ${UAT_LAN_BIND_ADDRESS:?UAT_LAN_BIND_ADDRESS is required}"), 3)
         self.assertIn(
             "AGENTOS_EXTERNAL_URL=https://tideai.tripwise.cn/agentos",
             example_env,
@@ -95,6 +99,12 @@ class UatIngressContractTest(TestCase):
         self.assertNotIn("MINIO_", workflow)
         self.assertNotIn("RDS_HOST", workflow)
         self.assertIn("DATA_SERVICE_BASE_URL: ${{ vars.DATA_SERVICE_BASE_URL }}", workflow)
+        self.assertIn("UAT_LAN_BIND_ADDRESS: ${{ vars.UAT_LAN_BIND_ADDRESS }}", workflow)
+        self.assertIn("POSTGRES_LAN_PORT: ${{ vars.POSTGRES_LAN_PORT }}", workflow)
+        self.assertIn("NEO4J_HTTP_LAN_PORT: ${{ vars.NEO4J_HTTP_LAN_PORT }}", workflow)
+        self.assertIn("NEO4J_BOLT_LAN_PORT: ${{ vars.NEO4J_BOLT_LAN_PORT }}", workflow)
+        self.assertIn("UAT_LAN_BIND_ADDRESS=192.168.0.53", example_env)
+        self.assertIn("POSTGRES_LAN_PORT=15432", example_env)
         self.assertIn(
             "JWT_VERIFICATION_KEY: ${JWT_VERIFICATION_KEY:?JWT_VERIFICATION_KEY is required}",
             compose,
@@ -164,7 +174,10 @@ class UatIngressContractTest(TestCase):
         self.assertIn("up -d --wait --wait-timeout 240 postgres neo4j", deploy_dependencies)
         self.assertIn("pg_control_system()", deploy_dependencies)
         self.assertIn("SHOW DATABASES YIELD name, databaseID", deploy_dependencies)
-        self.assertIn("a host port is published", deploy_dependencies)
+        self.assertIn("verify-dependency-ports.py", deploy_dependencies)
+        self.assertIn("verify-dependency-ports.py", deploy)
+        self.assertTrue(port_verifier.stat().st_mode & 0o111)
+        self.assertIn("actual_postgres != expected_postgres", port_verifier.read_text())
         self.assertIn("AgentOS was started", deploy_dependencies)
         self.assertNotIn("down -v", deploy_dependencies)
         self.assertIn("pg_dump", deploy)

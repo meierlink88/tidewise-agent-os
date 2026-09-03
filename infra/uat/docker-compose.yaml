@@ -10,6 +10,11 @@ services:
   postgres:
     image: ${POSTGRES_IMAGE:?POSTGRES_IMAGE is required}
     restart: unless-stopped
+    ports:
+      - target: 5432
+        published: ${POSTGRES_LAN_PORT:?POSTGRES_LAN_PORT is required}
+        host_ip: ${UAT_LAN_BIND_ADDRESS:?UAT_LAN_BIND_ADDRESS is required}
+        protocol: tcp
     environment:
       POSTGRES_USER: agent_os_uat_runtime
       POSTGRES_PASSWORD: ${DB_PASS:?DB_PASS is required}
@@ -28,6 +33,15 @@ services:
   neo4j:
     image: ${NEO4J_IMAGE:?NEO4J_IMAGE is required}
     restart: unless-stopped
+    ports:
+      - target: 7474
+        published: ${NEO4J_HTTP_LAN_PORT:?NEO4J_HTTP_LAN_PORT is required}
+        host_ip: ${UAT_LAN_BIND_ADDRESS:?UAT_LAN_BIND_ADDRESS is required}
+        protocol: tcp
+      - target: 7687
+        published: ${NEO4J_BOLT_LAN_PORT:?NEO4J_BOLT_LAN_PORT is required}
+        host_ip: ${UAT_LAN_BIND_ADDRESS:?UAT_LAN_BIND_ADDRESS is required}
+        protocol: tcp
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
       NEO4J_server_memory_heap_initial__size: ${NEO4J_HEAP_INITIAL_SIZE:-1G}

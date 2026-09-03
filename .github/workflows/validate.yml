@@ -66,8 +66,8 @@ jobs:
           python -c 'import pathlib, yaml; yaml.safe_load(pathlib.Path(".github/workflows/deploy-uat.yml").read_text())'
           docker compose --env-file infra/uat/.env.example -f infra/uat/docker-compose.yaml config --quiet
           test "$(docker compose --env-file infra/uat/.env.example -f infra/uat/docker-compose.yaml config --format json | jq -r '.services.agentos.ports[0].host_ip')" = 127.0.0.1
-          test "$(docker compose --env-file infra/uat/.env.example -f infra/uat/docker-compose.yaml config --format json | jq -r '.services.postgres.ports // empty')" = ""
-          test "$(docker compose --env-file infra/uat/.env.example -f infra/uat/docker-compose.yaml config --format json | jq -r '.services.neo4j.ports // empty')" = ""
+          test "$(docker compose --env-file infra/uat/.env.example -f infra/uat/docker-compose.yaml config --format json | jq -r '.services.postgres.ports[0] | "\(.host_ip):\(.published):\(.target)"')" = 192.168.0.53:15432:5432
+          test "$(docker compose --env-file infra/uat/.env.example -f infra/uat/docker-compose.yaml config --format json | jq -r '.services.neo4j.ports | map("\(.host_ip):\(.published):\(.target)") | sort | join(",")')" = 192.168.0.53:7474:7474,192.168.0.53:7687:7687
           grep -Fq 'capture_candidate_diagnostics' infra/uat/deploy.sh
           grep -Fq 'python -m scripts.migrate_agno_db' infra/uat/deploy.sh
           grep -Fq 'x-tidewise-release' infra/uat/deploy.sh
@@ -75,6 +75,7 @@ jobs:
           test -x infra/uat/deploy-dependencies.sh
           test -x infra/uat/deploy.sh
           test -x infra/uat/collect-diagnostics.sh
+          test -x infra/uat/verify-dependency-ports.py
 
       - name: Build the immutable runtime image
         run: docker build -t tidewise-agent-os:ci .
