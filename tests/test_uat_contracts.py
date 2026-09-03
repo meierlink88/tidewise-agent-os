@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 from unittest import TestCase
 
@@ -11,6 +12,25 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class UatIngressContractTest(TestCase):
+    def test_failure_diagnostics_redact_neo4j_auth_values(self) -> None:
+        diagnostics = REPOSITORY_ROOT / "infra/uat/collect-diagnostics.sh"
+        leaked_value = "neo4j/unsafe-example-value"
+
+        result = subprocess.run(
+            [diagnostics, "--redact-stdin"],
+            input=(
+                f"NEO4J_AUTH={leaked_value}\n"
+                f"Invalid value for NEO4J_AUTH: '{leaked_value}'\n"
+                f"{leaked_value} is invalid\n"
+            ),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertNotIn("unsafe-example-value", result.stdout)
+        self.assertEqual(result.stdout.count("[REDACTED]"), 3)
+
     def test_deployment_probe_has_its_required_scopes(self) -> None:
         required_scopes = [
             "agents:read",
