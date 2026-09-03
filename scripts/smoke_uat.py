@@ -30,20 +30,22 @@ UAT_SMOKE_SERVICE_ACCOUNT_SCOPES = [
     "agents:read",
     "workflows:read",
     "workflows:run",
-    "schedules:read",
     "config:read",
 ]
 
+# System Schedules are deliberately unowned. Agno service accounts always
+# self-scope unless they are admins, so use a separate, short-lived principal
+# for this operator-level read instead of widening the workflow smoke account.
+UAT_SCHEDULE_PROBE_SERVICE_ACCOUNT_SCOPES = ["agent_os:admin"]
 
-async def _probe(token: str) -> None:
+
+async def _probe(token: str, schedule_token: str) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=20.0) as client:
         agents = (await client.get("/agents")).raise_for_status().json()
         workflows = (await client.get("/workflows")).raise_for_status().json()
-        schedules = (await client.get("/schedules", params={"limit": 100, "page": 1})).raise_for_status().json()
         agent_ids = {item["id"] for item in agents}
         workflow_ids = {item["id"] for item in workflows}
-        schedule_endpoints = [item["endpoint"] for item in schedules["data"]]
         required_agents = {
             "tidewise-assistant",
             "title-curator",
@@ -69,6 +71,20 @@ async def _probe(token: str) -> None:
             raise RuntimeError(f"missing Agents: {sorted(required_agents - agent_ids)}")
         if not required_workflows <= workflow_ids:
             raise RuntimeError(f"missing Workflows: {sorted(required_workflows - workflow_ids)}")
+
+        schedule_headers = {"Authorization": f"Bearer {schedule_token}"}
+        schedules = (
+            (
+                await client.get(
+                    "/schedules",
+                    params={"limit": 100, "page": 1},
+                    headers=schedule_headers,
+                )
+            )
+            .raise_for_status()
+            .json()
+        )
+        schedule_endpoints = [item["endpoint"] for item in schedules["data"]]
         missing_endpoints = required_schedule_endpoints - set(schedule_endpoints)
         if missing_endpoints:
             raise RuntimeError(f"missing Schedule endpoints: {sorted(missing_endpoints)}")
@@ -103,24 +119,33 @@ async def _probe(token: str) -> None:
 
 async def main() -> None:
     db = get_postgres_db()
-    plaintext, token_hash, token_prefix = generate_token()
     now = int(time.time())
-    account = ServiceAccount(
-        id=str(uuid.uuid4()),
-        name=f"uat-deploy-smoke-{now}",
-        token_hash=token_hash,
-        token_prefix=token_prefix,
-        scopes=list(UAT_SMOKE_SERVICE_ACCOUNT_SCOPES),
-        created_at=now,
-        expires_at=now + 300,
-        created_by="uat-deploy",
-        user_id=None,
-    )
-    db.create_service_account(account.to_dict())
+    accounts: list[ServiceAccount] = []
+    tokens: list[str] = []
     try:
-        await _probe(plaintext)
+        for name, scopes in (
+            (f"uat-deploy-smoke-{now}", UAT_SMOKE_SERVICE_ACCOUNT_SCOPES),
+            (f"uat-schedule-probe-{now}", UAT_SCHEDULE_PROBE_SERVICE_ACCOUNT_SCOPES),
+        ):
+            plaintext, token_hash, token_prefix = generate_token()
+            account = ServiceAccount(
+                id=str(uuid.uuid4()),
+                name=name,
+                token_hash=token_hash,
+                token_prefix=token_prefix,
+                scopes=list(scopes),
+                created_at=now,
+                expires_at=now + 300,
+                created_by="uat-deploy",
+                user_id=None,
+            )
+            db.create_service_account(account.to_dict())
+            accounts.append(account)
+            tokens.append(plaintext)
+        await _probe(tokens[0], tokens[1])
     finally:
-        db.delete_service_account(account.id)
+        for account in accounts:
+            db.delete_service_account(account.id)
     print("PASS authenticated-agentos-smoke")
 
 
