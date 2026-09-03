@@ -77,7 +77,7 @@ manifest:
       - "处理所有已发布且尚未提炼 Event 的 Evidence"
 
   investment-reasoning:
-    description: "Schedule 直达的五阶段投研推理：冻结Event/Signal，依次分析地缘政治、宏观经济、产业链及节点并审核。"
+    description: "Schedule 直达的七阶段投研推理：冻结上下文，逐层分析并审核，生成报告后通过幂等发布适配器发布。"
     quick_prompts:
       - "获取最近48小时全部Event，分析对相关产业链所有节点的投资价值变化。"
 

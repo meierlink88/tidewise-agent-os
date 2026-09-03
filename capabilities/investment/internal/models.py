@@ -615,3 +615,16 @@ class InvestmentReportWorkflowOutput(FrozenModel):
     audit_artifact_path: str
     generation_status: Literal["GENERATED", "SKIPPED"]
     reason: str | None = None
+
+
+class InvestmentReportPublicationOutput(FrozenModel):
+    """Compact final Workflow result returned by the independent publication step."""
+
+    publisher_report_id: str
+    report_artifact_path: str
+    audit_artifact_path: str
+    publication_status: Literal["PUBLISHED", "REPLAYED", "SKIPPED"]
+    report_id: str | None = None
+    published_at: datetime | None = None
+    replayed: bool | None = None
+    reason: str | None = None

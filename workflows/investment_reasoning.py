@@ -15,16 +15,17 @@ from capabilities.investment.functions import (
     analyze_macro_impact,
     generate_investment_report,
     prepare_investment_context,
+    publish_investment_report,
     review_and_finalize,
 )
 from db import get_postgres_db
 
 INVESTMENT_REASONING_WORKFLOW_ID = "investment-reasoning"
-INVESTMENT_REASONING_CONTRACT_VERSION = 11
+INVESTMENT_REASONING_CONTRACT_VERSION = 12
 INVESTMENT_REASONING_DESCRIPTION = (
     "Freezes the Schedule Event window, analyzes geopolitical and macro impacts in sequence, "
     "then loads all Signal-rooted industry topology for bounded node transmission, reviews lineage, "
-    "and writes a fixed, immutable AgentOS Report Artifact."
+    "writes a fixed AgentOS Report Artifact, and publishes it through an idempotent adapter."
 )
 
 
@@ -33,7 +34,7 @@ def _fail_fast_review() -> HumanReview:
 
 
 def _seed_workflow(reasoner: Agent, reviewer: Agent, report_writer: Agent | None = None) -> Workflow:
-    """Return the fixed six-stage graph; one Reasoner is reused across three layers."""
+    """Return the fixed seven-stage graph; one Reasoner is reused across three layers."""
 
     return Workflow(
         id=INVESTMENT_REASONING_WORKFLOW_ID,
@@ -89,6 +90,13 @@ def _seed_workflow(reasoner: Agent, reviewer: Agent, report_writer: Agent | None
             Step(
                 name="generate-investment-report",
                 executor=generate_investment_report,  # type: ignore[arg-type]
+                max_retries=0,
+                human_review=_fail_fast_review(),
+                strict_input_validation=True,
+            ),
+            Step(
+                name="publish-investment-report",
+                executor=publish_investment_report,  # type: ignore[arg-type]
                 max_retries=0,
                 human_review=_fail_fast_review(),
                 strict_input_validation=True,

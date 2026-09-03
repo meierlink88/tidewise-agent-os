@@ -14,7 +14,7 @@
 - Workflow：`raw-collection`，由 Agno Studio/PostgreSQL 管理编排版本，执行采集、语义过滤、确定性去重和 manifest-last 发布。
 - Workflow：`evidence-extraction`，增量提取并发布 Atomic Evidence，回写正式 Evidence ID。
 - Workflow：`event-extraction`，冻结本地 Evidence，发布去重后 Event，投影 Graphiti 并构建 Signal Fact。
-- Workflow：`investment-reasoning`，由 Schedule 命题直接触发，按地缘政治→宏观经济→产业链及节点逐层推导，仅从有效 Signal 根形成方向结论。
+- Workflow：`investment-reasoning`，由 Schedule 命题直接触发，按地缘政治→宏观经济→产业链及节点逐层推导，仅从有效 Signal 根形成方向结论；生成固定报告后由独立幂等发布 Step 交付，当前本地默认使用文件 Mock Publisher。
 - Projection CLI：`sematica.projection.company_cli`，从 Data API 投影 canonical Company，并只对图中已有 Industry/ChainNode 做可恢复的受限模型映射；写入禁止使用 Graphiti Episode。
 - API/MCP：`http://localhost:8000`、`http://localhost:8000/mcp`。
 
