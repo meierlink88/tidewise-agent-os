@@ -182,7 +182,7 @@ jobs:
       RELEASE_SHA: ${{ needs.resolve-release.outputs.commit_sha }}
       AGENTOS_IMAGE: ${{ needs.build-and-push.outputs.agentos_image }}
       DEPLOY_BUNDLE_IMAGE: ${{ needs.build-and-push.outputs.deploy_bundle_image }}
-      POSTGRES_IMAGE: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+      POSTGRES_IMAGE: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
       NEO4J_IMAGE: neo4j:5.26.28-community@sha256:ff32db30b2baff97971e441b46bfd9c832c1b62c970398ef579244c06b21d357
       DB_PASS: ${{ secrets.AGENTOS_DB_PASSWORD }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}

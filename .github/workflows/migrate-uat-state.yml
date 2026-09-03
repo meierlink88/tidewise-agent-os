@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  POSTGRES_IMAGE: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+  POSTGRES_IMAGE: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
 
 jobs:
   stage-postgres-client:
@@ -34,8 +34,8 @@ jobs:
           mkdir -p "$artifact_root"
           docker pull --platform linux/amd64 "$POSTGRES_IMAGE"
           [ "$(docker image inspect --format '{{.Architecture}}' "$POSTGRES_IMAGE")" = amd64 ]
-          docker tag "$POSTGRES_IMAGE" agentos-postgres-client:16
-          docker save agentos-postgres-client:16 | gzip -1 > "$archive"
+          docker tag "$POSTGRES_IMAGE" agentos-postgres-client:17
+          docker save agentos-postgres-client:17 | gzip -1 > "$archive"
           test -s "$archive"
           (cd "$artifact_root" && sha256sum postgres-client-image.tar.gz > SHA256SUMS)
           echo "path=$artifact_root" >> "$GITHUB_OUTPUT"
@@ -57,7 +57,7 @@ jobs:
       DB_HOST: ${{ vars.RDS_HOST }}
       DB_PASS: ${{ secrets.AGENTOS_DB_PASSWORD }}
       MIGRATION_PASSPHRASE: ${{ secrets.UAT_MIGRATION_PASSPHRASE }}
-      POSTGRES_CLIENT_IMAGE: agentos-postgres-client:16
+      POSTGRES_CLIENT_IMAGE: agentos-postgres-client:17
     steps:
       - name: Validate explicit confirmation
         shell: bash
