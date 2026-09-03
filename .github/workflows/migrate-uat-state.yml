@@ -101,7 +101,11 @@ jobs:
             | gzip -9 > "$migration_root/agent-os.sql.gz"
           test -s "$migration_root/agent-os.sql.gz"
           if [ -d /opt/tidewise/agentos-uat/data ]; then
-            tar -C /opt/tidewise/agentos-uat -czf "$migration_root/artifacts.tar.gz" data
+            docker run --rm --read-only --network none \
+              --mount type=bind,source=/opt/tidewise/agentos-uat,target=/source,readonly \
+              --mount "type=bind,source=${migration_root},target=/export" \
+              --entrypoint tar "$POSTGRES_CLIENT_IMAGE" \
+              -C /source -czf /export/artifacts.tar.gz data
           else
             tar -czf "$migration_root/artifacts.tar.gz" --files-from /dev/null
           fi
