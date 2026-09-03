@@ -1085,7 +1085,7 @@ class InvestmentWorkflowShapeTest(unittest.TestCase):
         self.assertEqual(len(parsed.stopped_reason or ""), 500)
         self.assertEqual(len(_bounded_text("A" * 900, limit=500) or ""), 500)
 
-    def test_workflow_has_six_fixed_business_stages(self) -> None:
+    def test_workflow_has_seven_fixed_business_stages(self) -> None:
         workflow = _seed_workflow(cast(Agent, object()), cast(Agent, object()))
         steps = cast(list[Step], workflow.steps)
         self.assertEqual(
@@ -1097,13 +1097,14 @@ class InvestmentWorkflowShapeTest(unittest.TestCase):
                 "analyze-industry-impact",
                 "review-and-finalize",
                 "generate-investment-report",
+                "publish-investment-report",
             ],
         )
 
     def test_http_natural_language_contract_is_owned_by_prepare_not_workflow_input_schema(self) -> None:
         workflow = _seed_workflow(cast(Agent, object()), cast(Agent, object()))
 
-        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 11)
+        self.assertEqual(INVESTMENT_REASONING_CONTRACT_VERSION, 12)
         self.assertIsNone(workflow.input_schema)
         self.assertIs(cast(list[Step], workflow.steps)[0].executor, prepare_investment_context)
 

@@ -81,6 +81,7 @@ from capabilities.investment import (
     InvestmentAnalysisContext,
     InvestmentAnalysisResult,
     InvestmentReasoningInput,
+    InvestmentReportPublicationOutput,
     InvestmentReportWorkflowOutput,
     LayerAnalysisContext,
     LayerAnalysisResult,
@@ -182,6 +183,7 @@ registry = TidewiseRegistry(
         ReviewResult,
         InvestmentAnalysisResult,
         ReviewedInvestmentState,
+        InvestmentReportPublicationOutput,
         InvestmentReportWorkflowOutput,
     ],
     functions=[

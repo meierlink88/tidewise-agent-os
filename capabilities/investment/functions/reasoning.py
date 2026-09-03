@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from agno.run import RunContext
@@ -20,6 +21,7 @@ from capabilities.investment.internal.models import (
     InvestmentAnalysisResult,
     InvestmentConclusionArtifact,
     InvestmentReasoningInput,
+    InvestmentReportPublicationOutput,
     InvestmentReportWorkflowOutput,
     LayerAnalysisResult,
     MacroAnalysisState,
@@ -28,6 +30,8 @@ from capabilities.investment.internal.models import (
     ReviewResult,
     Trend,
 )
+from capabilities.investment.internal.report_contract import InvestmentReportArtifact
+from capabilities.investment.internal.report_publication import build_report_publication, report_publisher
 from capabilities.investment.internal.reporting import InvestmentReportAssembler, ReportNotPublishable
 from capabilities.investment.internal.runtime import investment_workflow_runtime
 from capabilities.investment.internal.storage import (
@@ -391,6 +395,36 @@ async def generate_investment_report(step_input: StepInput, run_context: RunCont
 
 
 async def publish_investment_report(step_input: StepInput, run_context: RunContext) -> StepOutput:
-    """Compatibility alias for previously stored Workflow versions; no external publication occurs."""
+    """Publish the generated immutable Report through the configured deterministic adapter."""
 
-    return await generate_investment_report(step_input, run_context)
+    del run_context
+    generated = _content(step_input, InvestmentReportWorkflowOutput)
+    if generated.generation_status == "SKIPPED":
+        return StepOutput(
+            content=InvestmentReportPublicationOutput(
+                publisher_report_id=generated.source_report_id,
+                report_artifact_path=generated.report_artifact_path,
+                audit_artifact_path=generated.audit_artifact_path,
+                publication_status="SKIPPED",
+                reason=generated.reason,
+            ),
+            success=True,
+        )
+    path = Path(generated.report_artifact_path).resolve()
+    report = await asyncio.to_thread(InvestmentReportArtifact.model_validate_json, path.read_text(encoding="utf-8"))
+    if report.source_report_id != generated.source_report_id:
+        raise ValueError("generated Report identity does not match its Workflow handoff")
+    request = build_report_publication(report)
+    receipt = await report_publisher().publish(request)
+    return StepOutput(
+        content=InvestmentReportPublicationOutput(
+            publisher_report_id=request.publisher_report_id,
+            report_artifact_path=str(path),
+            audit_artifact_path=generated.audit_artifact_path,
+            publication_status="REPLAYED" if receipt.replayed else "PUBLISHED",
+            report_id=receipt.report_id,
+            published_at=receipt.published_at,
+            replayed=receipt.replayed,
+        ),
+        success=True,
+    )
