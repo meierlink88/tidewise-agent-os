@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -Eeuo pipefail
+
 ############################################################################
 #
 #    Agno Container Entrypoint
@@ -24,9 +26,31 @@ cat << 'BANNER'
 BANNER
 echo -e "${NC}"
 
-if [[ "$WAIT_FOR_DB" = true || "$WAIT_FOR_DB" = True ]]; then
+wait_for_db="${WAIT_FOR_DB:-False}"
+if [[ "$wait_for_db" = true || "$wait_for_db" = True ]]; then
+    : "${DB_HOST:?DB_HOST is required when WAIT_FOR_DB is true}"
+    : "${DB_PORT:?DB_PORT is required when WAIT_FOR_DB is true}"
     echo -e "    ${DIM}Waiting for database at ${DB_HOST}:${DB_PORT}...${NC}"
-    dockerize -wait tcp://$DB_HOST:$DB_PORT -timeout 300s
+    python - "$DB_HOST" "$DB_PORT" <<'PY'
+import socket
+import sys
+import time
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+deadline = time.monotonic() + 300
+last_error: OSError | None = None
+
+while time.monotonic() < deadline:
+    try:
+        with socket.create_connection((host, port), timeout=5):
+            break
+    except OSError as exc:
+        last_error = exc
+        time.sleep(1)
+else:
+    raise SystemExit(f"Database unavailable after 300s: {host}:{port}: {last_error}")
+PY
     echo -e "    ${BOLD}Database ready.${NC}"
     echo ""
 fi

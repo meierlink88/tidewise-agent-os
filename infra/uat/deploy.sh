@@ -125,11 +125,12 @@ fi
 # additive, idempotent migration with the candidate image before v3 serves.
 compose_for "$runtime_env" "$candidate_images" "$candidate_compose" stop --timeout 30 agentos || true
 migrate_candidate_database "$runtime_env" "$candidate_images" "$candidate_compose"
-compose_for "$runtime_env" "$candidate_images" "$candidate_compose" up -d --wait --wait-timeout 180 agentos
 if [ ! -s "$current_sha" ]; then
-  compose_for "$runtime_env" "$candidate_images" "$candidate_compose" exec -T agentos \
+  compose_for "$runtime_env" "$candidate_images" "$candidate_compose" run --rm --no-deps agentos \
     python -m scripts.seed_schedules
+  echo "PASS initial-schedule-seed"
 fi
+compose_for "$runtime_env" "$candidate_images" "$candidate_compose" up -d --wait --wait-timeout 180 agentos
 verify_release "$runtime_env" "$candidate_images" "$candidate_compose" "$release_sha"
 
 # Prove Docker restart recovery while preserving PostgreSQL-owned Schedule configuration.
