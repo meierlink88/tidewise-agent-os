@@ -88,105 +88,19 @@ jobs:
               core.setFailed(`No successful Validate run exists for ${process.env.TARGET_SHA}`);
             }
 
-  build-and-push:
-    name: Build and publish ARM64 SWR images on DGX
+  deploy:
+    name: Build and deploy on UAT DGX Spark
     runs-on: [self-hosted, linux, ARM64, tidewise-agentos-uat-dgx]
     needs: resolve-release
     environment: uat
-    outputs:
-      agentos_image: ${{ steps.refs.outputs.agentos_image }}
-      deploy_bundle_image: ${{ steps.refs.outputs.deploy_bundle_image }}
-    env:
-      SWR_REGISTRY: ${{ vars.SWR_REGISTRY }}
-      SWR_NAMESPACE: ${{ vars.SWR_NAMESPACE }}
-      SWR_AGENTOS_REPOSITORY: ${{ vars.SWR_AGENTOS_REPOSITORY }}
-      SWR_DEPLOY_REPOSITORY: ${{ vars.SWR_AGENTOS_DEPLOY_REPOSITORY }}
-    steps:
-      - name: Checkout release commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.resolve-release.outputs.commit_sha }}
-
-      - name: Resolve image tags
-        id: tags
-        env:
-          COMMIT_SHA: ${{ needs.resolve-release.outputs.commit_sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          : "${SWR_REGISTRY:?Set SWR_REGISTRY in the uat Environment}"
-          : "${SWR_NAMESPACE:?Set SWR_NAMESPACE in the uat Environment}"
-          : "${SWR_AGENTOS_REPOSITORY:?Set SWR_AGENTOS_REPOSITORY in the uat Environment}"
-          : "${SWR_DEPLOY_REPOSITORY:?Set SWR_AGENTOS_DEPLOY_REPOSITORY in the uat Environment}"
-          prefix="${SWR_REGISTRY}/${SWR_NAMESPACE}"
-          echo "agentos_tag=${prefix}/${SWR_AGENTOS_REPOSITORY}:${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "deploy_bundle_tag=${prefix}/${SWR_DEPLOY_REPOSITORY}:${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
-
-      - name: Login to SWR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ${{ env.SWR_REGISTRY }}
-          username: ${{ secrets.SWR_USERNAME }}
-          password: ${{ secrets.SWR_PASSWORD }}
-
-      - name: Build and push AgentOS
-        id: agentos
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/arm64
-          push: true
-          provenance: false
-          tags: ${{ steps.tags.outputs.agentos_tag }}
-          labels: org.opencontainers.image.revision=${{ needs.resolve-release.outputs.commit_sha }}
-
-      - name: Build and push immutable deployment bundle
-        id: bundle
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        with:
-          context: infra/uat
-          file: infra/uat/deploy-bundle.Dockerfile
-          platforms: linux/arm64
-          push: true
-          provenance: false
-          tags: ${{ steps.tags.outputs.deploy_bundle_tag }}
-          labels: org.opencontainers.image.revision=${{ needs.resolve-release.outputs.commit_sha }}
-
-      - name: Resolve immutable image references
-        id: refs
-        env:
-          AGENTOS_TAG: ${{ steps.tags.outputs.agentos_tag }}
-          AGENTOS_DIGEST: ${{ steps.agentos.outputs.digest }}
-          BUNDLE_TAG: ${{ steps.tags.outputs.deploy_bundle_tag }}
-          BUNDLE_DIGEST: ${{ steps.bundle.outputs.digest }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for digest in "$AGENTOS_DIGEST" "$BUNDLE_DIGEST"; do
-            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "invalid image digest" >&2; exit 1; }
-          done
-          echo "agentos_image=${AGENTOS_TAG}@${AGENTOS_DIGEST}" >> "$GITHUB_OUTPUT"
-          echo "deploy_bundle_image=${BUNDLE_TAG}@${BUNDLE_DIGEST}" >> "$GITHUB_OUTPUT"
-
-  deploy:
-    name: Deploy to UAT DGX Spark
-    runs-on: [self-hosted, linux, ARM64, tidewise-agentos-uat-dgx]
-    needs: [resolve-release, build-and-push]
-    environment: uat
     env:
       DEPLOY_ROOT: /opt/tidewise/agentos-uat
-      SWR_REGISTRY: ${{ vars.SWR_REGISTRY }}
       UAT_RUNNER_NAME: ${{ vars.UAT_AGENTOS_RUNNER_NAME }}
       AGENTOS_EXTERNAL_URL: ${{ vars.AGENTOS_EXTERNAL_URL }}
       DATA_SERVICE_BASE_URL: ${{ vars.DATA_SERVICE_BASE_URL }}
       STAGE_ONLY: ${{ inputs.stage_only }}
       RELEASE_SHA: ${{ needs.resolve-release.outputs.commit_sha }}
-      AGENTOS_IMAGE: ${{ needs.build-and-push.outputs.agentos_image }}
-      DEPLOY_BUNDLE_IMAGE: ${{ needs.build-and-push.outputs.deploy_bundle_image }}
+      AGENTOS_LOCAL_REPOSITORY: tidewise-agentos-uat
       POSTGRES_IMAGE: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
       NEO4J_IMAGE: neo4j:5.26.28-community@sha256:ff32db30b2baff97971e441b46bfd9c832c1b62c970398ef579244c06b21d357
       DB_PASS: ${{ secrets.AGENTOS_DB_PASSWORD }}
@@ -203,32 +117,33 @@ jobs:
       JWT_JWKS_BASE64: ${{ secrets.JWT_JWKS_BASE64 }}
       CONTROL_PLANE_JWT_VERIFICATION_KEY: ${{ vars.CONTROL_PLANE_JWT_VERIFICATION_KEY }}
     steps:
-      - name: Login to SWR with pull credentials
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      - name: Checkout validated release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          registry: ${{ env.SWR_REGISTRY }}
-          username: ${{ secrets.SWR_PULL_USERNAME }}
-          password: ${{ secrets.SWR_PULL_PASSWORD }}
+          ref: ${{ needs.resolve-release.outputs.commit_sha }}
 
-      - name: Pull immutable deployment bundle
-        id: bundle
+      - name: Build immutable AgentOS image locally on DGX
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$DEPLOY_BUNDLE_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "bundle must use a digest" >&2; exit 1; }
-          docker pull "$DEPLOY_BUNDLE_IMAGE"
-          bundle_root="${RUNNER_TEMP}/agentos-uat-bundle-${GITHUB_RUN_ID}"
-          rm -rf "$bundle_root"
-          mkdir -p "$bundle_root"
-          # The bundle image is FROM scratch and intentionally has no default command.
-          # It is never started; the override only lets Docker create metadata for docker cp.
-          container="$(docker create "$DEPLOY_BUNDLE_IMAGE" /bin/true)"
-          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
-          docker cp "${container}:/bundle/." "$bundle_root"
-          docker rm -f "$container" >/dev/null
-          trap - EXIT
-          echo "root=$bundle_root" >> "$GITHUB_OUTPUT"
-          echo "compose=$bundle_root/docker-compose.yaml" >> "$GITHUB_OUTPUT"
+          [ "$(uname -m)" = aarch64 ] || { echo "local build requires aarch64" >&2; exit 1; }
+          local_tag="${AGENTOS_LOCAL_REPOSITORY}:${RELEASE_SHA}"
+          docker buildx build \
+            --platform linux/arm64 \
+            --pull \
+            --load \
+            --provenance=false \
+            --label "org.opencontainers.image.revision=${RELEASE_SHA}" \
+            --tag "$local_tag" \
+            .
+          image_id="$(docker image inspect --format '{{.Id}}' "$local_tag")"
+          [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "invalid local image ID" >&2; exit 1; }
+          [ "$(docker image inspect --format '{{.Architecture}}' "$image_id")" = arm64 ] \
+            || { echo "local AgentOS image is not arm64" >&2; exit 1; }
+          [ "$(docker image inspect --format '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' "$image_id")" = "$RELEASE_SHA" ] \
+            || { echo "local AgentOS image revision does not match release" >&2; exit 1; }
+          echo "AGENTOS_IMAGE=$image_id" >> "$GITHUB_ENV"
+          echo "PASS local-agentos-image ${RELEASE_SHA} ${image_id}"
 
       - name: Prepare protected runtime inputs
         id: runtime
@@ -285,18 +200,18 @@ jobs:
           echo "runtime_env=$runtime_env" >> "$GITHUB_OUTPUT"
           echo "images_env=$images_env" >> "$GITHUB_OUTPUT"
 
-      - name: Pull immutable ARM64 images
+      - name: Pull pinned ARM64 dependency images
         shell: bash
         run: |
           set -euo pipefail
-          for image in "$AGENTOS_IMAGE" "$POSTGRES_IMAGE" "$NEO4J_IMAGE"; do
+          for image in "$POSTGRES_IMAGE" "$NEO4J_IMAGE"; do
             [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "image must use a digest" >&2; exit 1; }
             docker pull "$image"
           done
 
       - name: Preflight DGX, public Data Service and dedicated dependencies
         shell: bash
-        run: ${{ steps.bundle.outputs.root }}/preflight.sh
+        run: ./infra/uat/preflight.sh
 
       - name: Validate UAT Compose
         shell: bash
@@ -304,7 +219,7 @@ jobs:
           docker compose
           --env-file "${{ steps.runtime.outputs.runtime_env }}"
           --env-file "${{ steps.runtime.outputs.images_env }}"
-          -f "${{ steps.bundle.outputs.compose }}"
+          -f infra/uat/docker-compose.yaml
           config --quiet
 
       - name: Deploy and verify fresh dependencies
@@ -313,8 +228,8 @@ jobs:
         env:
           RUNTIME_ENV: ${{ steps.runtime.outputs.runtime_env }}
           CANDIDATE_IMAGES: ${{ steps.runtime.outputs.images_env }}
-          COMPOSE_FILE: ${{ steps.bundle.outputs.compose }}
-        run: ${{ steps.bundle.outputs.root }}/deploy-dependencies.sh
+          COMPOSE_FILE: ${{ github.workspace }}/infra/uat/docker-compose.yaml
+        run: ./infra/uat/deploy-dependencies.sh
 
       - name: Deploy and verify release
         if: ${{ ! inputs.dependencies_only }}
@@ -322,9 +237,9 @@ jobs:
         env:
           RUNTIME_ENV: ${{ steps.runtime.outputs.runtime_env }}
           CANDIDATE_IMAGES: ${{ steps.runtime.outputs.images_env }}
-          COMPOSE_FILE: ${{ steps.bundle.outputs.compose }}
+          COMPOSE_FILE: ${{ github.workspace }}/infra/uat/docker-compose.yaml
           DIAGNOSTICS_FILE: ${{ runner.temp }}/agentos-uat-diagnostics-${{ github.run_id }}.log
-        run: ${{ steps.bundle.outputs.root }}/deploy.sh
+        run: ./infra/uat/deploy.sh
 
       - name: Collect sanitized failure diagnostics
         id: diagnostics
@@ -333,11 +248,11 @@ jobs:
         env:
           RUNTIME_ENV: ${{ steps.runtime.outputs.runtime_env }}
           CANDIDATE_IMAGES: ${{ steps.runtime.outputs.images_env }}
-          COMPOSE_FILE: ${{ steps.bundle.outputs.compose }}
+          COMPOSE_FILE: ${{ github.workspace }}/infra/uat/docker-compose.yaml
         run: |
           output="${RUNNER_TEMP}/agentos-uat-diagnostics-${GITHUB_RUN_ID}.log"
           if [ ! -s "$output" ]; then
-            "${{ steps.bundle.outputs.root }}/collect-diagnostics.sh" > "$output"
+            ./infra/uat/collect-diagnostics.sh > "$output"
           fi
           echo "file=$output" >> "$GITHUB_OUTPUT"
 

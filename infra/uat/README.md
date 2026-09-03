@@ -30,7 +30,8 @@ returns the candidate commit in `X-Tidewise-Release`; this prevents a successful
 - PostgreSQL and Neo4j have no published ports. Only AgentOS can reach them on `tidewise-agentos-uat-private`.
 - The Data Service base URL must be public HTTPS. Preflight rejects loopback/private DNS results and verifies an
   authenticated, complete Source Snapshot through the candidate image.
-- All three images are immutable digest references and must resolve to `linux/arm64` on DGX.
+- AgentOS is built on DGX from the validated `main` commit and Compose receives its immutable local image ID.
+  PostgreSQL and Neo4j remain pinned by registry digest. All three images must resolve to `linux/arm64` on DGX.
 - PostgreSQL, Neo4j data, and Neo4j logs use `tidewise-agentos-uat-*` named volumes. Never run `docker compose down -v`.
 - Before an upgrade of an existing DGX release, deployment writes a compressed PostgreSQL dump under
   `/opt/tidewise/agentos-uat/backups`. Back up the three named volumes to independent storage before host maintenance.
@@ -58,7 +59,6 @@ JWKS paths but does not start a release.
 
 Variables:
 
-- `SWR_REGISTRY`, `SWR_NAMESPACE`, `SWR_AGENTOS_REPOSITORY`, `SWR_AGENTOS_DEPLOY_REPOSITORY`
 - `UAT_AGENTOS_RUNNER_NAME` — `tidewise-agentos-uat-dgx`
 - `AGENTOS_EXTERNAL_URL` — public HTTPS issuer/base, normally `https://tideai.tripwise.cn/agentos`
 - `DATA_SERVICE_BASE_URL` — Huawei Cloud public API base, normally `https://tideai.tripwise.cn`
@@ -67,7 +67,6 @@ Variables:
 
 Secrets:
 
-- `SWR_USERNAME`, `SWR_PASSWORD`, `SWR_PULL_USERNAME`, `SWR_PULL_PASSWORD`
 - `AGENTOS_DB_PASSWORD`, `NEO4J_PASSWORD`, `DEEPSEEK_API_KEY`, `DATA_SERVICE_TOKEN`
 - `GRAPHITI_EMBEDDING_API_KEY`, `JWT_JWKS_BASE64`
 - optional `MCP_CONNECT_SECRET`, `AGENTOS_MCP_SIGNING_KEY`
@@ -86,7 +85,7 @@ reviewed and merged into `main`; it never copies a developer database, `.env`, s
    publishes a host port. AgentOS remains stopped.
 3. Dispatch the same validated commit with `dependencies_only=false` and `stage_only=true`. This deploys AgentOS,
    applies the additive Agno migration to the fresh database, seeds code-defined default Schedules, and proves internal
-   health, auth, components, workflows, MCP, public Data API access, Graphiti, restart recovery, and image digests.
+   health, auth, components, workflows, MCP, public Data API access, Graphiti, restart recovery, and image identity.
    The smoke check keeps workflow execution on a least-privilege temporary service account and uses a separate
    five-minute administrator probe only to verify the unowned system Schedules through the authenticated API;
    both accounts are deleted even when verification fails.
@@ -95,8 +94,10 @@ reviewed and merged into `main`; it never copies a developer database, `.env`, s
 5. Observe the DGX release. Any legacy ECS cleanup is outside this deployment and requires separate authorization.
 
 Run **Deploy UAT** manually from `main`. It accepts only a commit already validated on `main`, builds ARM64 images on
-DGX, deploys digest references, starts dedicated PostgreSQL and Neo4j, applies the additive Agno migration, and seeds
-default schedules only for the first DGX release. On candidate failure, it restores the prior AgentOS image/config;
-database state is not automatically rolled back. The last two release snapshots remain under the deployment state
-directory. In `dependencies_only` mode it records only the dependency image and Compose snapshot; it does not create an
-AgentOS release snapshot or start the application.
+DGX without pushing to or pulling from an AgentOS registry, resolves the result to a local Docker image ID, starts
+dedicated PostgreSQL and Neo4j, applies the additive Agno migration, and seeds default schedules only for the first DGX
+release. The deployment scripts come directly from the same checked-out release commit; there is no deployment-bundle
+image. On candidate failure, it restores the prior AgentOS image/config; database state is not automatically rolled
+back. Local release images must be retained for rollback. The last two release snapshots remain under the deployment
+state directory. In `dependencies_only` mode it records only the dependency image and Compose snapshot; it does not
+create an AgentOS release snapshot or start the application.
