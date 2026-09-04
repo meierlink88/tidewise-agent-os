@@ -91,15 +91,17 @@ Agent 或 Workflow。
 因此 Control Panel 中的改名和其他运行配置会跨容器重启保留。
 
 采集结果默认位于项目根目录 `data/collector/`。接受的文章在 manifest 可见前以
-`documents/YYYY/MM/DD/<document-sha256>.md` 内容寻址路径幂等写入本地 Artifact：
+`documents/YYYY/MM/DD/<document-sha256>.md` 内容寻址路径同时幂等写入 AgentOS 自有 MinIO
+`raw-evidence` bucket 和本地 Artifact：
 
 - `documents/`：接受的原始资讯 Markdown。
 - `runs/<run_id>/`：候选账本、汇总和 manifest。
 - `indexes/title-dedup-index.tsv`：新版标题跨运行去重索引；历史 `dedup-index.tsv` 仅保留为只读 URL 兼容索引。
 
-`data/` 已被 Git 忽略。可通过 `.env` 的 `COLLECTOR_DATA_DIR` 替换宿主机目录。Evidence Extraction
-通过版本化 Data Service API 提交完整 Raw Evidence 正文；AgentOS 不连接 Data Service 的 PostgreSQL、MinIO
-或其他基础设施，也不持有这些基础设施的凭据。Data Service 独占服务端持久化与对外读取策略。
+`data/` 已被 Git 忽略。可通过 `.env` 的 `COLLECTOR_DATA_DIR` 替换宿主机目录。
+Evidence Extraction 仍用本地完整 Markdown 作为模型输入，但通过版本化 Data Service API 的既有
+`raw_text` 字段只提交 `/{bucket}/{object_key}` 相对路径。Data Service 不读取或代理对象，也不向 AgentOS
+暴露自己的 PostgreSQL、MinIO 或其他基础设施；AgentOS 只持有自身 MinIO 的写凭据。
 
 确定性 Function 使用 `DATA_SERVICE_TOKEN` 从 Data Service 读取一次完整 active Source Snapshot，
 并行执行 Web Search、API 和 RSS 三类采集组。这三类能力不向 Agent Registry 注册为 Tool。

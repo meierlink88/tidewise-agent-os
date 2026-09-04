@@ -47,7 +47,7 @@ docker image inspect "$agentos_image" >/dev/null || fail image-present "AGENTOS_
 [ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$agentos_image")" = "$release_sha" ] \
   || fail image-revision "AGENTOS_IMAGE does not match RELEASE_SHA"
 
-for image_var in POSTGRES_IMAGE NEO4J_IMAGE; do
+for image_var in POSTGRES_IMAGE NEO4J_IMAGE MINIO_IMAGE; do
   image="${!image_var:-}"
   [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]] || fail immutable-image "$image_var must use a digest"
   docker image inspect "$image" >/dev/null || fail image-present "$image_var is not pulled"
@@ -91,7 +91,13 @@ if (
     raise SystemExit("FAIL uat-lan-bind: a specific private IPv4 address is required")
 
 ports = []
-for name in ("POSTGRES_LAN_PORT", "NEO4J_HTTP_LAN_PORT", "NEO4J_BOLT_LAN_PORT"):
+for name in (
+    "POSTGRES_LAN_PORT",
+    "NEO4J_HTTP_LAN_PORT",
+    "NEO4J_BOLT_LAN_PORT",
+    "MINIO_LAN_PORT",
+    "MINIO_CONSOLE_PORT",
+):
     try:
         port = int(os.environ[name])
     except ValueError as exc:
@@ -101,6 +107,19 @@ for name in ("POSTGRES_LAN_PORT", "NEO4J_HTTP_LAN_PORT", "NEO4J_BOLT_LAN_PORT"):
     ports.append(port)
 if len(set(ports)) != len(ports) or 9081 in ports:
     raise SystemExit("FAIL uat-lan-port: dependency ports must be unique and must not use 9081")
+
+raw_base = urlparse(os.environ["RAW_EVIDENCE_PUBLIC_BASE_URL"])
+if (
+    raw_base.scheme != "http"
+    or raw_base.hostname != str(lan_address)
+    or raw_base.port != int(os.environ["MINIO_LAN_PORT"])
+    or raw_base.path.rstrip("/")
+    or raw_base.username
+    or raw_base.password
+    or raw_base.query
+    or raw_base.fragment
+):
+    raise SystemExit("FAIL raw-evidence-public-url: expected protected-LAN MinIO API base URL")
 PY
 pass public-https-and-lan-contracts
 
@@ -130,6 +149,8 @@ check_dependency_port_owner() {
 check_dependency_port_owner "$POSTGRES_LAN_PORT" postgres
 check_dependency_port_owner "$NEO4J_HTTP_LAN_PORT" neo4j
 check_dependency_port_owner "$NEO4J_BOLT_LAN_PORT" neo4j
+check_dependency_port_owner "$MINIO_LAN_PORT" minio
+check_dependency_port_owner "$MINIO_CONSOLE_PORT" minio
 pass protected-lan-dependency-ports
 
 : "${DATA_SERVICE_TOKEN:?DATA_SERVICE_TOKEN is required}"
@@ -143,6 +164,13 @@ pass public-data-service-source-snapshot
 
 : "${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY is required}"
 : "${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}"
+: "${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}"
+: "${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}"
+: "${RAW_EVIDENCE_BUCKET:?RAW_EVIDENCE_BUCKET is required}"
+[[ "$RAW_EVIDENCE_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] \
+  || fail raw-evidence-bucket "must be a valid lowercase S3 bucket name"
+[ "${#MINIO_ACCESS_KEY}" -ge 3 ] || fail minio-access-key "must contain at least 3 characters"
+[ "${#MINIO_SECRET_KEY}" -ge 8 ] || fail minio-secret-key "must contain at least 8 characters"
 : "${GRAPHITI_EMBEDDING_API_KEY:?GRAPHITI_EMBEDDING_API_KEY is required}"
 : "${GRAPHITI_EMBEDDING_BASE_URL:?GRAPHITI_EMBEDDING_BASE_URL is required}"
 : "${GRAPHITI_EMBEDDING_MODEL:?GRAPHITI_EMBEDDING_MODEL is required}"

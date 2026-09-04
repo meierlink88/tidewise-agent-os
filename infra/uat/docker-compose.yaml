@@ -59,6 +59,33 @@ services:
     logging: *default-logging
     networks: [agentos-private]
 
+  minio:
+    image: ${MINIO_IMAGE:?MINIO_IMAGE is required}
+    command: server /data --address :9000 --console-address :9001
+    restart: unless-stopped
+    ports:
+      - target: 9000
+        published: ${MINIO_LAN_PORT:?MINIO_LAN_PORT is required}
+        host_ip: ${UAT_LAN_BIND_ADDRESS:?UAT_LAN_BIND_ADDRESS is required}
+        protocol: tcp
+      - target: 9001
+        published: ${MINIO_CONSOLE_PORT:?MINIO_CONSOLE_PORT is required}
+        host_ip: 127.0.0.1
+        protocol: tcp
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+    volumes:
+      - agentos-minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging: *default-logging
+    networks: [agentos-private]
+
   agentos:
     image: ${AGENTOS_IMAGE:?AGENTOS_IMAGE is required}
     command: uvicorn app.main:app --host 0.0.0.0 --port 9081
@@ -97,6 +124,11 @@ services:
       DEEPSEEK_USE_THINKING: ${DEEPSEEK_USE_THINKING:-False}
       DATA_SERVICE_BASE_URL: ${DATA_SERVICE_BASE_URL:?DATA_SERVICE_BASE_URL is required}
       DATA_SERVICE_TOKEN: ${DATA_SERVICE_TOKEN:?DATA_SERVICE_TOKEN is required}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      RAW_EVIDENCE_BUCKET: ${RAW_EVIDENCE_BUCKET:-raw-evidence}
+      RAW_EVIDENCE_PUBLIC_BASE_URL: ${RAW_EVIDENCE_PUBLIC_BASE_URL:?RAW_EVIDENCE_PUBLIC_BASE_URL is required}
       COLLECTOR_ARTIFACT_ROOT: /app/data/collector
       EVIDENCE_ARTIFACT_ROOT: /app/data/evidence
       EVENT_ARTIFACT_ROOT: /app/data/event
@@ -121,6 +153,8 @@ services:
         condition: service_healthy
       neo4j:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9081/health"]
       interval: 15s
@@ -141,3 +175,5 @@ volumes:
     name: tidewise-agentos-uat-neo4j-data
   agentos-neo4j-logs:
     name: tidewise-agentos-uat-neo4j-logs
+  agentos-minio-data:
+    name: tidewise-agentos-uat-minio-data

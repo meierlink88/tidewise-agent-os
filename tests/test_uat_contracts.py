@@ -35,6 +35,20 @@ class UatIngressContractTest(TestCase):
         self.assertNotIn("unsafe-example-value", result.stdout)
         self.assertEqual(result.stdout.count("[REDACTED]"), 3)
 
+    def test_failure_diagnostics_redact_minio_credentials(self) -> None:
+        diagnostics = REPOSITORY_ROOT / "infra/uat/collect-diagnostics.sh"
+        result = subprocess.run(
+            [diagnostics, "--redact-stdin"],
+            input="MINIO_ACCESS_KEY=unsafe-user\nMINIO_SECRET_KEY=unsafe-password\n",
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertNotIn("unsafe-user", result.stdout)
+        self.assertNotIn("unsafe-password", result.stdout)
+        self.assertEqual(result.stdout.count("[REDACTED]"), 2)
+
     def test_deployment_probe_has_its_required_scopes(self) -> None:
         required_scopes = [
             "agents:read",
@@ -76,6 +90,7 @@ class UatIngressContractTest(TestCase):
         self.assertIn('"127.0.0.1:9081:9081"', compose)
         self.assertIn("postgres:", compose)
         self.assertIn("neo4j:", compose)
+        self.assertIn("minio:", compose)
         neo4j_service = compose.split("  neo4j:", 1)[1].split("  agentos:", 1)[0]
         self.assertNotIn("\n      NEO4J_PASSWORD:", neo4j_service)
         self.assertIn("$${NEO4J_AUTH#*/}", neo4j_service)
@@ -84,7 +99,8 @@ class UatIngressContractTest(TestCase):
         self.assertIn("published: ${POSTGRES_LAN_PORT:?POSTGRES_LAN_PORT is required}", compose)
         self.assertIn("published: ${NEO4J_HTTP_LAN_PORT:?NEO4J_HTTP_LAN_PORT is required}", compose)
         self.assertIn("published: ${NEO4J_BOLT_LAN_PORT:?NEO4J_BOLT_LAN_PORT is required}", compose)
-        self.assertEqual(compose.count("host_ip: ${UAT_LAN_BIND_ADDRESS:?UAT_LAN_BIND_ADDRESS is required}"), 3)
+        self.assertEqual(compose.count("host_ip: ${UAT_LAN_BIND_ADDRESS:?UAT_LAN_BIND_ADDRESS is required}"), 4)
+        self.assertIn("host_ip: 127.0.0.1", compose)
         self.assertIn(
             "AGENTOS_EXTERNAL_URL=https://tideai.tripwise.cn/agentos",
             example_env,
@@ -94,15 +110,22 @@ class UatIngressContractTest(TestCase):
         self.assertIn("is_private", preflight)
         self.assertNotIn("--insecure", preflight)
         self.assertNotIn("--insecure", deploy)
-        self.assertNotIn("MINIO_", compose)
-        self.assertNotIn("MINIO_", preflight)
-        self.assertNotIn("MINIO_", workflow)
+        self.assertIn("MINIO_ENDPOINT: http://minio:9000", compose)
+        self.assertIn("MINIO_ACCESS_KEY", compose)
+        self.assertIn("RAW_EVIDENCE_PUBLIC_BASE_URL", compose)
+        self.assertIn("MINIO_IMAGE", preflight)
+        self.assertIn("raw-evidence-public-url", preflight)
+        self.assertIn("MINIO_IMAGE", workflow)
+        self.assertIn("MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}", workflow)
+        self.assertIn("RAW_EVIDENCE_PUBLIC_BASE_URL: ${{ vars.RAW_EVIDENCE_PUBLIC_BASE_URL }}", workflow)
         self.assertNotIn("RDS_HOST", workflow)
         self.assertIn("DATA_SERVICE_BASE_URL: ${{ vars.DATA_SERVICE_BASE_URL }}", workflow)
         self.assertIn("UAT_LAN_BIND_ADDRESS: ${{ vars.UAT_LAN_BIND_ADDRESS }}", workflow)
         self.assertIn("POSTGRES_LAN_PORT: ${{ vars.POSTGRES_LAN_PORT }}", workflow)
         self.assertIn("NEO4J_HTTP_LAN_PORT: ${{ vars.NEO4J_HTTP_LAN_PORT }}", workflow)
         self.assertIn("NEO4J_BOLT_LAN_PORT: ${{ vars.NEO4J_BOLT_LAN_PORT }}", workflow)
+        self.assertIn("MINIO_LAN_PORT: ${{ vars.MINIO_LAN_PORT }}", workflow)
+        self.assertIn("MINIO_CONSOLE_PORT: ${{ vars.MINIO_CONSOLE_PORT }}", workflow)
         self.assertIn("UAT_LAN_BIND_ADDRESS=192.168.0.53", example_env)
         self.assertIn("POSTGRES_LAN_PORT=15432", example_env)
         self.assertIn(
@@ -171,9 +194,11 @@ class UatIngressContractTest(TestCase):
         self.assertNotIn("SWR_", preflight)
         self.assertIn("AGENTOS_IMAGE must be a local image ID", preflight)
         self.assertIn("AGENTOS_IMAGE does not match RELEASE_SHA", preflight)
-        self.assertIn("up -d --wait --wait-timeout 240 postgres neo4j", deploy_dependencies)
+        self.assertIn("up -d --wait --wait-timeout 240 postgres neo4j minio", deploy_dependencies)
         self.assertIn("pg_control_system()", deploy_dependencies)
         self.assertIn("SHOW DATABASES YIELD name, databaseID", deploy_dependencies)
+        self.assertIn("verify_raw_evidence_storage", deploy_dependencies)
+        self.assertIn("tidewise-agentos-uat-minio-data /data", deploy_dependencies)
         self.assertIn("verify-dependency-ports.py", deploy_dependencies)
         self.assertIn("verify-dependency-ports.py", deploy)
         self.assertTrue(port_verifier.stat().st_mode & 0o111)
@@ -181,9 +206,14 @@ class UatIngressContractTest(TestCase):
         self.assertIn("AgentOS was started", deploy_dependencies)
         self.assertNotIn("down -v", deploy_dependencies)
         self.assertIn("pg_dump", deploy)
+        self.assertIn(
+            'verify_release "$current_runtime" "$current_images" "$current_compose" "$(cat "$current_sha")" false',
+            deploy,
+        )
         self.assertIn("linux/arm64", workflow)
         self.assertIn("tidewise-agentos-uat-dgx", workflow)
         self.assertIn("postgres:17.11-bookworm@sha256:", workflow)
+        self.assertIn("minio/minio:RELEASE.2025-07-23T15-54-02Z@sha256:", workflow)
         self.assertNotIn("postgres:16@sha256:", workflow)
         self.assertFalse((REPOSITORY_ROOT / ".github/workflows/migrate-uat-state.yml").exists())
         self.assertFalse((REPOSITORY_ROOT / "infra/uat/deploy-bundle.Dockerfile").exists())

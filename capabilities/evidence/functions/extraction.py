@@ -433,7 +433,7 @@ def curate_evidence(step_input: StepInput, run_context: RunContext) -> StepOutpu
         quoted_source_id=quoted_id,
         quoted_source_name=quoted_name,
         title=prepared.title,
-        raw_text=prepared.raw_text,
+        raw_text=prepared.document_url_path,
         published_at=prepared.published_at,
         collected_at=prepared.collected_at,
         category_ids=[category.id],

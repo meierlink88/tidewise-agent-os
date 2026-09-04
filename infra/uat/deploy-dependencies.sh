@@ -28,11 +28,16 @@ neo4j_identity() {
     | tail -n 1 | tr -d '"\r'
 }
 
+storage_check() {
+  "${compose[@]}" run --rm --no-deps agentos \
+    python -m scripts.verify_raw_evidence_storage "$1" --identity "$release_sha"
+}
+
 "${compose[@]}" config --quiet
 [ -z "$("${compose[@]}" ps -q agentos)" ] \
   || { echo "FAIL dependencies-only: AgentOS is already running" >&2; exit 1; }
 
-"${compose[@]}" up -d --wait --wait-timeout 240 postgres neo4j
+"${compose[@]}" up -d --wait --wait-timeout 240 postgres neo4j minio
 
 postgres_version="$("${compose[@]}" exec -T postgres \
   psql --tuples-only --no-align --username agent_os_uat_runtime --dbname agent_os_uat \
@@ -44,12 +49,16 @@ postgres_before="$(postgres_identity)"
 neo4j_before="$(neo4j_identity)"
 [ -n "$postgres_before" ] || { echo "FAIL postgres-persistence-identity: missing" >&2; exit 1; }
 [ -n "$neo4j_before" ] || { echo "FAIL neo4j-persistence-identity: missing" >&2; exit 1; }
+storage_check initialize
+storage_check write-marker
 
 postgres_container="$("${compose[@]}" ps -q postgres)"
 neo4j_container="$("${compose[@]}" ps -q neo4j)"
+minio_container="$("${compose[@]}" ps -q minio)"
 python3 "$(dirname "$0")/verify-dependency-ports.py" \
-  "$postgres_container" "$neo4j_container" "$UAT_LAN_BIND_ADDRESS" \
-  "$POSTGRES_LAN_PORT" "$NEO4J_HTTP_LAN_PORT" "$NEO4J_BOLT_LAN_PORT"
+  "$postgres_container" "$neo4j_container" "$minio_container" "$UAT_LAN_BIND_ADDRESS" \
+  "$POSTGRES_LAN_PORT" "$NEO4J_HTTP_LAN_PORT" "$NEO4J_BOLT_LAN_PORT" \
+  "$MINIO_LAN_PORT" "$MINIO_CONSOLE_PORT"
 
 docker inspect --format '{{range .Mounts}}{{println .Name .Destination}}{{end}}' "$postgres_container" \
   | grep -Fqx 'tidewise-agentos-uat-postgres-data /var/lib/postgresql/data'
@@ -57,20 +66,26 @@ docker inspect --format '{{range .Mounts}}{{println .Name .Destination}}{{end}}'
   | grep -Fqx 'tidewise-agentos-uat-neo4j-data /data'
 docker inspect --format '{{range .Mounts}}{{println .Name .Destination}}{{end}}' "$neo4j_container" \
   | grep -Fqx 'tidewise-agentos-uat-neo4j-logs /logs'
+docker inspect --format '{{range .Mounts}}{{println .Name .Destination}}{{end}}' "$minio_container" \
+  | grep -Fqx 'tidewise-agentos-uat-minio-data /data'
 
-"${compose[@]}" restart postgres neo4j
-"${compose[@]}" up -d --wait --wait-timeout 240 postgres neo4j
+"${compose[@]}" restart postgres neo4j minio
+"${compose[@]}" up -d --wait --wait-timeout 240 postgres neo4j minio
 
 postgres_container="$("${compose[@]}" ps -q postgres)"
 neo4j_container="$("${compose[@]}" ps -q neo4j)"
+minio_container="$("${compose[@]}" ps -q minio)"
 python3 "$(dirname "$0")/verify-dependency-ports.py" \
-  "$postgres_container" "$neo4j_container" "$UAT_LAN_BIND_ADDRESS" \
-  "$POSTGRES_LAN_PORT" "$NEO4J_HTTP_LAN_PORT" "$NEO4J_BOLT_LAN_PORT"
+  "$postgres_container" "$neo4j_container" "$minio_container" "$UAT_LAN_BIND_ADDRESS" \
+  "$POSTGRES_LAN_PORT" "$NEO4J_HTTP_LAN_PORT" "$NEO4J_BOLT_LAN_PORT" \
+  "$MINIO_LAN_PORT" "$MINIO_CONSOLE_PORT"
 
 [ "$(postgres_identity)" = "$postgres_before" ] \
   || { echo "FAIL postgres-restart-persistence: identity changed" >&2; exit 1; }
 [ "$(neo4j_identity)" = "$neo4j_before" ] \
   || { echo "FAIL neo4j-restart-persistence: identity changed" >&2; exit 1; }
+storage_check verify-marker
+storage_check smoke
 [ -z "$("${compose[@]}" ps -q agentos)" ] \
   || { echo "FAIL dependencies-only: AgentOS was started" >&2; exit 1; }
 
@@ -80,4 +95,4 @@ printf '%s\n' "$release_sha" > "$state_dir/dependencies.sha"
 chmod 0640 "$state_dir/dependencies.sha"
 sync "$state_dir/dependencies.images.env" "$state_dir/dependencies.compose.yaml" "$state_dir/dependencies.sha"
 
-echo "PASS fresh-dgx-postgres-neo4j-dependencies ${release_sha}"
+echo "PASS fresh-dgx-postgres-neo4j-minio-dependencies ${release_sha}"

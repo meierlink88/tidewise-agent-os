@@ -2,7 +2,7 @@
 
 ## Deployment boundary
 
-DGX Spark is the AgentOS UAT host. It runs three isolated Compose services:
+DGX Spark is the AgentOS UAT host. It runs four isolated Compose services:
 
 ```text
 public HTTPS /agentos
@@ -11,14 +11,16 @@ public HTTPS /agentos
 DGX Spark (Linux ARM64)
 ├── AgentOS         127.0.0.1:9081 only
 ├── PostgreSQL 17   192.168.0.53:15432 (protected LAN)
-└── Neo4j 5.26      192.168.0.53:7474/7687 (protected LAN)
+├── Neo4j 5.26      192.168.0.53:7474/7687 (protected LAN)
+└── MinIO           192.168.0.53:9000 API; 127.0.0.1:9001 console
         |
         +---- HTTPS + service token ----> Huawei Cloud public Data Service API
 ```
 
 AgentOS never joins the Data Service Docker network and never receives Data Service PostgreSQL, MinIO, or other
-infrastructure credentials. Raw Evidence content is submitted in the versioned Data Service API request; Data Service
-owns its persistence. PostgreSQL and Neo4j on DGX are dedicated AgentOS dependencies and use explicit named volumes.
+infrastructure credentials. Full Raw Evidence Markdown is stored in AgentOS-owned MinIO; Data Service receives only
+the stable `/{bucket}/{object_key}` path through its existing API. PostgreSQL, Neo4j and MinIO on DGX are dedicated
+AgentOS dependencies and use explicit named volumes.
 
 The current Compose binds AgentOS only to `127.0.0.1:9081`. Before cutover, provision a reviewed TLS route or tunnel
 from the public `AGENTOS_EXTERNAL_URL` to that loopback listener. A release is accepted only when public `/health`
@@ -27,16 +29,17 @@ returns the candidate commit in `X-Tidewise-Release`; this prevents a successful
 ## Security and persistence
 
 - AgentOS runs as UID/GID `10002:10002`, read-only root filesystem, no Linux capabilities, and no new privileges.
-- PostgreSQL and Neo4j publish only to the configured private DGX LAN address for user-approved administration;
+- PostgreSQL, Neo4j and the MinIO object API publish only to the configured private DGX LAN address;
   they must never bind `0.0.0.0` or a public address. PostgreSQL keeps SCRAM-SHA-256 host authentication and Neo4j
-  keeps password authentication. AgentOS continues to use both services over `tidewise-agentos-uat-private`.
+  keeps password authentication. MinIO write and administration require credentials, its console remains loopback-only,
+  and only object GETs in the Raw Evidence bucket are anonymous. AgentOS uses all dependencies over the private network.
 - The Data Service base URL must be public HTTPS. Preflight rejects loopback/private DNS results and verifies an
   authenticated, complete Source Snapshot through the candidate image.
 - AgentOS is built on DGX from the validated `main` commit and Compose receives its immutable local image ID.
-  PostgreSQL and Neo4j remain pinned by registry digest. All three images must resolve to `linux/arm64` on DGX.
-- PostgreSQL, Neo4j data, and Neo4j logs use `tidewise-agentos-uat-*` named volumes. Never run `docker compose down -v`.
+  PostgreSQL, Neo4j and MinIO remain pinned by registry digest. All four images must resolve to `linux/arm64` on DGX.
+- PostgreSQL, Neo4j data/logs and MinIO data use `tidewise-agentos-uat-*` named volumes. Never run `docker compose down -v`.
 - Before an upgrade of an existing DGX release, deployment writes a compressed PostgreSQL dump under
-  `/opt/tidewise/agentos-uat/backups`. Back up the three named volumes to independent storage before host maintenance.
+  `/opt/tidewise/agentos-uat/backups`. Back up the four named volumes to independent storage before host maintenance.
 - Runtime secrets live in the GitHub `uat` Environment and a mode `0600` temporary env file; they are not in images.
 
 ## One-time DGX bootstrap
@@ -66,16 +69,19 @@ Variables:
 - `DATA_SERVICE_BASE_URL` — Huawei Cloud public API base, normally `https://tideai.tripwise.cn`
 - `UAT_LAN_BIND_ADDRESS` — DGX protected-LAN address, currently `192.168.0.53`
 - `POSTGRES_LAN_PORT`, `NEO4J_HTTP_LAN_PORT`, `NEO4J_BOLT_LAN_PORT` — currently `15432`, `7474`, `7687`
+- `MINIO_LAN_PORT`, `MINIO_CONSOLE_PORT` — currently `9000`, `9001`
+- `RAW_EVIDENCE_BUCKET`, `RAW_EVIDENCE_PUBLIC_BASE_URL` — currently `raw-evidence`, `http://192.168.0.53:9000`
 - `GRAPHITI_EMBEDDING_BASE_URL`, `GRAPHITI_EMBEDDING_MODEL`, `GRAPHITI_EMBEDDING_DIM`
 - `EVENT_EXTRACTION_BATCH_SIZE` and `CONTROL_PLANE_JWT_VERIFICATION_KEY`
 
 Secrets:
 
 - `AGENTOS_DB_PASSWORD`, `NEO4J_PASSWORD`, `DEEPSEEK_API_KEY`, `DATA_SERVICE_TOKEN`
+- `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` — AgentOS-owned object-storage credentials
 - `GRAPHITI_EMBEDDING_API_KEY`, `JWT_JWKS_BASE64`
 - optional `MCP_CONNECT_SECRET`, `AGENTOS_MCP_SIGNING_KEY`
 
-No Data Service database or object-storage variable/secret belongs in this environment.
+No Data Service database or Data Service-owned object-storage variable/secret belongs in this environment.
 
 ## Fresh initialization and cutover
 
@@ -84,12 +90,13 @@ means promoting the Git-tracked Agent, Workflow, capability, manifest, and Sched
 reviewed and merged into `main`; it never copies a developer database, `.env`, secrets, or ignored local Artifacts.
 
 1. Merge the development change into `main` and wait for that exact commit's **Validate** run to succeed.
-2. Dispatch **Deploy UAT** from `main` with `dependencies_only=true`. This starts and verifies only fresh PostgreSQL
-   and AgentOS-exclusive Neo4j, proves named-volume persistence across restart, and proves the exact protected-LAN
-   bindings for both services. AgentOS remains stopped.
+2. Dispatch **Deploy UAT** from `main` with `dependencies_only=true`. This starts and verifies only fresh PostgreSQL,
+   AgentOS-exclusive Neo4j and AgentOS-owned MinIO, proves named-volume persistence across restart, and proves the
+   exact protected-LAN/loopback bindings. AgentOS remains stopped.
 3. Dispatch the same validated commit with `dependencies_only=false` and `stage_only=true`. This deploys AgentOS,
    applies the additive Agno migration to the fresh database, seeds code-defined default Schedules, and proves internal
-   health, auth, components, workflows, MCP, public Data API access, Graphiti, restart recovery, and image identity.
+   health, auth, components, workflows, MCP, public Data API access, MinIO object publication/readback, Graphiti,
+   restart recovery, and image identity.
    The smoke check keeps workflow execution on a least-privilege temporary service account and uses a separate
    five-minute administrator probe only to verify the unowned system Schedules through the authenticated API;
    both accounts are deleted even when verification fails.
@@ -99,7 +106,7 @@ reviewed and merged into `main`; it never copies a developer database, `.env`, s
 
 Run **Deploy UAT** manually from `main`. It accepts only a commit already validated on `main`, builds ARM64 images on
 DGX without pushing to or pulling from an AgentOS registry, resolves the result to a local Docker image ID, starts
-dedicated PostgreSQL and Neo4j, applies the additive Agno migration, and seeds default schedules only for the first DGX
+dedicated PostgreSQL, Neo4j and MinIO, applies the additive Agno migration, and seeds default schedules only for the first DGX
 release. The deployment scripts come directly from the same checked-out release commit; there is no deployment-bundle
 image. On candidate failure, it restores the prior AgentOS image/config; database state is not automatically rolled
 back. Local release images must be retained for rollback. The last two release snapshots remain under the deployment
