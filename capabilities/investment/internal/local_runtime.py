@@ -43,6 +43,11 @@ from capabilities.investment.internal.models import (
     TransmissionSemanticReview,
 )
 from capabilities.investment.internal.report_contract import InvestmentReportArtifact
+from capabilities.investment.internal.report_publication import (
+    ReportPublicationReceipt,
+    ReportPublicationRequest,
+    ReportPublisher,
+)
 from capabilities.investment.internal.reporting import apply_report_narratives, extract_report_narratives
 from sematica.graphiti.investment import GraphitiInvestmentReader
 from sematica.graphiti.runtime import create_agentos_graphiti
@@ -194,12 +199,14 @@ class LocalInvestmentWorkflowRuntime:
         reasoner: Agent,
         reviewer: Agent,
         report_writer: Agent | None = None,
+        report_publisher: ReportPublisher | None = None,
     ) -> None:
         self._graphiti = graphiti
         self._provider = InvestmentContextBuilder(GraphitiInvestmentReader(graphiti))
         self._reasoner = reasoner
         self._report_writer = report_writer or reasoner
         self._reviewer = reviewer
+        self._report_publisher = report_publisher
         self._slots = asyncio.Semaphore(3)
 
     async def prepare(self, request: InvestmentAnalysisRequest) -> InvestmentAnalysisContext:
@@ -1117,13 +1124,25 @@ class LocalInvestmentWorkflowRuntime:
     async def close(self) -> None:
         await self._graphiti.close()
 
+    async def publish_report(self, request: ReportPublicationRequest) -> ReportPublicationReceipt:
+        if self._report_publisher is None:
+            raise RuntimeError("Investment Report publisher is not configured")
+        return await self._report_publisher.publish(request)
+
 
 def create_local_investment_workflow_runtime(
     model: Any,
     reasoner: Agent,
     report_writer: Agent,
     reviewer: Agent,
+    report_publisher: ReportPublisher,
 ) -> LocalInvestmentWorkflowRuntime:
     """Compose one app-owned Graphiti client with the published Agent components."""
 
-    return LocalInvestmentWorkflowRuntime(create_agentos_graphiti(model), reasoner, reviewer, report_writer)
+    return LocalInvestmentWorkflowRuntime(
+        create_agentos_graphiti(model),
+        reasoner,
+        reviewer,
+        report_writer,
+        report_publisher,
+    )

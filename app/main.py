@@ -27,6 +27,7 @@ from app.schedules import validate_schedules
 from capabilities.event import configure_event_workflow_runtime, create_local_event_workflow_runtime
 from capabilities.investment import (
     configure_investment_workflow_runtime,
+    create_data_service_report_publisher,
     create_local_investment_workflow_runtime,
 )
 from db import get_postgres_db
@@ -117,11 +118,16 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     try:
         event_runtime = create_local_event_workflow_runtime(model, registry)
         configure_event_workflow_runtime(event_runtime)
+        report_publisher = create_data_service_report_publisher(
+            base_url=getenv("DATA_SERVICE_BASE_URL", "http://data:9011"),
+            service_token=getenv("DATA_SERVICE_TOKEN", ""),
+        )
         investment_runtime = create_local_investment_workflow_runtime(
             model,
             load_investment_reasoner_agent(registry),
             load_investment_report_writer_agent(registry),
             load_investment_reviewer_agent(registry),
+            report_publisher,
         )
         configure_investment_workflow_runtime(investment_runtime)
         # Schedule rows are runtime configuration owned by PostgreSQL/Control Panel.
