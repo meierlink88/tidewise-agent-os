@@ -16,7 +16,7 @@ from capabilities.evidence.functions import (
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTION_WORKFLOW_ID = "evidence-extraction"
-EVIDENCE_EXTRACTION_CONTRACT_VERSION = 12
+EVIDENCE_EXTRACTION_CONTRACT_VERSION = 13
 EVIDENCE_EXTRACTION_BATCH_LIMIT = 20
 
 
