@@ -16,6 +16,7 @@ from agno.workflow import StepInput, StepOutput
 from pydantic import ValidationError
 
 from capabilities.evidence.internal.artifacts import (
+    PublishedEvidenceArtifact,
     load_published_evidence_artifact,
     persist_evidence_identity_bindings,
 )
@@ -133,11 +134,17 @@ def _evidence_run_state(run_context: RunContext) -> dict[str, Any]:
 
 
 async def prepare_evidence(step_input: StepInput, run_context: RunContext) -> StepOutput:
-    """Select one pending Raw document and build the identity-free Agent request."""
+    """Select one unpublished Raw content identity and build the Agent request."""
     del step_input
-    prepared, checkpoint = read_next_raw_document(read_checkpoint())
-    if prepared is None:
-        return StepOutput(content=EvidenceExtractionIdle(checkpoint=checkpoint), stop=True)
+    while True:
+        prepared, checkpoint = read_next_raw_document(read_checkpoint())
+        if prepared is None:
+            return StepOutput(content=EvidenceExtractionIdle(checkpoint=checkpoint), stop=True)
+        published = _load_final_artifact(prepared.publication_key)
+        if published is None:
+            break
+        _record_completed_duplicate(prepared, published)
+        advance_checkpoint(prepared)
     run_state = _evidence_run_state(run_context)
     snapshot = run_state.get(_CATEGORY_CATALOG_DEPENDENCY)
     if snapshot is None:
@@ -181,6 +188,53 @@ def _source_reference_id(identity: str) -> str:
 
 def _publication_artifact_id(publication_key: str) -> str:
     return hashlib.sha256(publication_key.encode("utf-8")).hexdigest()
+
+
+def _load_final_artifact(publication_key: str) -> PublishedEvidenceArtifact | None:
+    artifact_id = _publication_artifact_id(publication_key)
+    path = evidence_artifact_root() / "documents" / artifact_id / "manifest.json"
+    if not path.exists():
+        return None
+    artifact = load_published_evidence_artifact(path)
+    if (
+        artifact.manifest.get("schema") != "evidence_extraction_manifest.v5"
+        or artifact.manifest.get("artifacts") != {"prepared": "prepared.json", "bindings": "bindings.json"}
+        or artifact.prepared.raw_evidence.publication_key != publication_key
+    ):
+        raise ValueError("published Evidence Artifact identity conflict")
+    return artifact
+
+
+def _record_completed_duplicate(prepared: PreparedRawDocument, published: PublishedEvidenceArtifact) -> Path:
+    identity = "\0".join(
+        (
+            prepared.manifest_path,
+            str(prepared.document_index),
+            prepared.document_sha256,
+            prepared.publication_key,
+        )
+    )
+    audit_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    path = evidence_artifact_root() / "duplicates" / f"{audit_id}.json"
+    payload = {
+        "schema": "evidence_extraction_duplicate.v1",
+        "reason": "ALREADY_EXTRACTED",
+        "publication_key": prepared.publication_key,
+        "duplicate_collection_id": prepared.collection_id,
+        "duplicate_manifest_path": prepared.manifest_path,
+        "duplicate_document_index": prepared.document_index,
+        "duplicate_document_path": prepared.document_path,
+        "duplicate_document_sha256": prepared.document_sha256,
+        "published_artifact_manifest_path": str(published.manifest_path.relative_to(evidence_artifact_root())),
+        "published_raw_evidence_id": published.identities.raw_evidence_id,
+        "published_evidence_ids": published.identities.ids,
+    }
+    if path.exists():
+        if json.loads(path.read_text(encoding="utf-8")) != payload:
+            raise ValueError("Evidence duplicate audit identity conflict")
+    else:
+        write_json(path, payload)
+    return path
 
 
 def _category_catalog_sha256(catalog: EvidenceCategoryCatalog) -> str:
@@ -449,27 +503,15 @@ def curate_evidence(step_input: StepInput, run_context: RunContext) -> StepOutpu
 
 
 def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -> EvidencePublicationResult | None:
-    if not path.exists():
+    artifact = _load_final_artifact(publication.raw_evidence.publication_key)
+    if artifact is None:
         return None
-    try:
-        artifact = load_published_evidence_artifact(path)
-    except ValueError as exc:
-        raise ValueError("published Evidence Artifact is invalid") from exc
-    manifest = artifact.manifest
     frozen = artifact.prepared
     if (
         frozen.prepared_raw != publication.prepared_raw
         or frozen.raw_evidence.publication_key != publication.raw_evidence.publication_key
     ):
         raise ValueError("published Evidence Artifact source identity conflict")
-    schema = manifest.get("schema")
-    if schema != "evidence_extraction_manifest.v5":
-        raise ValueError("published Evidence Artifact identity conflict")
-    if (
-        manifest.get("artifacts") != {"prepared": "prepared.json", "bindings": "bindings.json"}
-        or artifact.bindings is None
-    ):
-        raise ValueError("published Evidence Artifact identity conflict")
     _enqueue_for_event(path, artifact.identities.ids)
     checkpoint = advance_checkpoint(frozen.prepared_raw)
     return EvidencePublicationResult(

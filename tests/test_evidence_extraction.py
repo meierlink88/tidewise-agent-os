@@ -138,28 +138,38 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             dependencies=dependencies,
         )
 
-    def _publish_raw_fixture(self) -> None:
+    def _publish_raw_fixture(
+        self,
+        *,
+        collection_id: str = "collection-evidence",
+        collected_at: datetime | None = None,
+        candidate_id: str = "candidate-evidence",
+        title: str = "示例公司签署服务器订单",
+        url: str = "https://example.test/evidence-source",
+        content: str = "示例公司公告签署10亿元服务器订单，合同期限为三年。",
+    ) -> None:
         now = datetime(2026, 8, 11, 8, 0, tzinfo=UTC)
+        collected = collected_at or now + timedelta(minutes=1)
         candidate = Candidate(
-            candidate_id="candidate-evidence",
+            candidate_id=candidate_id,
             connector="cls_telegraph",
             query="AI服务器订单",
-            title="示例公司签署服务器订单",
-            url="https://example.test/evidence-source",
-            content="示例公司公告签署10亿元服务器订单，合同期限为三年。",
+            title=title,
+            url=url,
+            content=content,
             source_name="财联社",
             source_level=SourceLevel.L2_WIRE,
             published_at=now,
-            collected_at=now + timedelta(minutes=1),
+            collected_at=collected,
         )
         write_tool_batch(
-            collection_id="collection-evidence",
+            collection_id=collection_id,
             connector="cls_telegraph",
             query="AI服务器订单",
             candidates=[candidate],
         )
         write_title_curation(
-            "collection-evidence",
+            collection_id,
             TitleCurationDraft(
                 decisions=[
                     TitleCurationDecision(
@@ -170,9 +180,9 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             ),
         )
         prepared = build_artifact_set(
-            "collection-evidence",
+            collection_id,
             CollectionRequest(objective="采集最近2小时服务器订单"),
-            completed_at=now + timedelta(minutes=2),
+            completed_at=collected + timedelta(minutes=1),
         )
         publish_artifact_set(prepared, document_store=AcceptingRawDocumentStore())
 
@@ -350,6 +360,24 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(output.stop)
         self.assertIsInstance(output.content, EvidenceExtractionIdle)
         mocked.assert_not_called()
+
+    async def test_prepare_fails_closed_on_corrupt_completed_identity_before_catalog(self) -> None:
+        self._publish_raw_fixture()
+        prepared = self._prepared()
+        artifact_id = hashlib.sha256(prepared.publication_key.encode("utf-8")).hexdigest()
+        manifest = evidence_artifact_root() / "documents" / artifact_id / "manifest.json"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text("not-json", encoding="utf-8")
+        context = RunContext(run_id="run-corrupt-completion", session_id="session-corrupt-completion", dependencies={})
+
+        with (
+            patch("capabilities.evidence.functions.extraction.get_evidence_categories") as catalog_call,
+            self.assertRaisesRegex(ValueError, "published Evidence Artifact is invalid"),
+        ):
+            await prepare_evidence(StepInput(), context)
+
+        catalog_call.assert_not_called()
+        self.assertFalse(checkpoint_path().exists())
 
     def test_unknown_category_code_is_skipped_before_publication_is_prepared(self) -> None:
         self._publish_raw_fixture()
@@ -1331,6 +1359,127 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
                 ):
                     await publish_evidence(step_input)
                 self.assertEqual(read_checkpoint().manifest_offset, 0)
+
+    async def test_complete_workflow_skips_completed_content_identity_before_agent_and_publication(self) -> None:
+        self._publish_raw_fixture()
+        original = self._prepared()
+        publication = self._validated(original)
+        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        with patch(
+            "capabilities.evidence.functions.extraction.post_publication",
+            side_effect=[
+                {"id": raw_evidence_id},
+                {
+                    "raw_evidence_id": raw_evidence_id,
+                    "ids": [evidence_id],
+                    "items": [{"input_index": 0, "id": evidence_id}],
+                },
+            ],
+        ):
+            await publish_evidence(StepInput(previous_step_content=publication))
+
+        shutil.rmtree(os.environ["COLLECTOR_ARTIFACT_ROOT"])
+        checkpoint_path().unlink()
+        self._publish_raw_fixture(
+            collection_id="collection-repeat",
+            collected_at=original.collected_at + timedelta(days=1),
+        )
+        repeated = self._prepared()
+        self.assertEqual(repeated.publication_key, original.publication_key)
+        self.assertNotEqual(repeated.document_path, original.document_path)
+        self.assertNotEqual(repeated.collected_at, original.collected_at)
+
+        agent = build_evidence_extractor_agent()
+        agent.db = None
+        workflow = _seed_workflow(agent)
+        workflow.db = None
+        controlled_agent = AsyncMock(
+            return_value=RunOutput(
+                agent_id="evidence-extractor",
+                content=self._draft(),
+                content_type="EvidenceExtractionDraft",
+            )
+        )
+        with (
+            patch.object(agent, "arun", new=controlled_agent),
+            patch(
+                "capabilities.evidence.functions.extraction.get_evidence_categories",
+                return_value=self._catalog_result(),
+            ) as catalog_call,
+            patch("capabilities.evidence.functions.extraction.post_publication") as publication_call,
+        ):
+            response = await workflow.arun(
+                input="处理所有尚未提取的 Raw Document",
+                run_id="run-completed-identity-dedup",
+                session_id="session-completed-identity-dedup",
+            )  # type: ignore[misc]
+
+        self.assertEqual(response.status, RunStatus.completed)
+        controlled_agent.assert_not_called()
+        catalog_call.assert_not_called()
+        publication_call.assert_not_called()
+        self.assertGreater(read_checkpoint().manifest_offset, 0)
+        duplicate_audits = list((evidence_artifact_root() / "duplicates").glob("*.json"))
+        self.assertEqual(len(duplicate_audits), 1)
+        audit = json.loads(duplicate_audits[0].read_text(encoding="utf-8"))
+        self.assertEqual(audit["schema"], "evidence_extraction_duplicate.v1")
+        self.assertEqual(audit["reason"], "ALREADY_EXTRACTED")
+        self.assertEqual(audit["publication_key"], original.publication_key)
+        self.assertEqual(audit["duplicate_document_sha256"], repeated.document_sha256)
+        self.assertEqual(audit["published_raw_evidence_id"], raw_evidence_id)
+        self.assertEqual(audit["published_evidence_ids"], [evidence_id])
+
+    async def test_prepare_skips_completed_duplicate_and_returns_the_next_new_document(self) -> None:
+        self._publish_raw_fixture()
+        original = self._prepared()
+        publication = self._validated(original)
+        raw_evidence_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        with patch(
+            "capabilities.evidence.functions.extraction.post_publication",
+            side_effect=[
+                {"id": raw_evidence_id},
+                {
+                    "raw_evidence_id": raw_evidence_id,
+                    "ids": [evidence_id],
+                    "items": [{"input_index": 0, "id": evidence_id}],
+                },
+            ],
+        ):
+            await publish_evidence(StepInput(previous_step_content=publication))
+
+        shutil.rmtree(os.environ["COLLECTOR_ARTIFACT_ROOT"])
+        checkpoint_path().unlink()
+        self._publish_raw_fixture(
+            collection_id="collection-repeat",
+            collected_at=original.collected_at + timedelta(days=1),
+        )
+        self._publish_raw_fixture(
+            collection_id="collection-new",
+            collected_at=original.collected_at + timedelta(days=1, minutes=1),
+            candidate_id="candidate-new",
+            title="新公司扩建算力中心",
+            url="https://example.test/new-evidence-source",
+            content="新公司宣布扩建算力中心，预计下月开工。",
+        )
+        context = RunContext(
+            run_id="run-skip-then-new",
+            session_id="session-skip-then-new",
+            dependencies={},
+        )
+        with patch(
+            "capabilities.evidence.functions.extraction.get_evidence_categories",
+            return_value=self._catalog_result(),
+        ) as catalog_call:
+            output = await prepare_evidence(StepInput(), context)
+
+        request = EvidenceAnalysisRequest.model_validate(output.content)
+        self.assertEqual(request.document.source_url, "https://example.test/new-evidence-source")
+        self.assertNotEqual(request.document.publication_key, original.publication_key)
+        self.assertEqual(catalog_call.call_count, 1)
+        self.assertEqual(read_checkpoint().manifest_offset, request.document.manifest_offset)
+        self.assertEqual(len(list((evidence_artifact_root() / "duplicates").glob("*.json"))), 1)
 
     async def test_complete_workflow_classifies_extracts_publishes_and_checkpoints(self) -> None:
         self._publish_raw_fixture()
