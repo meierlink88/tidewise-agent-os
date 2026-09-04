@@ -84,6 +84,30 @@ def read_title_curation_if_present(collection_id: str) -> TitleCurationDraft | N
     return TitleCurationDraft.model_validate_json(path.read_text(encoding="utf-8"))
 
 
+def write_title_curation_omissions(collection_id: str, omissions: dict[str, int]) -> None:
+    """Persist bounded per-Candidate omission counts for partial filter responses."""
+    path = collection_staging_root(collection_id) / "curation" / "omission-counts.json"
+    _atomic_write_text(path, json.dumps(omissions, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+
+
+def read_title_curation_omissions(collection_id: str) -> dict[str, int]:
+    """Load and validate omission counts for one collection run."""
+    path = collection_staging_root(collection_id) / "curation" / "omission-counts.json"
+    if not path.is_file():
+        return {}
+    decoded = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(decoded, dict) or any(
+        not isinstance(candidate_id, str)
+        or not candidate_id
+        or not isinstance(count, int)
+        or isinstance(count, bool)
+        or count < 1
+        for candidate_id, count in decoded.items()
+    ):
+        raise ValueError("Raw Evidence filter omission state is invalid")
+    return decoded
+
+
 def write_json(path: Path, value: object) -> None:
     """Atomically persist JSON with stable human-readable formatting."""
     _atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n")

@@ -12,7 +12,8 @@ CollectionRequest
        -> persist complete Tool Batches
        -> expose bounded Candidate context
   -> filter-raw-evidence
-       -> Raw Evidence Filter returns one strict is_relevant decision per Candidate
+       -> Raw Evidence Filter returns bounded partial is_relevant decisions
+       -> persist valid decisions and requeue omissions into the next batch
   -> publish-raw-evidence
        -> validate exact Candidate coverage
        -> deduplicate and build immutable Raw Documents
@@ -62,7 +63,8 @@ the only owner of the persisted Markdown wrapper and frontmatter.
 ## Invariants
 
 - Every successful channel call writes one complete Tool Batch.
-- Every Candidate receives exactly one strict boolean relevance decision.
+- Every Candidate receives exactly one strict boolean relevance decision before publication. Valid decisions from a
+  partial model response are retained; omitted Candidate IDs are retried in later bounded batches.
 - Invalid URLs, irrelevant material and cross-run or in-run duplicates receive deterministic terminal dispositions.
 - No publication-time window participates in Candidate acceptance.
 - Manifest publication is last and downstream Evidence Extraction consumes the manifest index by byte offset.
@@ -75,9 +77,10 @@ the only owner of the persisted Markdown wrapper and frontmatter.
 - Invalid query or Source Snapshot failure aborts collection before publication.
 - One provider failure does not discard successful sibling channel results.
 - A group without enabled Sources returns `no_channels`; sibling groups still execute.
-- Missing or malformed filter coverage aborts publication.
+- Unknown or duplicate filter IDs abort immediately. An omitted ID is retried up to three model responses; a third
+  omission aborts with the exact exhausted IDs. Final publication still requires complete Candidate coverage.
 - Build or MinIO failure leaves the final manifest and manifest index unpublished.
-- All three Workflow Steps have no hidden retries and fail closed on deterministic contract errors.
+- All three Workflow Steps have no framework retries. The filter Loop owns its explicit, persisted omission retry.
 
 ## Acceptance seam
 
@@ -85,5 +88,6 @@ the only owner of the persisted Markdown wrapper and frontmatter.
 - No Collection Query Planner is registered or executed.
 - Bocha sends `freshness=oneDay`.
 - Latest provider results are not rejected by a local time-window check.
-- Filter input is bounded and filter output covers every Candidate exactly once.
+- Filter input is bounded; partial valid output advances progress without losing omitted Candidates, and publication
+  still covers every Candidate exactly once.
 - Artifact publication remains deterministic and idempotent.

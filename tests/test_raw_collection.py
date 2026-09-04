@@ -57,6 +57,20 @@ from workflows.raw_collection import (
 )
 
 
+class RecordingRawDocumentStore:
+    def __init__(self) -> None:
+        self.uploads: list[tuple[str, str, bytes, str]] = []
+
+    def publish_markdown(self, *, bucket: str, object_key: str, content: bytes, sha256: str) -> None:
+        self.uploads.append((bucket, object_key, content, sha256))
+
+
+class FailingRawDocumentStore:
+    def publish_markdown(self, *, bucket: str, object_key: str, content: bytes, sha256: str) -> None:
+        del bucket, object_key, content, sha256
+        raise RuntimeError("MinIO unavailable")
+
+
 class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -300,9 +314,15 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(prepared.candidate_counts["exact_duplicate"], 1)
         self.assertNotIn("out_of_window", prepared.candidate_counts)
 
+        with self.assertRaisesRegex(RuntimeError, "MinIO unavailable"):
+            publish_artifact_set(prepared, document_store=FailingRawDocumentStore())
+        self.assertFalse(manifest.exists())
+        self.assertFalse((root / "indexes/manifest-index.jsonl").exists())
+
+        document_store = RecordingRawDocumentStore()
         with patch.dict(os.environ, {"RAW_EVIDENCE_BUCKET": "changed-after-build"}):
-            result = publish_artifact_set(prepared)
-            repeated = publish_artifact_set(prepared)
+            result = publish_artifact_set(prepared, document_store=document_store)
+            repeated = publish_artifact_set(prepared, document_store=document_store)
         self.assertEqual(result.collection_id, repeated.collection_id)
         self.assertTrue(manifest.is_file())
         manifest_index = root / "indexes/manifest-index.jsonl"
@@ -313,6 +333,16 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(index_entries[0]["accepted_documents"], 1)
         document = root / prepared.accepted_documents[0].relative_path
         self.assertTrue(document.is_file())
+        self.assertEqual(
+            [(bucket, key) for bucket, key, _, _ in document_store.uploads],
+            [
+                (
+                    "raw-evidence",
+                    "documents/2026/08/10/42bb236684abe391ab33aa932ed2acb73fce00a378a3b250fba157d1e8995feb.md",
+                ),
+            ],
+        )
+        self.assertEqual(document_store.uploads[0][2], document.read_bytes())
         self.assertEqual(document.stem, prepared.accepted_documents[0].sha256)
         manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
         self.assertEqual(
@@ -496,7 +526,7 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
             CollectionRequest(objective="采集政策"),
             completed_at=now,
         )
-        publish_artifact_set(prepared)
+        publish_artifact_set(prepared, document_store=RecordingRawDocumentStore())
 
         self.assertEqual(prepared.candidate_counts["known_url"], 1)
         self.assertEqual(legacy.read_text(encoding="utf-8"), legacy_payload)
@@ -615,6 +645,94 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(request.candidates), 25)
         self.assertEqual(request.candidates[-1].content, candidates[24].content)
+
+    async def test_filter_batch_persists_valid_subset_and_requeues_omissions(self) -> None:
+        now = datetime(2026, 8, 13, 3, tzinfo=UTC)
+        candidates = [
+            Candidate(
+                candidate_id=f"candidate-{index}",
+                connector="rss",
+                query="政策",
+                title=f"政策{index}",
+                url=f"https://example.com/partial/{index}",
+                content=f"完整正文-{index}",
+                source_name="媒体",
+                published_at=now,
+                collected_at=now,
+            )
+            for index in range(3)
+        ]
+        write_tool_batch(
+            collection_id="run-partial-curation",
+            connector="rss",
+            query="政策",
+            candidates=candidates,
+        )
+        context = RunContext(run_id="run-partial-curation", session_id="session")
+        prepared = await prepare_raw_evidence_filter_batch(StepInput(input="采集政策"), context)
+        partial = TitleCurationDraft(
+            decisions=[
+                TitleCurationDecision(candidate_id="candidate-0", is_relevant=True),
+                TitleCurationDecision(candidate_id="candidate-2", is_relevant=False),
+            ]
+        )
+
+        progress = await save_raw_evidence_filter_batch(
+            StepInput(
+                input="采集政策",
+                previous_step_content=partial,
+                previous_step_outputs={"prepare-raw-evidence-filter-batch": prepared},
+            ),
+            context,
+        )
+
+        self.assertEqual(
+            RawEvidenceFilterProgress.model_validate(progress.content),
+            RawEvidenceFilterProgress(total_candidates=3, decided_candidates=2, remaining_candidates=1),
+        )
+        retry = await prepare_raw_evidence_filter_batch(StepInput(input="采集政策"), context)
+        retry_request = TitleCurationRequest.model_validate(retry.content)
+        self.assertEqual([item.candidate_id for item in retry_request.candidates], ["candidate-1"])
+
+    async def test_filter_batch_fails_after_three_no_progress_responses(self) -> None:
+        now = datetime(2026, 8, 13, 3, tzinfo=UTC)
+        write_tool_batch(
+            collection_id="run-no-progress",
+            connector="rss",
+            query="政策",
+            candidates=[
+                Candidate(
+                    candidate_id="candidate-stalled",
+                    connector="rss",
+                    query="政策",
+                    title="政策",
+                    url="https://example.com/stalled",
+                    content="完整正文",
+                    source_name="媒体",
+                    published_at=now,
+                    collected_at=now,
+                )
+            ],
+        )
+        context = RunContext(run_id="run-no-progress", session_id="session")
+        empty = TitleCurationDraft(decisions=[])
+
+        for attempt in range(3):
+            prepared = await prepare_raw_evidence_filter_batch(StepInput(input="采集政策"), context)
+            step_input = StepInput(
+                input="采集政策",
+                previous_step_content=empty,
+                previous_step_outputs={"prepare-raw-evidence-filter-batch": prepared},
+            )
+            if attempt < 2:
+                progress = await save_raw_evidence_filter_batch(step_input, context)
+                self.assertEqual(
+                    RawEvidenceFilterProgress.model_validate(progress.content).remaining_candidates,
+                    1,
+                )
+            else:
+                with self.assertRaisesRegex(ValueError, "repeatedly omitted Candidate IDs"):
+                    await save_raw_evidence_filter_batch(step_input, context)
 
     def test_filter_loop_end_condition_requires_zero_remaining_candidates(self) -> None:
         incomplete = StepOutput(

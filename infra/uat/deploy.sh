@@ -38,9 +38,14 @@ verify_release() {
   local images="$2"
   local compose_file="$3"
   local expected_sha="$4"
+  local verify_storage="${5:-true}"
   compose_for "$runtime" "$images" "$compose_file" exec -T agentos \
     curl -fsS http://127.0.0.1:9081/health >/dev/null
   compose_for "$runtime" "$images" "$compose_file" exec -T agentos python /app/scripts/smoke_uat.py
+  if [ "$verify_storage" = true ]; then
+    compose_for "$runtime" "$images" "$compose_file" exec -T agentos \
+      python -m scripts.verify_raw_evidence_storage smoke --identity "$expected_sha"
+  fi
   compose_for "$runtime" "$images" "$compose_file" exec -T agentos python -m sematica.graphiti.readiness
   if [ "$stage_only" = true ]; then
     echo "PASS staged-agentos-health-auth-components-schedules-mcp"
@@ -62,6 +67,23 @@ verify_release() {
   echo "PASS agentos-health-auth-components-schedules-mcp"
 }
 
+verify_candidate_storage_persistence() {
+  local runtime="$1"
+  local images="$2"
+  local compose_file="$3"
+  compose_for "$runtime" "$images" "$compose_file" run --rm --no-deps agentos \
+    python -m scripts.verify_raw_evidence_storage initialize
+  compose_for "$runtime" "$images" "$compose_file" run --rm --no-deps agentos \
+    python -m scripts.verify_raw_evidence_storage write-marker --identity "$release_sha"
+  compose_for "$runtime" "$images" "$compose_file" restart minio
+  compose_for "$runtime" "$images" "$compose_file" up -d --wait --wait-timeout 120 minio
+  compose_for "$runtime" "$images" "$compose_file" run --rm --no-deps agentos \
+    python -m scripts.verify_raw_evidence_storage verify-marker --identity "$release_sha"
+  compose_for "$runtime" "$images" "$compose_file" run --rm --no-deps agentos \
+    python -m scripts.verify_raw_evidence_storage smoke --identity "$release_sha"
+  echo "PASS raw-evidence-minio-restart-persistence"
+}
+
 migrate_candidate_database() {
   local runtime="$1"
   local images="$2"
@@ -76,7 +98,7 @@ rollback() {
   echo "Candidate verification failed; restoring the previous AgentOS release" >&2
   if [ -s "$current_runtime" ] && [ -s "$current_images" ] && [ -s "$current_compose" ]; then
     compose_for "$current_runtime" "$current_images" "$current_compose" up -d --wait --wait-timeout 180 agentos
-    verify_release "$current_runtime" "$current_images" "$current_compose" "$(cat "$current_sha")"
+    verify_release "$current_runtime" "$current_images" "$current_compose" "$(cat "$current_sha")" false
     echo "PASS rollback-previous-agentos-release" >&2
   else
     compose_for "$runtime_env" "$candidate_images" "$candidate_compose" stop --timeout 30 agentos || true
@@ -111,12 +133,14 @@ on_error() {
 trap 'on_error $?' ERR
 
 compose_for "$runtime_env" "$candidate_images" "$candidate_compose" config --quiet
-compose_for "$runtime_env" "$candidate_images" "$candidate_compose" up -d --wait --wait-timeout 240 postgres neo4j
+compose_for "$runtime_env" "$candidate_images" "$candidate_compose" up -d --wait --wait-timeout 240 postgres neo4j minio
 postgres_container="$(compose_for "$runtime_env" "$candidate_images" "$candidate_compose" ps -q postgres)"
 neo4j_container="$(compose_for "$runtime_env" "$candidate_images" "$candidate_compose" ps -q neo4j)"
+minio_container="$(compose_for "$runtime_env" "$candidate_images" "$candidate_compose" ps -q minio)"
 python3 "$(dirname "$0")/verify-dependency-ports.py" \
-  "$postgres_container" "$neo4j_container" "$UAT_LAN_BIND_ADDRESS" \
-  "$POSTGRES_LAN_PORT" "$NEO4J_HTTP_LAN_PORT" "$NEO4J_BOLT_LAN_PORT"
+  "$postgres_container" "$neo4j_container" "$minio_container" "$UAT_LAN_BIND_ADDRESS" \
+  "$POSTGRES_LAN_PORT" "$NEO4J_HTTP_LAN_PORT" "$NEO4J_BOLT_LAN_PORT" \
+  "$MINIO_LAN_PORT" "$MINIO_CONSOLE_PORT"
 if [ -s "$current_sha" ]; then
   backup_file="${deployment_root}/backups/agent-os-${release_sha}.sql.gz"
   compose_for "$runtime_env" "$candidate_images" "$candidate_compose" exec -T postgres \
@@ -129,6 +153,7 @@ fi
 # Agno v3 moves runs into their own table. Freeze v2 writes, then apply the
 # additive, idempotent migration with the candidate image before v3 serves.
 compose_for "$runtime_env" "$candidate_images" "$candidate_compose" stop --timeout 30 agentos || true
+verify_candidate_storage_persistence "$runtime_env" "$candidate_images" "$candidate_compose"
 migrate_candidate_database "$runtime_env" "$candidate_images" "$candidate_compose"
 if [ ! -s "$current_sha" ]; then
   compose_for "$runtime_env" "$candidate_images" "$candidate_compose" run --rm --no-deps agentos \

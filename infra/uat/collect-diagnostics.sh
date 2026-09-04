@@ -7,6 +7,7 @@ redact() {
     -e 's/(Authorization: Bearer )[A-Za-z0-9._-]+/\1[REDACTED]/g' \
     -e 's#(postgresql[^:]*://[^:]+:)[^@]+@#\1[REDACTED]@#g' \
     -e 's/(API_KEY|TOKEN|SECRET|PASSWORD|DB_PASS)=([^[:space:]]+)/\1=[REDACTED]/gI' \
+    -e 's/(MINIO_ACCESS_KEY|MINIO_SECRET_KEY|MINIO_ROOT_USER|MINIO_ROOT_PASSWORD)=([^[:space:]]+)/\1=[REDACTED]/gI' \
     -e "s#(NEO4J_AUTH[=:][[:space:]]*'?)[^'[:space:]]+#\1[REDACTED]#gI" \
     -e "s#(^|[[:space:]'\"])neo4j/[^'\"[:space:]]+#\1neo4j/[REDACTED]#g"
 }
@@ -29,3 +30,5 @@ echo "===== postgres logs ====="
 "${compose[@]}" logs --no-color --tail 150 postgres 2>&1 | redact
 echo "===== neo4j logs ====="
 "${compose[@]}" logs --no-color --tail 150 neo4j 2>&1 | redact
+echo "===== minio logs ====="
+"${compose[@]}" logs --no-color --tail 150 minio 2>&1 | redact

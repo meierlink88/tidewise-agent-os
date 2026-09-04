@@ -13,7 +13,7 @@ on:
         default: false
         type: boolean
       dependencies_only:
-        description: Deploy and verify only fresh DGX PostgreSQL and Neo4j; do not start AgentOS.
+        description: Deploy and verify only fresh DGX PostgreSQL, Neo4j and MinIO; do not start AgentOS.
         required: false
         default: false
         type: boolean
@@ -102,16 +102,23 @@ jobs:
       POSTGRES_LAN_PORT: ${{ vars.POSTGRES_LAN_PORT }}
       NEO4J_HTTP_LAN_PORT: ${{ vars.NEO4J_HTTP_LAN_PORT }}
       NEO4J_BOLT_LAN_PORT: ${{ vars.NEO4J_BOLT_LAN_PORT }}
+      MINIO_LAN_PORT: ${{ vars.MINIO_LAN_PORT }}
+      MINIO_CONSOLE_PORT: ${{ vars.MINIO_CONSOLE_PORT }}
+      RAW_EVIDENCE_BUCKET: ${{ vars.RAW_EVIDENCE_BUCKET }}
+      RAW_EVIDENCE_PUBLIC_BASE_URL: ${{ vars.RAW_EVIDENCE_PUBLIC_BASE_URL }}
       STAGE_ONLY: ${{ inputs.stage_only }}
       RELEASE_SHA: ${{ needs.resolve-release.outputs.commit_sha }}
       AGENTOS_LOCAL_REPOSITORY: tidewise-agentos-uat
       POSTGRES_IMAGE: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
       NEO4J_IMAGE: neo4j:5.26.28-community@sha256:ff32db30b2baff97971e441b46bfd9c832c1b62c970398ef579244c06b21d357
+      MINIO_IMAGE: minio/minio:RELEASE.2025-07-23T15-54-02Z@sha256:d249d1fb6966de4d8ad26c04754b545205ff15a62e4fd19ebd0f26fa5baacbc0
       DB_PASS: ${{ secrets.AGENTOS_DB_PASSWORD }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
       DATA_SERVICE_TOKEN: ${{ secrets.DATA_SERVICE_TOKEN }}
       EVENT_EXTRACTION_BATCH_SIZE: ${{ vars.EVENT_EXTRACTION_BATCH_SIZE || '20' }}
       NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+      MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+      MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
       GRAPHITI_EMBEDDING_API_KEY: ${{ secrets.GRAPHITI_EMBEDDING_API_KEY }}
       GRAPHITI_EMBEDDING_BASE_URL: ${{ vars.GRAPHITI_EMBEDDING_BASE_URL }}
       GRAPHITI_EMBEDDING_MODEL: ${{ vars.GRAPHITI_EMBEDDING_MODEL }}
@@ -169,6 +176,8 @@ jobs:
               "AGENTOS_EXTERNAL_URL", "DATA_SERVICE_BASE_URL", "RELEASE_SHA", "DB_PASS",
               "UAT_LAN_BIND_ADDRESS", "POSTGRES_LAN_PORT",
               "NEO4J_HTTP_LAN_PORT", "NEO4J_BOLT_LAN_PORT",
+              "MINIO_LAN_PORT", "MINIO_CONSOLE_PORT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY",
+              "RAW_EVIDENCE_BUCKET", "RAW_EVIDENCE_PUBLIC_BASE_URL",
               "DEEPSEEK_API_KEY", "DATA_SERVICE_TOKEN", "EVENT_EXTRACTION_BATCH_SIZE",
               "NEO4J_PASSWORD",
               "GRAPHITI_EMBEDDING_API_KEY", "GRAPHITI_EMBEDDING_BASE_URL",
@@ -197,6 +206,7 @@ jobs:
             printf 'AGENTOS_IMAGE=%s\n' "$AGENTOS_IMAGE"
             printf 'POSTGRES_IMAGE=%s\n' "$POSTGRES_IMAGE"
             printf 'NEO4J_IMAGE=%s\n' "$NEO4J_IMAGE"
+            printf 'MINIO_IMAGE=%s\n' "$MINIO_IMAGE"
           } > "$images_env"
           printf '%s' "$JWT_JWKS_BASE64" | base64 --decode > "$jwks_tmp"
           python3 -m json.tool "$jwks_tmp" >/dev/null
@@ -210,7 +220,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for image in "$POSTGRES_IMAGE" "$NEO4J_IMAGE"; do
+          for image in "$POSTGRES_IMAGE" "$NEO4J_IMAGE" "$MINIO_IMAGE"; do
             [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "image must use a digest" >&2; exit 1; }
             docker pull "$image"
           done

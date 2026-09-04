@@ -15,8 +15,10 @@ from capabilities.collection.internal.artifacts import build_artifact_set, publi
 from capabilities.collection.internal.buffer import (
     read_title_curation,
     read_title_curation_if_present,
+    read_title_curation_omissions,
     read_tool_batches,
     write_title_curation,
+    write_title_curation_omissions,
 )
 from capabilities.collection.internal.channels.models import ChannelType
 from capabilities.collection.internal.models import (
@@ -33,6 +35,7 @@ from capabilities.collection.internal.source_snapshot import load_active_source_
 
 RAW_EVIDENCE_FILTER_MAX_CANDIDATES = 25
 RAW_EVIDENCE_FILTER_MAX_CONTENT_CHARS = 40_000
+RAW_EVIDENCE_FILTER_MAX_OMISSIONS = 3
 
 
 def request_from_input(value: Any) -> CollectionRequest:
@@ -149,7 +152,7 @@ def _curation_draft(value: Any) -> TitleCurationDraft:
 
 
 async def save_raw_evidence_filter_batch(step_input: StepInput, run_context: RunContext) -> StepOutput:
-    """Fail closed on batch coverage and atomically merge one filter result."""
+    """Persist valid decisions and leave omitted Candidates for a bounded later retry."""
     request_output = step_input.get_step_output("prepare-raw-evidence-filter-batch")
     if request_output is None or request_output.content is None:
         raise ValueError("Raw Evidence filter batch request is missing")
@@ -164,7 +167,7 @@ async def save_raw_evidence_filter_batch(step_input: StepInput, run_context: Run
         raise ValueError("Raw Evidence Filter returned duplicate Candidate IDs")
     missing = sorted(set(expected) - set(actual))
     unknown = sorted(set(actual) - set(expected))
-    if missing or unknown:
+    if unknown:
         raise ValueError(f"Raw Evidence Filter Candidate coverage mismatch: missing={missing}, unknown={unknown}")
 
     candidates = _all_candidates(run_context.run_id)
@@ -186,6 +189,22 @@ async def save_raw_evidence_filter_batch(step_input: StepInput, run_context: Run
         raise ValueError(f"Raw Evidence filter state contains unknown Candidate IDs: {unknown_state}")
     merged = TitleCurationDraft(decisions=[decisions_by_id[item] for item in all_ids if item in decisions_by_id])
     write_title_curation(run_context.run_id, merged)
+
+    omissions = read_title_curation_omissions(run_context.run_id)
+    for candidate_id in actual:
+        omissions.pop(candidate_id, None)
+    for candidate_id in missing:
+        omissions[candidate_id] = omissions.get(candidate_id, 0) + 1
+    write_title_curation_omissions(run_context.run_id, omissions)
+    exhausted = sorted(
+        candidate_id for candidate_id in missing if omissions[candidate_id] >= RAW_EVIDENCE_FILTER_MAX_OMISSIONS
+    )
+    if exhausted:
+        raise ValueError(
+            "Raw Evidence Filter repeatedly omitted Candidate IDs: "
+            f"candidate_ids={exhausted}, attempts={RAW_EVIDENCE_FILTER_MAX_OMISSIONS}"
+        )
+
     remaining = len(all_ids) - len(merged.decisions)
     return StepOutput(
         content=RawEvidenceFilterProgress(
