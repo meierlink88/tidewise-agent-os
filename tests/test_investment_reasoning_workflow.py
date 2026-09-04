@@ -2262,6 +2262,77 @@ class GraphitiInvestmentRetrievalTest(unittest.IsolatedAsyncioTestCase):
 
 
 class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
+    async def test_startup_injects_the_data_service_report_publisher_into_the_runtime(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "RUNTIME_ENV": "dev",
+                "DATA_SERVICE_BASE_URL": "https://data.example.test",
+                "DATA_SERVICE_TOKEN": "service-token",
+            },
+        ):
+            import app.main as main
+
+        event_runtime = SimpleNamespace(close=AsyncMock())
+        investment_runtime = SimpleNamespace(close=AsyncMock())
+        publisher = object()
+        ensure_names = [
+            "ensure_title_curator_agent",
+            "ensure_evidence_extractor_agent",
+            "ensure_event_extractor_agent",
+            "ensure_event_identity_agent",
+            "ensure_event_signal_analyst_agent",
+            "ensure_investment_reasoner_agent",
+            "ensure_investment_report_writer_agent",
+            "ensure_investment_reviewer_agent",
+            "ensure_raw_collection_workflow",
+            "retire_collection_query_planner_agent",
+            "ensure_evidence_extraction_workflow",
+            "ensure_event_extraction_workflow",
+            "ensure_investment_reasoning_workflow",
+        ]
+        with ExitStack() as stack:
+            settings = {
+                "DATA_SERVICE_BASE_URL": "https://data.example.test",
+                "DATA_SERVICE_TOKEN": "service-token",
+            }
+            stack.enter_context(
+                patch.object(main, "getenv", side_effect=lambda name, default=None: settings.get(name, default))
+            )
+            for name in ensure_names:
+                stack.enter_context(patch.object(main, name))
+            stack.enter_context(patch.object(main.registry, "get_model", return_value=object()))
+            stack.enter_context(patch.object(main, "create_local_event_workflow_runtime", return_value=event_runtime))
+            stack.enter_context(patch.object(main, "load_investment_reasoner_agent", return_value=Agent(id="reasoner")))
+            stack.enter_context(
+                patch.object(main, "load_investment_report_writer_agent", return_value=Agent(id="report-writer"))
+            )
+            stack.enter_context(patch.object(main, "load_investment_reviewer_agent", return_value=Agent(id="reviewer")))
+            create_runtime = stack.enter_context(
+                patch.object(main, "create_local_investment_workflow_runtime", return_value=investment_runtime)
+            )
+            stack.enter_context(patch.object(main, "validate_schedules"))
+            create_publisher = stack.enter_context(
+                patch.object(main, "create_data_service_report_publisher", return_value=publisher)
+            )
+
+            async with main.lifespan(None):
+                pass
+
+        create_publisher.assert_called_once_with(
+            base_url="https://data.example.test",
+            service_token="service-token",
+        )
+        create_runtime.assert_called_once_with(
+            unittest.mock.ANY,
+            unittest.mock.ANY,
+            unittest.mock.ANY,
+            unittest.mock.ANY,
+            publisher,
+        )
+        investment_runtime.close.assert_awaited_once()
+        event_runtime.close.assert_awaited_once()
+
     async def test_startup_failure_closes_already_created_event_runtime(self) -> None:
         with patch.dict(os.environ, {"RUNTIME_ENV": "dev"}):
             import app.main as main
@@ -2292,6 +2363,7 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
                 patch.object(main, "load_investment_report_writer_agent", return_value=Agent(id="report-writer"))
             )
             stack.enter_context(patch.object(main, "load_investment_reviewer_agent", return_value=Agent(id="reviewer")))
+            stack.enter_context(patch.object(main, "create_data_service_report_publisher", return_value=object()))
             stack.enter_context(
                 patch.object(
                     main,
@@ -2339,6 +2411,7 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             stack.enter_context(
                 patch.object(main, "create_local_investment_workflow_runtime", return_value=investment_runtime)
             )
+            stack.enter_context(patch.object(main, "create_data_service_report_publisher", return_value=object()))
             stack.enter_context(patch.object(main, "validate_schedules"))
             with self.assertRaisesRegex(ExceptionGroup, "AgentOS runtime shutdown failed"):
                 async with main.lifespan(None):

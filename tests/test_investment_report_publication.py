@@ -1,6 +1,9 @@
 """Canonical publication projection and mock publisher tests."""
 
+import asyncio
+import json
 import tempfile
+import traceback
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -8,10 +11,12 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock
 
+import httpx
 from agno.run import RunContext
 from agno.workflow import StepInput
 from pydantic import ValidationError
 
+from capabilities.investment import configure_investment_workflow_runtime
 from capabilities.investment.functions.reasoning import publish_investment_report
 from capabilities.investment.internal.models import (
     InvestmentReportPublicationOutput,
@@ -19,6 +24,7 @@ from capabilities.investment.internal.models import (
 )
 from capabilities.investment.internal.report_contract import InvestmentReportArtifact
 from capabilities.investment.internal.report_publication import (
+    DataServiceReportPublisher,
     MockReportPublisher,
     PublicationConclusionBasis,
     PublicationConfidence,
@@ -29,9 +35,10 @@ from capabilities.investment.internal.report_publication import (
     PublicationTransmissionKind,
     PublicationValidationStatus,
     ReportPublicationConflict,
+    ReportPublicationRejected,
     ReportPublicationRequest,
+    ReportPublicationUnavailable,
     build_report_publication,
-    configure_report_publisher,
 )
 
 
@@ -43,7 +50,7 @@ class InvestmentReportPublicationTest(unittest.IsolatedAsyncioTestCase):
         self.root = Path(self.temporary.name)
 
     def tearDown(self) -> None:
-        configure_report_publisher(None)
+        configure_investment_workflow_runtime(None)
         self.temporary.cleanup()
 
     def _source_report(self) -> InvestmentReportArtifact:
@@ -370,12 +377,363 @@ class InvestmentReportPublicationTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ReportPublicationConflict, "divergent"):
             await publisher.publish(changed)
 
+    async def test_data_service_publisher_posts_the_strict_request_and_accepts_create_or_replay(self) -> None:
+        request = build_report_publication(self._source_report())
+        cases = ((201, False), (200, True))
+
+        for status_code, replayed in cases:
+            with self.subTest(status_code=status_code):
+                observed: list[httpx.Request] = []
+
+                async def respond(http_request: httpx.Request) -> httpx.Response:
+                    observed.append(http_request)
+                    return httpx.Response(
+                        status_code,
+                        request=http_request,
+                        json={
+                            "request_id": "request-1",
+                            "result": {
+                                "report_id": "RPT11111111-1111-4111-8111-111111111111",
+                                "published_at": "2026-09-04T08:00:00Z",
+                                "replayed": replayed,
+                            },
+                        },
+                    )
+
+                publisher = DataServiceReportPublisher(
+                    "https://data.example.test/",
+                    "service-token",
+                    transport=httpx.MockTransport(respond),
+                    retry_delay_seconds=0,
+                )
+                receipt = await publisher.publish(request)
+
+                self.assertEqual(receipt.replayed, replayed)
+                self.assertEqual(receipt.report_id, "RPT11111111-1111-4111-8111-111111111111")
+                self.assertEqual(len(observed), 1)
+                self.assertEqual(observed[0].method, "POST")
+                self.assertEqual(
+                    str(observed[0].url),
+                    "https://data.example.test/api/data/v1/report-publications",
+                )
+                self.assertEqual(observed[0].headers["Authorization"], "Bearer service-token")
+                self.assertEqual(observed[0].headers["Content-Type"], "application/json")
+                self.assertEqual(json.loads(observed[0].content), request.model_dump(mode="json"))
+
+    async def test_data_service_publisher_retries_transient_failure_with_identical_payload(self) -> None:
+        request = build_report_publication(self._source_report())
+        observed: list[dict[str, object]] = []
+
+        async def respond(http_request: httpx.Request) -> httpx.Response:
+            observed.append(json.loads(http_request.content))
+            if len(observed) == 1:
+                return httpx.Response(503, request=http_request, json={"error": {"code": "DATA_SERVICE_NOT_READY"}})
+            return httpx.Response(
+                200,
+                request=http_request,
+                json={
+                    "request_id": "request-2",
+                    "result": {
+                        "report_id": "RPT11111111-1111-4111-8111-111111111111",
+                        "published_at": "2026-09-04T08:00:00Z",
+                        "replayed": True,
+                    },
+                },
+            )
+
+        publisher = DataServiceReportPublisher(
+            "https://data.example.test",
+            "service-token",
+            transport=httpx.MockTransport(respond),
+            retry_delay_seconds=0,
+        )
+
+        receipt = await publisher.publish(request)
+
+        self.assertTrue(receipt.replayed)
+        self.assertEqual(observed, [request.model_dump(mode="json"), request.model_dump(mode="json")])
+
+    async def test_data_service_publisher_fails_closed_for_permanent_rejection(self) -> None:
+        request = build_report_publication(self._source_report())
+        attempts = 0
+
+        async def respond(http_request: httpx.Request) -> httpx.Response:
+            nonlocal attempts
+            attempts += 1
+            return httpx.Response(
+                422,
+                request=http_request,
+                json={"error": {"code": "REPORT_EVIDENCE_REFERENCE_INVALID", "message": "secret body"}},
+            )
+
+        publisher = DataServiceReportPublisher(
+            "https://data.example.test",
+            "service-token",
+            transport=httpx.MockTransport(respond),
+            retry_delay_seconds=0,
+        )
+
+        with self.assertRaises(ReportPublicationRejected) as raised:
+            await publisher.publish(request)
+
+        self.assertEqual(attempts, 1)
+        self.assertNotIn("secret body", str(raised.exception))
+        self.assertNotIn("service-token", str(raised.exception))
+
+    async def test_data_service_publisher_maps_conflict_without_retry(self) -> None:
+        request = build_report_publication(self._source_report())
+        attempts = 0
+
+        async def respond(http_request: httpx.Request) -> httpx.Response:
+            nonlocal attempts
+            attempts += 1
+            return httpx.Response(409, request=http_request)
+
+        publisher = DataServiceReportPublisher(
+            "https://data.example.test",
+            "service-token",
+            transport=httpx.MockTransport(respond),
+            retry_delay_seconds=0,
+        )
+
+        with self.assertRaises(ReportPublicationConflict):
+            await publisher.publish(request)
+
+        self.assertEqual(attempts, 1)
+
+    async def test_data_service_publisher_rejects_malformed_success_envelope(self) -> None:
+        request = build_report_publication(self._source_report())
+
+        async def respond(http_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                201,
+                request=http_request,
+                json={
+                    "request_id": "request-3",
+                    "result": {
+                        "report_id": "secret-response-body",
+                        "published_at": "2026-09-04T08:00:00Z",
+                        "replayed": False,
+                    },
+                },
+            )
+
+        publisher = DataServiceReportPublisher(
+            "https://data.example.test",
+            "service-token",
+            transport=httpx.MockTransport(respond),
+            retry_delay_seconds=0,
+        )
+
+        with self.assertRaisesRegex(ReportPublicationUnavailable, "invalid success envelope") as raised:
+            await publisher.publish(request)
+
+        rendered = "".join(traceback.format_exception(raised.exception))
+        self.assertNotIn("secret-response-body", rendered)
+
+    async def test_data_service_publisher_rejects_coerced_replay_flag(self) -> None:
+        request = build_report_publication(self._source_report())
+
+        async def respond(http_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                201,
+                request=http_request,
+                json={
+                    "request_id": "request-4",
+                    "result": {
+                        "report_id": "RPT11111111-1111-4111-8111-111111111111",
+                        "published_at": "2026-09-04T08:00:00Z",
+                        "replayed": "false",
+                    },
+                },
+            )
+
+        publisher = DataServiceReportPublisher(
+            "https://data.example.test",
+            "service-token",
+            transport=httpx.MockTransport(respond),
+            retry_delay_seconds=0,
+        )
+
+        with self.assertRaisesRegex(ReportPublicationUnavailable, "invalid success envelope"):
+            await publisher.publish(request)
+
+    async def test_data_service_publisher_rejects_noncanonical_receipt_fields(self) -> None:
+        request = build_report_publication(self._source_report())
+        cases = (
+            ("RPT------------------------------------", "2026-09-04T08:00:00Z"),
+            ("RPT11111111-1111-4111-8111-111111111111", 1788508800),
+            ("RPT11111111-1111-4111-8111-111111111111", "1788508800"),
+            ("RPT11111111-1111-4111-8111-111111111111", "2026-09-04T08:00:00+00:00"),
+        )
+
+        for report_id, published_at in cases:
+            with self.subTest(report_id=report_id, published_at=published_at):
+
+                async def respond(http_request: httpx.Request) -> httpx.Response:
+                    return httpx.Response(
+                        201,
+                        request=http_request,
+                        json={
+                            "request_id": "request-5",
+                            "result": {
+                                "report_id": report_id,
+                                "published_at": published_at,
+                                "replayed": False,
+                            },
+                        },
+                    )
+
+                publisher = DataServiceReportPublisher(
+                    "https://data.example.test",
+                    "service-token",
+                    transport=httpx.MockTransport(respond),
+                    retry_delay_seconds=0,
+                )
+
+                with self.assertRaisesRegex(ReportPublicationUnavailable, "invalid success envelope"):
+                    await publisher.publish(request)
+
+    async def test_data_service_publisher_retries_http_request_timeout(self) -> None:
+        request = build_report_publication(self._source_report())
+        attempts = 0
+
+        async def respond(http_request: httpx.Request) -> httpx.Response:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                return httpx.Response(408, request=http_request)
+            return httpx.Response(
+                200,
+                request=http_request,
+                json={
+                    "request_id": "request-408",
+                    "result": {
+                        "report_id": "RPT11111111-1111-4111-8111-111111111111",
+                        "published_at": "2026-09-04T08:00:00Z",
+                        "replayed": True,
+                    },
+                },
+            )
+
+        publisher = DataServiceReportPublisher(
+            "https://data.example.test",
+            "service-token",
+            transport=httpx.MockTransport(respond),
+            retry_delay_seconds=0,
+        )
+
+        receipt = await publisher.publish(request)
+
+        self.assertTrue(receipt.replayed)
+        self.assertEqual(attempts, 2)
+
+    async def test_data_service_publisher_retries_transport_failures_then_fails_safely(self) -> None:
+        request = build_report_publication(self._source_report())
+        for error_type in (httpx.ConnectError, httpx.ReadTimeout):
+            with self.subTest(error_type=error_type.__name__):
+                attempts = 0
+
+                async def respond(http_request: httpx.Request) -> httpx.Response:
+                    nonlocal attempts
+                    attempts += 1
+                    raise error_type("sensitive provider diagnostic", request=http_request)
+
+                publisher = DataServiceReportPublisher(
+                    "https://data.example.test",
+                    "service-token",
+                    transport=httpx.MockTransport(respond),
+                    retry_delay_seconds=0,
+                )
+
+                with self.assertRaises(ReportPublicationUnavailable) as raised:
+                    await publisher.publish(request)
+
+                self.assertEqual(attempts, 2)
+                rendered = "".join(traceback.format_exception(raised.exception))
+                self.assertNotIn("sensitive provider diagnostic", rendered)
+                self.assertNotIn("service-token", rendered)
+
+    async def test_data_service_publisher_enforces_one_total_timeout_across_retries(self) -> None:
+        request = build_report_publication(self._source_report())
+        attempts = 0
+
+        async def respond(http_request: httpx.Request) -> httpx.Response:
+            nonlocal attempts
+            attempts += 1
+            return httpx.Response(503, request=http_request)
+
+        publisher = DataServiceReportPublisher(
+            "https://data.example.test",
+            "service-token",
+            timeout_seconds=0.01,
+            total_timeout_seconds=0.01,
+            max_attempts=2,
+            retry_delay_seconds=1,
+            transport=httpx.MockTransport(respond),
+        )
+
+        with self.assertRaisesRegex(ReportPublicationUnavailable, "total timeout"):
+            await publisher.publish(request)
+
+        self.assertEqual(attempts, 1)
+
+    async def test_data_service_publisher_can_retry_after_one_request_timeout(self) -> None:
+        request = build_report_publication(self._source_report())
+        attempts = 0
+
+        async def respond(http_request: httpx.Request) -> httpx.Response:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                await asyncio.sleep(0.02)
+            return httpx.Response(
+                200,
+                request=http_request,
+                json={
+                    "request_id": "request-6",
+                    "result": {
+                        "report_id": "RPT11111111-1111-4111-8111-111111111111",
+                        "published_at": "2026-09-04T08:00:00Z",
+                        "replayed": True,
+                    },
+                },
+            )
+
+        publisher = DataServiceReportPublisher(
+            "https://data.example.test",
+            "service-token",
+            timeout_seconds=0.01,
+            total_timeout_seconds=0.05,
+            retry_delay_seconds=0,
+            transport=httpx.MockTransport(respond),
+        )
+
+        receipt = await publisher.publish(request)
+
+        self.assertTrue(receipt.replayed)
+        self.assertEqual(attempts, 2)
+
+    def test_data_service_publisher_rejects_unsafe_or_incomplete_configuration(self) -> None:
+        cases = (
+            ("data.example.test", "service-token", "BASE_URL"),
+            ("https://user:password@data.example.test", "service-token", "BASE_URL"),
+            ("https://data.example.test?token=unsafe", "service-token", "BASE_URL"),
+            ("https://data.example.test", "", "TOKEN"),
+            ("https://data.example.test", "service-token\nleak", "TOKEN"),
+        )
+
+        for base_url, token, message in cases:
+            with self.subTest(base_url=base_url, token=bool(token)):
+                with self.assertRaisesRegex(ValueError, message):
+                    DataServiceReportPublisher(base_url, token)
+
     async def test_publish_step_uses_direct_predecessor_and_returns_the_mock_receipt(self) -> None:
         report = self._source_report()
         artifact_path = self.root / "report.json"
         artifact_path.write_text(report.model_dump_json(), encoding="utf-8")
         publisher = MockReportPublisher(self.root / "published")
-        configure_report_publisher(publisher)
+        configure_investment_workflow_runtime(SimpleNamespace(publish_report=publisher.publish))
         generated = InvestmentReportWorkflowOutput(
             source_report_id=report.source_report_id,
             report_artifact_path=str(artifact_path),
@@ -394,8 +752,8 @@ class InvestmentReportPublicationTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result.replayed)
 
     async def test_skipped_generation_does_not_invoke_the_publisher(self) -> None:
-        publisher = AsyncMock()
-        configure_report_publisher(publisher)
+        publish_report = AsyncMock()
+        configure_investment_workflow_runtime(SimpleNamespace(publish_report=publish_report))
         generated = InvestmentReportWorkflowOutput(
             source_report_id="agentos-investment-run-skipped",
             report_artifact_path="",
@@ -412,4 +770,4 @@ class InvestmentReportPublicationTest(unittest.IsolatedAsyncioTestCase):
         result = InvestmentReportPublicationOutput.model_validate(output.content)
         self.assertEqual(result.publication_status, "SKIPPED")
         self.assertEqual(result.reason, "没有可发布结论")
-        publisher.publish.assert_not_awaited()
+        publish_report.assert_not_awaited()

@@ -71,6 +71,14 @@ def configure_investment_workflow_runtime(runtime) -> None:
     configure(runtime)
 
 
+def create_data_service_report_publisher(*, base_url: str, service_token: str):
+    """Build the private Data Service adapter at the application boundary."""
+
+    from capabilities.investment.internal.report_publication import DataServiceReportPublisher
+
+    return DataServiceReportPublisher(base_url, service_token)
+
+
 __all__ = [
     "AcceptedCrossLayerTransmission",
     "AcceptedTransmission",
@@ -124,5 +132,6 @@ __all__ = [
     "TransmissionSemanticReview",
     "Trend",
     "configure_investment_workflow_runtime",
+    "create_data_service_report_publisher",
     "create_local_investment_workflow_runtime",
 ]

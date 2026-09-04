@@ -31,7 +31,7 @@ from capabilities.investment.internal.models import (
     Trend,
 )
 from capabilities.investment.internal.report_contract import InvestmentReportArtifact
-from capabilities.investment.internal.report_publication import build_report_publication, report_publisher
+from capabilities.investment.internal.report_publication import build_report_publication
 from capabilities.investment.internal.reporting import InvestmentReportAssembler, ReportNotPublishable
 from capabilities.investment.internal.runtime import investment_workflow_runtime
 from capabilities.investment.internal.storage import (
@@ -415,7 +415,7 @@ async def publish_investment_report(step_input: StepInput, run_context: RunConte
     if report.source_report_id != generated.source_report_id:
         raise ValueError("generated Report identity does not match its Workflow handoff")
     request = build_report_publication(report)
-    receipt = await report_publisher().publish(request)
+    receipt = await investment_workflow_runtime().publish_report(request)
     return StepOutput(
         content=InvestmentReportPublicationOutput(
             publisher_report_id=request.publisher_report_id,

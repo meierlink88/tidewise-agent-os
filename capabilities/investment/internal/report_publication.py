@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Literal, Protocol, Self
+from typing import Any, Literal, Protocol, Self
+from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, uuid5
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+import httpx
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 from capabilities.investment.internal.report_contract import (
     InvestmentReportArtifact,
@@ -325,17 +329,61 @@ class ReportPublicationRequest(PublicationModel):
 
 
 class ReportPublicationReceipt(PublicationModel):
-    report_id: str = Field(pattern=r"^RPT[0-9a-f-]{36}$")
+    report_id: str = Field(pattern=r"^RPT[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
     published_at: datetime
-    replayed: bool
+    replayed: StrictBool
+
+    @field_validator("published_at")
+    @classmethod
+    def published_at_is_utc(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value):
+            raise ValueError("published_at must be a UTC timestamp")
+        return value
 
 
 class ReportPublicationConflict(ValueError):
     """The same publisher identity was reused with divergent content."""
 
 
+class ReportPublicationRejected(RuntimeError):
+    """Data rejected a Report publication with a permanent client error."""
+
+
+class ReportPublicationUnavailable(RuntimeError):
+    """Data could not return a valid Report publication receipt."""
+
+
 class ReportPublisher(Protocol):
     async def publish(self, request: ReportPublicationRequest) -> ReportPublicationReceipt: ...
+
+
+class ReportPublicationEnvelope(PublicationModel):
+    request_id: str = Field(min_length=1, max_length=128)
+    result: ReportPublicationReceipt
+
+    @field_validator("result", mode="before")
+    @classmethod
+    def receipt_uses_wire_timestamp(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            raise ValueError("result must be an object")
+        published_at = value.get("published_at")
+        if (
+            not isinstance(published_at, str)
+            or re.fullmatch(
+                r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z",
+                published_at,
+            )
+            is None
+        ):
+            raise ValueError("published_at must be a UTC RFC3339 string using Z")
+        return value
+
+    @field_validator("request_id")
+    @classmethod
+    def request_id_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("request_id must not be blank")
+        return value
 
 
 class MockPublicationRecord(PublicationModel):
@@ -611,6 +659,135 @@ def _canonical_sha256(request: ReportPublicationRequest) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+REPORT_PUBLICATIONS_PATH = "/api/data/v1/report-publications"
+REPORT_PUBLICATION_TIMEOUT_SECONDS = 20.0
+REPORT_PUBLICATION_TOTAL_TIMEOUT_SECONDS = 45.0
+REPORT_PUBLICATION_MAX_ATTEMPTS = 2
+
+
+class DataServiceReportPublisher:
+    """Authenticated, bounded publisher for the versioned Data Report API."""
+
+    def __init__(
+        self,
+        base_url: str,
+        service_token: str,
+        *,
+        timeout_seconds: float = REPORT_PUBLICATION_TIMEOUT_SECONDS,
+        total_timeout_seconds: float = REPORT_PUBLICATION_TOTAL_TIMEOUT_SECONDS,
+        max_attempts: int = REPORT_PUBLICATION_MAX_ATTEMPTS,
+        retry_delay_seconds: float = 0.25,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        parsed = urlsplit(base_url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("DATA_SERVICE_BASE_URL is invalid")
+        token = service_token.strip()
+        if not token:
+            raise ValueError("DATA_SERVICE_TOKEN is not configured")
+        if any(ord(character) < 0x21 or ord(character) > 0x7E for character in token):
+            raise ValueError("DATA_SERVICE_TOKEN contains invalid characters")
+        if timeout_seconds <= 0:
+            raise ValueError("Report publication timeout must be positive")
+        if total_timeout_seconds <= 0:
+            raise ValueError("Report publication total timeout must be positive")
+        if max_attempts < 1:
+            raise ValueError("Report publication max attempts must be positive")
+        if retry_delay_seconds < 0:
+            raise ValueError("Report publication retry delay must not be negative")
+        self._url = f"{base_url.rstrip('/')}{REPORT_PUBLICATIONS_PATH}"
+        self._headers = {"Authorization": f"Bearer {token}"}
+        self._request_timeout_seconds = timeout_seconds
+        self._total_timeout_seconds = total_timeout_seconds
+        self._max_attempts = max_attempts
+        self._retry_delay_seconds = retry_delay_seconds
+        self._transport = transport
+
+    async def publish(self, request: ReportPublicationRequest) -> ReportPublicationReceipt:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._total_timeout_seconds
+        try:
+            async with asyncio.timeout(self._total_timeout_seconds):
+                return await self._publish_with_retries(request, deadline)
+        except TimeoutError:
+            raise ReportPublicationUnavailable(
+                f"Data Service Report publication exceeded the {self._total_timeout_seconds:g}s total timeout"
+            ) from None
+
+    async def _publish_with_retries(
+        self,
+        request: ReportPublicationRequest,
+        deadline: float,
+    ) -> ReportPublicationReceipt:
+        payload = request.model_dump(mode="json")
+        for attempt in range(1, self._max_attempts + 1):
+            try:
+                remaining_seconds = max(deadline - asyncio.get_running_loop().time(), 0.001)
+                attempt_timeout = min(self._request_timeout_seconds, remaining_seconds)
+                async with asyncio.timeout(attempt_timeout):
+                    async with httpx.AsyncClient(
+                        timeout=attempt_timeout,
+                        headers=self._headers,
+                        transport=self._transport,
+                    ) as client:
+                        response = await client.post(self._url, json=payload)
+            except TimeoutError:
+                if attempt < self._max_attempts:
+                    await self._wait_before_retry(attempt)
+                    continue
+                raise ReportPublicationUnavailable(
+                    f"Data Service Report publication timed out after {attempt} attempts"
+                ) from None
+            except httpx.RequestError:
+                if attempt < self._max_attempts:
+                    await self._wait_before_retry(attempt)
+                    continue
+                raise ReportPublicationUnavailable(
+                    f"Data Service Report publication failed after {attempt} attempts"
+                ) from None
+
+            if response.status_code in {200, 201}:
+                try:
+                    envelope = ReportPublicationEnvelope.model_validate(response.json())
+                except (TypeError, ValueError):
+                    raise ReportPublicationUnavailable(
+                        "Data Service Report publication returned an invalid success envelope"
+                    ) from None
+                if (response.status_code == 200) != envelope.result.replayed:
+                    raise ReportPublicationUnavailable(
+                        "Data Service Report publication returned inconsistent replay status"
+                    )
+                return envelope.result
+
+            if response.status_code == 409:
+                raise ReportPublicationConflict(
+                    "publisher_report_id already exists with divergent Report publication content"
+                )
+            retryable_status = response.status_code in {408, 425, 429} or 500 <= response.status_code < 600
+            if 400 <= response.status_code < 500 and not retryable_status:
+                raise ReportPublicationRejected(
+                    f"Data Service rejected Report publication with HTTP {response.status_code}"
+                )
+            if retryable_status and attempt < self._max_attempts:
+                await self._wait_before_retry(attempt)
+                continue
+            raise ReportPublicationUnavailable(
+                f"Data Service Report publication failed with HTTP {response.status_code} after {attempt} attempts"
+            )
+        raise AssertionError("Report publication retry loop did not return or raise")
+
+    async def _wait_before_retry(self, attempt: int) -> None:
+        if self._retry_delay_seconds:
+            await asyncio.sleep(self._retry_delay_seconds * (2 ** (attempt - 1)))
+
+
 class MockReportPublisher:
     """File-backed Data Service substitute with the production idempotency semantics."""
 
@@ -659,15 +836,3 @@ def _atomic_create_record(path: Path, record: MockPublicationRecord) -> bool:
     finally:
         temporary.unlink(missing_ok=True)
     return True
-
-
-_configured_publisher: ReportPublisher | None = None
-
-
-def configure_report_publisher(publisher: ReportPublisher | None) -> None:
-    global _configured_publisher
-    _configured_publisher = publisher
-
-
-def report_publisher() -> ReportPublisher:
-    return _configured_publisher or MockReportPublisher()

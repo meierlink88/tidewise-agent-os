@@ -14,6 +14,10 @@ from capabilities.investment.internal.models import (
     ReviewResult,
 )
 from capabilities.investment.internal.report_contract import InvestmentReportArtifact
+from capabilities.investment.internal.report_publication import (
+    ReportPublicationReceipt,
+    ReportPublicationRequest,
+)
 
 
 class InvestmentWorkflowRuntime(Protocol):
@@ -53,6 +57,8 @@ class InvestmentWorkflowRuntime(Protocol):
         self,
         report: InvestmentReportArtifact,
     ) -> InvestmentReportArtifact: ...
+
+    async def publish_report(self, request: ReportPublicationRequest) -> ReportPublicationReceipt: ...
 
     async def close(self) -> None: ...
 
