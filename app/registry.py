@@ -1,6 +1,7 @@
 """Safe components available to the local AgentOS Studio registry."""
 
 from agno.agent import Agent
+from agno.models.base import Model
 from agno.registry import Registry
 
 from agents.event_association import EVENT_ASSOCIATION_AGENT_ID, load_event_association_agent
@@ -12,8 +13,8 @@ from agents.investment_reasoner import INVESTMENT_REASONER_AGENT_ID, load_invest
 from agents.investment_report_writer import INVESTMENT_REPORT_WRITER_AGENT_ID, load_investment_report_writer_agent
 from agents.investment_reviewer import INVESTMENT_REVIEWER_AGENT_ID, load_investment_reviewer_agent
 from agents.tidewise_assistant import tidewise_assistant
-from agents.title_curator import TITLE_CURATOR_AGENT_ID, filter_model, load_title_curator_agent
-from app.settings import default_model, sol_medium_model
+from agents.title_curator import TITLE_CURATOR_AGENT_ID, load_title_curator_agent
+from app.settings import SOL_LOW_MODEL_ID, default_model, sol_low_model
 from app.workflow_runtime import install_raw_collection_session_compatibility
 from capabilities.collection import (
     CollectionRequest,
@@ -137,6 +138,13 @@ def platform_identity() -> str:
 class TidewiseRegistry(Registry):
     """Resolve Studio Agents as sessionless runtime copies when composing Workflows."""
 
+    def get_model(self, model_id: str, provider: str | None = None, name: str | None = None) -> Model | None:
+        # Historical Reviewer variants stay loadable without duplicate Studio options.
+        if model_id == SOL_LOW_MODEL_ID and provider in (None, "OpenAI"):
+            if name in ("RawEvidenceFilter-low", "RawEvidenceFilter-none"):
+                name = "OpenAIResponses"
+        return super().get_model(model_id, provider=provider, name=name)
+
     def get_agent(self, agent_id: str) -> Agent | None:
         code_defined = super().get_agent(agent_id)
         if code_defined is not None:
@@ -166,8 +174,7 @@ install_raw_collection_session_compatibility()
 
 registry = TidewiseRegistry(
     name="Tidewise AgentOS Registry",
-    # Distinct names preserve per-Agent effort when Agno restores pinned Workflow steps.
-    models=[default_model(), sol_medium_model(), filter_model("low"), filter_model("none")],
+    models=[default_model(), sol_low_model()],
     dbs=[get_postgres_db()],
     schemas=[
         AssociationDecision,

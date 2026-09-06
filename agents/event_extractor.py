@@ -8,7 +8,7 @@ from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
 
-from app.settings import is_sol_medium_model, sol_medium_model
+from app.settings import is_sol_low_model, sol_low_model
 from capabilities.event import EVENT_EXTRACTOR_AGENT_ID, EventExtractionDraft
 from db import get_postgres_db
 
@@ -50,7 +50,7 @@ def _seed_instructions() -> str:
 
 def _configure(agent: Agent, instructions: str) -> Agent:
     agent.db = get_postgres_db()
-    agent.model = sol_medium_model()
+    agent.model = sol_low_model()
     agent.name = "Event Extractor"
     agent.description = EVENT_EXTRACTOR_DESCRIPTION
     agent.tools = []
@@ -95,7 +95,7 @@ def _has_runtime_contract(agent: Agent) -> bool:
 
     return all(
         (
-            is_sol_medium_model(agent.model),
+            is_sol_low_model(agent.model),
             not agent.tools,
             agent.tool_call_limit is None,
             agent.tool_choice is None,
@@ -137,7 +137,7 @@ def build_event_extractor_agent() -> Agent:
             id=EVENT_EXTRACTOR_AGENT_ID,
             name="Event Extractor",
             description=EVENT_EXTRACTOR_DESCRIPTION,
-            model=sol_medium_model(),
+            model=sol_low_model(),
             instructions=instructions,
         ),
         instructions,
