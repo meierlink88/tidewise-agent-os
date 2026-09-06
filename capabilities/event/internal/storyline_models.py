@@ -122,5 +122,8 @@ class StorylineJournal(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal["event_storyline_journal.v1"] = "event_storyline_journal.v1"
+    # Missing on pre-fix journals. Never silently trust cached empty judgments
+    # produced when a business dict was dropped by Agno's Message parser.
+    input_transport_version: Literal[1, 2] = 1
     agent_versions: StorylineAgentVersions
     candidates: dict[str, StorylineCandidateState] = Field(default_factory=dict)

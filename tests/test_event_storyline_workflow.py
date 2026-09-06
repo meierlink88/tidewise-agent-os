@@ -376,6 +376,24 @@ class StorylineWorkflowTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(StorylineOperationError, "prepare_storyline_batch"):
             await self.run_flow(flow)
 
+    async def test_pre_fix_journal_is_not_silently_resumed(self):
+        from capabilities.event.internal.storage import _atomic_write_json, load_storyline_journal, pending_directory
+
+        self.enqueue()
+        self.runtime.fail_graph_once = True
+        with self.assertRaises(StorylineOperationError):
+            await self.run_flow()
+        batch_dir = next((self.fixture.event_root / ".pending").iterdir())
+        journal = load_storyline_journal(batch_dir.name)
+        payload = journal.model_dump(mode="json")
+        del payload["input_transport_version"]
+        _atomic_write_json(pending_directory(batch_dir.name) / "storyline_journal.json", payload)
+        previous_calls = len(self.calls)
+        with self.assertRaisesRegex(StorylineOperationError, "prepare_storyline_batch"):
+            await self.run_flow()
+        self.assertEqual(len(self.calls), previous_calls)
+        self.assertEqual(self.runtime.data_publications, 1)
+
     async def test_legacy_pending_batch_fails_closed(self):
         from capabilities.event.internal.storage import claim_event_batch, freeze_draft, release_event_batch_lease
 

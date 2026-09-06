@@ -144,10 +144,12 @@ async def prepare_storyline_batch(step_input: StepInput, run_context: RunContext
         if journal is None:
             if not batch.needs_analysis:
                 raise ValueError("legacy pending Event batch requires explicit operator reconciliation")
-            journal = StorylineJournal(agent_versions=pins)
+            journal = StorylineJournal(agent_versions=pins, input_transport_version=2)
             write_storyline_journal(batch, journal)
         elif journal.agent_versions != pins:
             raise ValueError("resume requires the original exact Agent versions")
+        elif journal.input_transport_version != 2:
+            raise ValueError("pre-fix Event input journal requires explicit operator reconciliation")
         _event_run_state(run_context)["batch"] = batch.model_dump(mode="json")
         renew_event_batch_lease(batch)
         return StepOutput(content=batch)

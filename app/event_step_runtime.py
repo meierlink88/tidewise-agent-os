@@ -14,7 +14,11 @@ from agno.exceptions import RunCancelledException
 from agno.run.agent import RunCancelledEvent, RunErrorEvent
 from agno.workflow import Step, StepInput, StepOutput
 
-from capabilities.event.functions.linear import prepare_event_semantic_call, settle_event_semantic_call
+from capabilities.event.functions.linear import (
+    event_semantic_input_text,
+    prepare_event_semantic_call,
+    settle_event_semantic_call,
+)
 
 _execute = Step.execute
 _aexecute = Step.aexecute
@@ -29,7 +33,13 @@ def _agent_id(step: Step) -> str:
 
 
 def _input(original: StepInput, prepared: StepOutput) -> StepInput:
-    return replace(original, previous_step_content=prepared.content, previous_step_outputs={"prepared": prepared})
+    # Agno treats dict inputs as Message envelopes, not business payloads. Replace
+    # both predecessor views: native Step chooses its deepest predecessor output.
+    if not prepared.success:
+        raise ValueError("Cannot invoke Event Agent with failed preparation")
+    text = event_semantic_input_text(prepared.content)
+    message = replace(prepared, content=text, steps=None)
+    return replace(original, previous_step_content=text, previous_step_outputs={"prepared": message})
 
 
 def _result(outputs: list[StepOutput]) -> StepOutput:

@@ -35,6 +35,17 @@ the frozen v13 topology fixture tests those legacy contracts separately.
 
 ## Agent contracts
 
+### Model input transport
+
+Issue #173 fixes Agno 3.0.1 interpreting business dictionaries as Message envelopes.
+All four direct Event Agent Steps now receive explicit JSON text as user content.
+Both predecessor representations are replaced; nested stale outputs cannot override
+the payload. Unicode, nulls and numeric values are retained. Association/Signal inputs
+must contain Event, frozen classification and identified nonempty candidates; invalid
+or unserializable input fails before model invocation. Regression tests pass through
+native Step message selection and Agno's real sync/async message builders, rather than
+mocking Agent.arun and bypassing serialization. No new Workflow nodes are introduced.
+
 | Agent | Semantic output | Code-owned boundary |
 | --- | --- | --- |
 | Event Extractor | Atomic Event candidates or explicit no-event dispositions | Exact Evidence partition, source fields, timestamps |
@@ -138,8 +149,13 @@ Links are derived using Agno's native `derive_step_links`, so Studio serializati
 code publication agree. Startup rejects missing/mismatched pins, not editable positions.
 Refreshing Agent versions preserves the published Event Loop configuration. Contract
 v14 to v15 migration seeds the approved linear topology and preserves the four exact pins.
-The v14 journal shape and semantic page boundaries are unchanged, so pending v14 work
-can resume only with the same exact Agent versions; incompatible pins fail closed.
+The semantic page boundaries are unchanged. Journals created after #173 carry
+`input_transport_version=2`. Missing or older transport versions fail closed and require
+explicit operator reconciliation, even with unchanged Agent pins: earlier cached empty
+association decisions may have been produced without any business input. Never merely
+stamp an old journal with version 2; review/reset contaminated semantic results while
+preserving every valid Data/graph publication identity and ACK under a separate approved
+reconciliation. This code change does not mutate or replay existing pending batches.
 
 Each batch freezes pins in `storyline_journal.json`. Inputs, catalog pages, decisions,
 compiled proposals and per-write acknowledgements are journaled under the existing lease.
