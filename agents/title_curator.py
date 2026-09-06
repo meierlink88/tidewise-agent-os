@@ -11,11 +11,11 @@ from agno.models.openai import OpenAIResponses
 from agno.registry import Registry
 
 from app.settings import SOL_MEDIUM_MODEL_ID, sol_medium_model
-from capabilities.evidence import ArticleReviewDraft
+from capabilities.evidence import EvidenceReviewDraft
 from db import get_postgres_db
 
 TITLE_CURATOR_AGENT_ID = "title-curator"
-TITLE_CURATOR_CONTRACT_VERSION = 12
+TITLE_CURATOR_CONTRACT_VERSION = 13
 TITLE_CURATOR_AGENT_NAME = "Evidence Reviewer"
 TITLE_CURATOR_SEED_SHA256_KEY = "article_review_seed_sha256"
 _SEED_PROMPT = Path(__file__).with_name("title_curator.seed.md")
@@ -62,7 +62,7 @@ def _configure(agent: Agent) -> Agent:
     agent.instructions = _seed_instructions()
     agent.tools = []
     agent.retries = 0
-    agent.output_schema = ArticleReviewDraft
+    agent.output_schema = EvidenceReviewDraft
     # Constrain generation with the existing draft schema; keep local business validation.
     agent.structured_outputs = True
     agent.use_json_mode = False

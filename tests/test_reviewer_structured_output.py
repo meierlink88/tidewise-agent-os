@@ -9,7 +9,7 @@ from agno.run import RunContext
 from pydantic import ValidationError
 
 from agents.title_curator import build_title_curator_agent
-from capabilities.evidence import ArticleReviewDraft
+from capabilities.evidence import ArticleReviewDraft, EvidenceReviewDraft
 
 
 class ReviewerStructuredOutputTest(unittest.TestCase):
@@ -18,7 +18,7 @@ class ReviewerStructuredOutputTest(unittest.TestCase):
             agent = build_title_curator_agent()
         context = RunContext(run_id="schema-probe", session_id="schema-probe", output_schema=agent.output_schema)
         response_format = get_response_format(agent, run_context=context)
-        self.assertIs(response_format, ArticleReviewDraft)
+        self.assertIs(response_format, EvidenceReviewDraft)
         self.assertTrue(agent.structured_outputs)
         self.assertFalse(agent.use_json_mode)
         assert isinstance(agent.model, OpenAIResponses)
@@ -27,7 +27,8 @@ class ReviewerStructuredOutputTest(unittest.TestCase):
         self.assertEqual(output_format["type"], "json_schema")
         self.assertIs(output_format["strict"], True)
         schema = output_format["schema"]
-        self.assertEqual(set(schema["required"]), {"article_key", "is_relevant", "extraction"})
+        self.assertEqual(set(schema["required"]), {"is_relevant", "extraction"})
+        self.assertNotIn("article_key", schema["properties"])
         extraction = schema["$defs"]["EvidenceExtractionDraft"]
         self.assertEqual(set(extraction["required"]), {"raw_evidence", "evidences"})
 
@@ -48,6 +49,10 @@ class ReviewerStructuredOutputTest(unittest.TestCase):
         check_objects(schema)
         self.assertTrue(schema["properties"]["extraction"]["description"])
         self.assertEqual(agent.retries, 0)
+
+    def test_llm_cannot_return_a_machine_identity(self) -> None:
+        with self.assertRaises(ValidationError):
+            EvidenceReviewDraft.model_validate({"article_key": "invented", "is_relevant": False, "extraction": None})
 
     def test_reported_corrupt_envelope_is_not_repaired_or_accepted(self) -> None:
         with self.assertRaises(ValidationError) as caught:

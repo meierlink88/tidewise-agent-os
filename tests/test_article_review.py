@@ -21,7 +21,7 @@ from capabilities.collection.functions import review
 from capabilities.collection.internal import article_queue as queue
 from capabilities.collection.internal.buffer import write_title_curation, write_tool_batch
 from capabilities.collection.internal.models import Candidate, TitleCurationDecision, TitleCurationDraft
-from capabilities.evidence import ArticleReviewDraft, ArticleReviewRequest
+from capabilities.evidence import ArticleReviewDraft, ArticleReviewRequest, EvidenceReviewDraft, EvidenceReviewRequest
 from capabilities.evidence.functions import publish_evidence, transfer_legacy_raw_documents
 from capabilities.evidence.internal.storage import checkpoint_path
 from tests import test_evidence_extraction as fixtures
@@ -227,14 +227,14 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
         order = []
 
         async def analyze(**kwargs):
-            request = ArticleReviewRequest.model_validate(kwargs["input"])
-            order.append(("review", request.article_key))
+            request = EvidenceReviewRequest.model_validate(kwargs["input"])
+            key = first if request.document.source_url == "https://example.test/article" else second
+            order.append(("review", key))
             return RunOutput(
                 agent_id="title-curator",
-                content=ArticleReviewDraft(
-                    article_key=request.article_key,
-                    is_relevant=request.article_key == first,
-                    extraction=fixtures.EvidenceExtractionTest._draft() if request.article_key == first else None,
+                content=EvidenceReviewDraft(
+                    is_relevant=key == first,
+                    extraction=fixtures.EvidenceExtractionTest._draft() if key == first else None,
                 ),
             )
 
@@ -332,7 +332,7 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
         workflow.db = db
         assert isinstance(workflow.steps, list)
         workflow.steps[0] = Step(name="existing-queue", executor=lambda step_input: StepOutput(content={}))
-        response = ArticleReviewDraft(article_key=key, is_relevant=False, extraction=None)
+        response = EvidenceReviewDraft(is_relevant=False, extraction=None)
         with patch.object(
             agent.model,
             "aresponse",
@@ -358,9 +358,7 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
         workflow.db = None
         assert isinstance(workflow.steps, list)
         workflow.steps[0] = Step(name="existing-queue", executor=lambda step_input: StepOutput(content={}))
-        draft = ArticleReviewDraft(
-            article_key=key, is_relevant=True, extraction=fixtures.EvidenceExtractionTest._draft()
-        )
+        draft = EvidenceReviewDraft(is_relevant=True, extraction=fixtures.EvidenceExtractionTest._draft())
         with (
             patch.object(agent, "arun", new=AsyncMock(return_value=RunOutput(content=draft))) as analyze,
             patch.object(review, "upload_article"),
@@ -386,8 +384,7 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
             with patch.object(review, "upload_article") as upload, patch.object(review, "publish_evidence") as publish:
                 result = await review.evidence_publish(
                     StepInput(
-                        previous_step_content=ArticleReviewDraft(
-                            article_key=key,
+                        previous_step_content=EvidenceReviewDraft(
                             is_relevant=relevant,
                             extraction=draft,
                         )
@@ -411,6 +408,41 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.stop)
         self.assertEqual(queue.read_state(key)["status"], "failed")
         self.assertTrue((queue.item_root(key) / "publication.json").exists())
+
+    async def test_identity_stays_in_code_and_is_bound_before_storage(self) -> None:
+        key, _ = queue.enqueue_candidate(self.candidate(), "identity-test")
+        prepared = await review.prepare_evidence_review(StepInput(), self.context)
+        self.assertIsInstance(prepared.content, EvidenceReviewRequest)
+        assert isinstance(prepared.content, EvidenceReviewRequest)
+        payload = prepared.content.model_dump()
+        self.assertEqual(set(payload), {"document", "categories"})
+        self.assertEqual(
+            set(payload["document"]),
+            {"title", "raw_text", "source_name", "source_url", "published_at", "collected_at"},
+        )
+        self.assertNotIn(key, prepared.content.model_dump_json())
+        await review.evidence_publish(
+            StepInput(previous_step_content=EvidenceReviewDraft(is_relevant=False, extraction=None)), self.context
+        )
+        bound = ArticleReviewDraft.model_validate_json((queue.item_root(key) / "review.json").read_text())
+        self.assertEqual(bound.article_key, key)
+        self.assertEqual(queue.read_state(key)["status"], "excluded")
+
+    async def test_stale_claim_cannot_bind_or_publish_semantic_result(self) -> None:
+        key, _ = queue.enqueue_candidate(self.candidate(), "fencing-test")
+        await review.prepare_evidence_review(StepInput(), self.context)
+        assert self.context.session_state is not None
+        self.context.session_state["article_review"]["claim"]["token"] = "stale-token"
+        with patch.object(review, "upload_article") as upload, patch.object(review, "publish_evidence") as publish:
+            with self.assertRaises(ValueError):
+                await review.evidence_publish(
+                    StepInput(previous_step_content=EvidenceReviewDraft(is_relevant=False, extraction=None)),
+                    self.context,
+                )
+        upload.assert_not_called()
+        publish.assert_not_called()
+        self.assertFalse((queue.item_root(key) / "review.json").exists())
+        self.assertEqual(queue.read_state(key)["status"], "pending")
 
 
 if __name__ == "__main__":
