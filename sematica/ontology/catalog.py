@@ -19,7 +19,7 @@ from sematica.ontology.entities import (
     variable,
 )
 
-ONTOLOGY_VERSION = "reasoning-ontology/v6"
+ONTOLOGY_VERSION = "reasoning-ontology/v7"
 
 _ENTITY_SCHEMAS: tuple[ModuleType, ...] = (
     country,

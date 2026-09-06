@@ -59,21 +59,12 @@ class CountryMemberOfOrganization(TidewiseEntityLink):
     )
 
 
-class CountryImplementsMacroEconomic(TidewiseEntityLink):
-    """一个国家在其政策体系中可实施某类宏观经济政策动作。
-
-    该关系表达政策工具的制度适用性，不表示该国家此刻正在执行该政策。
-    """
-
-
 ENTITY_TYPES = {"Country": Country}
 EDGE_TYPES = {
     "CountryInRegion": CountryInRegion,
     "CountryMemberOfOrganization": CountryMemberOfOrganization,
-    "CountryImplementsMacroEconomic": CountryImplementsMacroEconomic,
 }
 EDGE_TYPE_MAP = {
     ("Country", "Region"): ["CountryInRegion"],
     ("Country", "Organization"): ["CountryMemberOfOrganization"],
-    ("Country", "MacroEconomic"): ["CountryImplementsMacroEconomic"],
 }

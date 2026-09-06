@@ -1,377 +1,204 @@
-"""构建并校验图谱专用的宏观经济政策动作目录。"""
+"""Project an operator-exported Data join snapshot without database access or extraction."""
 
 from __future__ import annotations
 
-from collections import Counter
-from collections.abc import Callable
+import hashlib
+import json
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import NAMESPACE_URL, uuid5
+from typing import Literal
 
-from graphiti_core import Graphiti
-from graphiti_core.edges import EntityEdge
 from graphiti_core.nodes import EntityNode
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from sematica.ontology import CountryImplementsMacroEconomic, MacroEconomic
 from sematica.ontology.entities.base import NonBlankText
-from sematica.ontology.enums import MacroEconomicCategory, MacroEconomicStatus
-from sematica.projection.authoritative_writer import GROUP_ID, write_projection
+from sematica.ontology.entities.macro_economic import ID_SUFFIX, MacroEconomic, MacroEconomicTactic
+from sematica.projection.authoritative_writer import GROUP_ID, node_uuid
 from sematica.projection.runtime import ProjectionError
 
-CATALOG_PATH = Path(__file__).with_name("catalog.v1.json")
-DEMO_CATALOG_SOURCE = "tidewise-reason/macroeconomic-policy-demo"
-RELATION_NAME = "IMPLEMENTS"
-APPROVED_COUNTRY_CODES = frozenset({"CN", "US", "JP", "KR", "GB"})
-EXPECTED_CATEGORY_COUNTS = {
-    MacroEconomicCategory.MONETARY: 8,
-    MacroEconomicCategory.FISCAL: 8,
-    MacroEconomicCategory.INDUSTRIAL_POLICY: 8,
-    MacroEconomicCategory.GROWTH_CYCLE: 6,
-    MacroEconomicCategory.INFLATION_PRICES: 8,
-    MacroEconomicCategory.EMPLOYMENT_LABOR: 8,
-    MacroEconomicCategory.FINANCIAL_STABILITY: 8,
-    MacroEconomicCategory.EXTERNAL_SECTOR: 8,
-    MacroEconomicCategory.DEBT_LEVERAGE: 8,
-    MacroEconomicCategory.REAL_ESTATE: 8,
-}
-CATEGORY_NAMES = {
-    MacroEconomicCategory.MONETARY: "货币政策线",
-    MacroEconomicCategory.FISCAL: "财政政策线",
-    MacroEconomicCategory.INDUSTRIAL_POLICY: "产业政策线",
-    MacroEconomicCategory.GROWTH_CYCLE: "增长/周期线",
-    MacroEconomicCategory.INFLATION_PRICES: "通胀/价格线",
-    MacroEconomicCategory.EMPLOYMENT_LABOR: "就业/劳动力线",
-    MacroEconomicCategory.FINANCIAL_STABILITY: "金融稳定线",
-    MacroEconomicCategory.EXTERNAL_SECTOR: "对外/国际收支线",
-    MacroEconomicCategory.DEBT_LEVERAGE: "债务/杠杆线",
-    MacroEconomicCategory.REAL_ESTATE: "房地产/土地线",
-}
+OWNER = "tidewise-agentos/macroeconomic-projection/v1"
 
 
-def demo_node_uuid(policy_key: str) -> str:
-    """为非 Data 权威节点生成稳定图谱身份。"""
-
-    return str(uuid5(NAMESPACE_URL, f"urn:tidewise:demo-macroeconomic-policy:{policy_key}"))
-
-
-def demo_edge_uuid(country_code: str, policy_key: str) -> str:
-    """为国家与政策动作之间的适用性关系生成稳定身份。"""
-
-    return str(
-        uuid5(
-            NAMESPACE_URL,
-            f"urn:tidewise:demo-country-implements-policy:{country_code}:{policy_key}",
-        )
-    )
-
-
-class DemoMacroEconomicPolicy(BaseModel):
-    """一项经过审阅、不冒充 Data 权威数据的政策动作。"""
-
+class Storyline(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-    policy_key: str = Field(pattern=r"^[A-Z][A-Z0-9_]{1,63}$")
+    id: str = Field(pattern="^MEC" + ID_SUFFIX + "$")
     name: NonBlankText = Field(max_length=100)
-    name_en: NonBlankText = Field(max_length=100)
-    category: MacroEconomicCategory
-    description: NonBlankText = Field(max_length=1000)
-    country_codes: tuple[str, ...] = Field(min_length=1, max_length=5)
-
-    @field_validator("country_codes")
-    @classmethod
-    def country_codes_must_be_approved_and_unique(cls, values: tuple[str, ...]) -> tuple[str, ...]:
-        if len(values) != len(set(values)):
-            raise ValueError("country_codes 不能重复")
-        unknown = set(values) - APPROVED_COUNTRY_CODES
-        if unknown:
-            raise ValueError("包含未批准的国家代码")
-        return values
-
-
-class DemoMacroEconomicCatalog(BaseModel):
-    """可版本化、可审阅的图谱演示政策目录。"""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    catalog_version: str = Field(pattern=r"^demo-macroeconomic-policy/v[1-9][0-9]*$")
-    published_at: datetime
-    items: tuple[DemoMacroEconomicPolicy, ...] = Field(min_length=78, max_length=78)
+    macro_economics_domain_id: str = Field(pattern="^MCD" + ID_SUFFIX + "$")
+    domain_code: str = Field(pattern=r"^[A-Z][A-Z0-9_]{0,49}$")
+    domain_name: NonBlankText = Field(max_length=50)
+    domain_description: NonBlankText
+    tactics: list[MacroEconomicTactic] = Field(min_length=1)
+    core_proposition: NonBlankText
+    candidate_assets: list[str] = Field(min_length=1)
+    created_at: datetime
+    updated_at: datetime
+    domain_created_at: datetime
+    domain_updated_at: datetime
 
     @model_validator(mode="after")
-    def catalog_must_match_the_reviewed_shape(self) -> DemoMacroEconomicCatalog:
-        if self.published_at.tzinfo is None or self.published_at.utcoffset() != UTC.utcoffset(self.published_at):
-            raise ValueError("published_at 必须是明确的 UTC 时间")
-        for field_name in ("policy_key", "name", "name_en"):
-            values = [getattr(item, field_name) for item in self.items]
-            if len(values) != len(set(values)):
-                raise ValueError(f"宏观经济目录存在重复 {field_name}")
-        counts = Counter(item.category for item in self.items)
-        if counts != Counter(EXPECTED_CATEGORY_COUNTS):
-            raise ValueError("宏观经济目录的十类数量与审阅结果不一致")
-        used_country_codes = {code for item in self.items for code in item.country_codes}
-        if used_country_codes != APPROVED_COUNTRY_CODES:
-            raise ValueError("宏观经济目录的国家范围与审阅结果不一致")
+    def validate_record(self):
+        for value in (self.created_at, self.updated_at, self.domain_created_at, self.domain_updated_at):
+            if value.tzinfo is None:
+                raise ValueError("Data timestamps require timezone")
+        if self.updated_at < self.created_at or self.domain_updated_at < self.domain_created_at:
+            raise ValueError("invalid timestamp order")
+        self.ontology()
+        return self
+
+    def ontology(self):
+        return MacroEconomic(
+            data_object_id=self.id,
+            core_proposition=self.core_proposition,
+            domain_code=self.domain_code,
+            domain_name=self.domain_name,
+            domain_description=self.domain_description,
+            tactics=json.dumps([t.model_dump() for t in self.tactics], ensure_ascii=False, separators=(",", ":")),
+            candidate_assets=self.candidate_assets,
+            updated_at=self.updated_at,
+        )
+
+
+class Snapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    schema_version: Literal["macroeconomic-projection-snapshot.v1"]
+    source_count: int = Field(gt=0)
+    items: list[Storyline] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_snapshot(self):
+        if len(self.items) != self.source_count:
+            raise ValueError("snapshot join lost or duplicated rows")
+        for key in ("id", "name"):
+            if len({getattr(item, key) for item in self.items}) != len(self.items):
+                raise ValueError("duplicate storyline identity or name")
+        domains: dict[str, tuple] = {}
+        codes: dict[str, str] = {}
+        for item in self.items:
+            profile = (
+                item.domain_code,
+                item.domain_name,
+                item.domain_description,
+                item.tactics,
+                item.domain_created_at,
+                item.domain_updated_at,
+            )
+            if domains.setdefault(item.macro_economics_domain_id, profile) != profile:
+                raise ValueError("conflicting domain profiles")
+            if codes.setdefault(item.domain_code, item.macro_economics_domain_id) != item.macro_economics_domain_id:
+                raise ValueError("domain code maps to multiple IDs")
         return self
 
 
-class CountryReference(BaseModel):
-    """图中已有的权威 Country 节点引用。"""
-
-    model_config = ConfigDict(frozen=True)
-
-    uuid: str
-    data_object_id: str
-    code: str
-    name: str
+def load_snapshot(path: Path) -> Snapshot:
+    return Snapshot.model_validate_json(path.read_text(encoding="utf-8"))
 
 
-class MacroEconomicPlan(BaseModel):
-    """宏观经济节点与关系写入前的完整预检结果。"""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
-
-    catalog_version: str
-    published_at: datetime
-    items: tuple[DemoMacroEconomicPolicy, ...]
-    nodes: tuple[EntityNode, ...]
-
-    @property
-    def relation_count(self) -> int:
-        return sum(len(item.country_codes) for item in self.items)
-
-    def summary(self) -> dict[str, object]:
-        return {
-            "group_id": GROUP_ID,
-            "catalog_version": self.catalog_version,
-            "macroeconomic_policies": len(self.nodes),
-            "country_implements": self.relation_count,
-            "countries": len(APPROVED_COUNTRY_CODES),
-            "data_authoritative": False,
-        }
-
-
-class ResolvedMacroEconomicPlan(BaseModel):
-    """已将国家代码安全解析为现有图节点的写入计划。"""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
-
-    base: MacroEconomicPlan
-    countries: tuple[CountryReference, ...]
-    edges: tuple[EntityEdge, ...]
-
-
-def load_catalog(path: Path = CATALOG_PATH) -> DemoMacroEconomicCatalog:
-    """读取并校验版本化的宏观经济政策目录。"""
-
-    try:
-        return DemoMacroEconomicCatalog.model_validate_json(path.read_text(encoding="utf-8"))
-    except (OSError, ValidationError, ValueError) as exc:
-        raise ProjectionError(f"无效的宏观经济政策目录：{exc}") from None
-
-
-def build_plan(catalog: DemoMacroEconomicCatalog) -> MacroEconomicPlan:
-    """在访问图之前，用公开 ontology 校验全部政策节点。"""
-
-    nodes: list[EntityNode] = []
-    for item in catalog.items:
-        try:
-            attributes = MacroEconomic(
-                policy_key=item.policy_key,
-                name_en=item.name_en,
-                category=item.category,
-                description=item.description,
-                status=MacroEconomicStatus.ACTIVE,
-            ).model_dump(mode="json", exclude_none=True)
-        except ValidationError as exc:
-            raise ProjectionError(f"宏观经济政策 {item.policy_key} 违反 ontology：{exc}") from None
+def build_plan(snapshot: Snapshot) -> list[EntityNode]:
+    nodes = []
+    for item in sorted(snapshot.items, key=lambda x: x.id):
+        summary = "\n".join(
+            [
+                item.name,
+                "领域：" + item.domain_name,
+                "领域描述：" + item.domain_description,
+                "核心命题：" + item.core_proposition,
+                "手段：" + "；".join(t.name + "：" + t.description for t in item.tactics),
+            ]
+        )
+        attrs = item.ontology().model_dump(mode="json", exclude_none=True)
+        attrs.update(
+            {
+                "projection_owner": OWNER,
+                "domain_created_at": item.domain_created_at.astimezone(UTC).isoformat(),
+                "domain_updated_at": item.domain_updated_at.astimezone(UTC).isoformat(),
+                "projection_fingerprint": hashlib.sha256(
+                    json.dumps(item.model_dump(mode="json"), sort_keys=True, ensure_ascii=False).encode()
+                ).hexdigest(),
+            }
+        )
         nodes.append(
             EntityNode(
-                uuid=demo_node_uuid(item.policy_key),
+                uuid=node_uuid(item.id),
                 name=item.name,
                 group_id=GROUP_ID,
-                labels=["MacroEconomic"],
-                created_at=catalog.published_at,
-                summary=(f"宏观经济政策动作：{item.name}。分类：{CATEGORY_NAMES[item.category]}。{item.description}"),
-                attributes={
-                    **attributes,
-                    "demo_catalog_source": DEMO_CATALOG_SOURCE,
-                    "demo_catalog_version": catalog.catalog_version,
-                },
+                labels=["Entity", "MacroEconomic"],
+                summary=summary,
+                created_at=item.created_at,
+                attributes=attrs,
             )
         )
-    return MacroEconomicPlan(
-        catalog_version=catalog.catalog_version,
-        published_at=catalog.published_at,
-        items=catalog.items,
-        nodes=tuple(nodes),
+    return nodes
+
+
+async def inspect_state(graphiti, nodes: list[EntityNode]) -> list[dict]:
+    records, _, _ = await graphiti.driver.execute_query(
+        """MATCH (n) WHERE n:MacroEconomic OR n.uuid IN $uuids OR n.data_object_id IN $ids
+        RETURN n{.*,name_embedding:null} AS props, labels(n) AS labels,
+        size(n.name_embedding) AS dimension ORDER BY n.uuid""",
+        uuids=[n.uuid for n in nodes],
+        ids=[n.attributes["data_object_id"] for n in nodes],
     )
+    return [r.data() if hasattr(r, "data") else dict(r) for r in records]
 
 
-async def resolve_country_nodes(graphiti: Graphiti, plan: MacroEconomicPlan) -> ResolvedMacroEconomicPlan:
-    """只将批准的国家代码解析到图中已有的权威 Country 节点。"""
-
-    result = await graphiti.driver.execute_query(
-        """
-        MATCH (country:Country:Entity {group_id: $group_id})
-        WHERE country.code IN $country_codes AND country.data_object_id IS NOT NULL
-        RETURN country.uuid AS uuid, country.data_object_id AS data_object_id,
-               country.code AS code, country.name AS name
-        ORDER BY country.code
-        """,
-        group_id=GROUP_ID,
-        country_codes=sorted(APPROVED_COUNTRY_CODES),
-    )
-    try:
-        countries = tuple(CountryReference.model_validate(record.data()) for record in result.records)
-    except ValidationError as exc:
-        raise ProjectionError(f"图中 Country 节点违反引用合同：{exc}") from None
-    countries_by_code = {country.code: country for country in countries}
-    if len(countries_by_code) != len(countries):
-        raise ProjectionError("图中存在重复的 Country code")
-    missing = APPROVED_COUNTRY_CODES - countries_by_code.keys()
-    if missing:
-        raise ProjectionError("图中缺少已批准国家：" + ", ".join(sorted(missing)))
-
-    CountryImplementsMacroEconomic()
-    edges: list[EntityEdge] = []
-    for item in plan.items:
-        target_uuid = demo_node_uuid(item.policy_key)
-        for country_code in item.country_codes:
-            country = countries_by_code[country_code]
-            edges.append(
-                EntityEdge(
-                    uuid=demo_edge_uuid(country_code, item.policy_key),
-                    group_id=GROUP_ID,
-                    source_node_uuid=country.uuid,
-                    target_node_uuid=target_uuid,
-                    created_at=plan.published_at,
-                    name=RELATION_NAME,
-                    fact=f"{country.name}在其政策体系中可实施{item.name}",
-                    attributes={
-                        "relation_schema": "CountryImplementsMacroEconomic",
-                        "demo_catalog_source": DEMO_CATALOG_SOURCE,
-                        "demo_catalog_version": plan.catalog_version,
-                    },
-                )
-            )
-    return ResolvedMacroEconomicPlan(base=plan, countries=countries, edges=tuple(edges))
-
-
-async def execute_plan(
-    graphiti: Graphiti,
-    plan: ResolvedMacroEconomicPlan,
-    *,
-    progress: Callable[[int, int], None] | None = None,
-) -> tuple[int, int, dict[str, int]]:
-    """幂等写入审阅过的节点和关系，不删除其他图数据。"""
-
-    return await write_projection(
-        graphiti,
-        nodes=plan.base.nodes,
-        edges=plan.edges,
-        owned_node_labels=frozenset({"MacroEconomic"}),
-        owned_edge_names=frozenset({RELATION_NAME}),
-        replace=False,
-        progress=progress,
-    )
-
-
-async def inspect_graph_state(graphiti: Graphiti, plan: ResolvedMacroEconomicPlan) -> dict[str, object]:
-    """读取本目录拥有的节点和关系以便校验。"""
-
-    node_result = await graphiti.driver.execute_query(
-        """
-        MATCH (policy:MacroEconomic:Entity {group_id: $group_id})
-        WHERE policy.demo_catalog_source = $catalog_source
-        RETURN policy.uuid AS uuid, policy.name AS name, policy.summary AS summary,
-               policy.policy_key AS policy_key, policy.name_en AS name_en,
-               policy.category AS category, policy.description AS description,
-               policy.status AS status, policy.data_object_id AS data_object_id,
-               policy.demo_catalog_source AS demo_catalog_source,
-               policy.demo_catalog_version AS demo_catalog_version,
-               labels(policy) AS labels, size(policy.name_embedding) AS embedding_dimension
-        ORDER BY policy.policy_key
-        """,
-        group_id=GROUP_ID,
-        catalog_source=DEMO_CATALOG_SOURCE,
-    )
-    edge_result = await graphiti.driver.execute_query(
-        """
-        MATCH (country:Country:Entity)-[relation:RELATES_TO]->
-              (policy:MacroEconomic:Entity {group_id: $group_id})
-        WHERE relation.name = $relation_name
-          AND relation.demo_catalog_source = $catalog_source
-        RETURN relation.uuid AS uuid, country.code AS country_code,
-               policy.policy_key AS policy_key, relation.name AS name,
-               relation.fact AS fact, size(relation.fact_embedding) AS embedding_dimension,
-               relation.relation_schema AS relation_schema,
-               relation.demo_catalog_version AS demo_catalog_version
-        ORDER BY country_code, policy_key
-        """,
-        group_id=GROUP_ID,
-        relation_name=RELATION_NAME,
-        catalog_source=DEMO_CATALOG_SOURCE,
-    )
-    return {
-        "nodes": [record.data() for record in node_result.records],
-        "edges": [record.data() for record in edge_result.records],
-    }
-
-
-def verify_state(plan: ResolvedMacroEconomicPlan, state: dict[str, object]) -> dict[str, object]:
-    """要求图中结果与版本化目录完全一致。"""
-
-    nodes = state.get("nodes")
-    edges = state.get("edges")
-    if not isinstance(nodes, list) or not isinstance(edges, list):
-        raise ProjectionError("无效的宏观经济图谱检查结果")
-
-    expected_nodes = {node.uuid: node for node in plan.base.nodes}
-    actual_nodes = {node["uuid"]: node for node in nodes}
-    expected_edges = {edge.uuid: edge for edge in plan.edges}
-    actual_edges = {edge["uuid"]: edge for edge in edges}
-    problems: list[str] = []
-    if set(actual_nodes) != set(expected_nodes) or len(nodes) != len(actual_nodes):
-        problems.append("政策节点身份集与目录不一致")
-    if set(actual_edges) != set(expected_edges) or len(edges) != len(actual_edges):
-        problems.append("国家政策关系集与目录不一致")
-    if any(set(node["labels"]) != {"Entity", "MacroEconomic"} for node in nodes):
-        problems.append("政策节点 label 不唯一")
-    if any(node["data_object_id"] is not None for node in nodes):
-        problems.append("演示政策节点冒充了 Data 对象")
-    if any(node["embedding_dimension"] != 1024 for node in nodes):
-        problems.append("政策节点向量缺失或维度错误")
-    if any(edge["embedding_dimension"] != 1024 for edge in edges):
-        problems.append("国家政策关系向量缺失或维度错误")
-    for uuid, expected in expected_nodes.items():
-        actual = actual_nodes.get(uuid)
-        if actual is None:
-            continue
-        expected_properties = {
-            "name": expected.name,
-            "summary": expected.summary,
-            **expected.attributes,
-        }
-        if any(actual.get(key) != value for key, value in expected_properties.items()):
-            problems.append(f"政策节点属性与目录不一致：{uuid}")
-    for uuid, expected in expected_edges.items():
-        actual = actual_edges.get(uuid)
-        if actual is None:
-            continue
+def preflight(nodes: list[EntityNode], state: list[dict]) -> dict:
+    expected = {n.uuid: n for n in nodes}
+    actual = {}
+    for row in state:
+        p = row["props"]
+        uuid = p.get("uuid")
+        if uuid in actual or uuid not in expected:
+            raise ProjectionError("unexpected or duplicate macroeconomic node; explicit cleanup required")
+        n = expected[uuid]
         if (
-            actual.get("name") != expected.name
-            or actual.get("fact") != expected.fact
-            or actual.get("relation_schema") != "CountryImplementsMacroEconomic"
-            or actual.get("demo_catalog_version") != plan.base.catalog_version
+            set(row["labels"]) != {"Entity", "MacroEconomic"}
+            or p.get("group_id") != GROUP_ID
+            or p.get("projection_owner") != OWNER
+            or p.get("data_object_id") != n.attributes["data_object_id"]
         ):
-            problems.append(f"国家政策关系属性与目录不一致：{uuid}")
-    if problems:
-        raise ProjectionError("; ".join(problems))
+            raise ProjectionError("macroeconomic namespace collision")
+        actual[uuid] = row
+    return actual
 
-    return {
-        **plan.base.summary(),
-        "node_total": len(nodes),
-        "relationship_total": len(edges),
-        "verified": True,
+
+def matches(node: EntityNode, row: dict, dimension: int) -> bool:
+    expected = {
+        "uuid": node.uuid,
+        "name": node.name,
+        "summary": node.summary,
+        "group_id": node.group_id,
+        **node.attributes,
     }
+    props = dict(row["props"])
+    props.pop("name_embedding", None)
+    # Graphiti save_bulk also persists a labels property in addition to native labels.
+    if set(props.pop("labels", [])) != set(node.labels):
+        return False
+    created = props.pop("created_at", None)
+    if hasattr(created, "to_native"):
+        created = created.to_native()
+    return props == expected and created == node.created_at and row["dimension"] == dimension
+
+
+def verify(nodes: list[EntityNode], state: list[dict], dimension: int) -> dict:
+    actual = preflight(nodes, state)
+    if set(actual) != {n.uuid for n in nodes} or any(not matches(n, actual[n.uuid], dimension) for n in nodes):
+        raise ProjectionError("macroeconomic projection differs from joined Data snapshot")
+    return {"verified": True, "storylines": len(nodes), "embedding_dimension": dimension}
+
+
+async def execute_plan(graphiti, nodes: list[EntityNode], dimension: int) -> dict:
+    actual = preflight(nodes, await inspect_state(graphiti, nodes))
+    changed = [n for n in nodes if n.uuid not in actual or not matches(n, actual[n.uuid], dimension)]
+    # Complete all vectors before the first graph write.
+    for start in range(0, len(changed), 10):
+        batch = changed[start : start + 10]
+        vectors = await graphiti.embedder.create_batch([n.name for n in batch])
+        for n, vector in zip(batch, vectors, strict=True):
+            if len(vector) != dimension:
+                raise ProjectionError("embedding dimension mismatch")
+            n.name_embedding = vector
+    preflight(nodes, await inspect_state(graphiti, nodes))
+    if changed:
+        await graphiti.nodes.entity.save_bulk(changed, batch_size=len(changed))
+    return {**verify(nodes, await inspect_state(graphiti, nodes), dimension), "nodes_written": len(changed)}
