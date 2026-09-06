@@ -12,6 +12,18 @@ Thinking may increase latency/output usage and does not guarantee semantic accur
 Pending batch results retain old pins; do not silently relabel or replay them.
 Rollback restores the previous non-thinking Event profile and matching versions.
 
+## LLM response extra fields (#193)
+
+The four batch LLM response roots use Pydantic's recursive `extra="ignore"` override
+at their `model_validate` and `model_validate_json` entry points, used by Agno and
+Workflow response parsing. Unknown fields, including nested fields such as Signal
+`reason_codes`, are discarded before results are checkpointed or converted to
+formal objects. Known fields retain requiredness, types, enums and business validators.
+Extra content cannot substitute for missing required content. Shared model configs,
+graph/Data Service write contracts, candidate coverage and entity checks are unchanged.
+No provider retry or workflow topology change; replay remains an operator action.
+Rollback restores strict extra-field parsing on the batch response roots.
+
 ## Empty batch association explanations (#191)
 
 An explicit `matches: []` with an omitted, null or blank `no_match_reason` is
