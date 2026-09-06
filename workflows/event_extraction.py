@@ -1,5 +1,6 @@
 """Lifecycle and orchestration for the Studio-managed Event Extraction Workflow."""
 
+from copy import deepcopy
 from typing import Any
 
 from agno.agent import Agent
@@ -32,7 +33,7 @@ from capabilities.event.functions import storyline as operations
 from db import get_postgres_db
 
 EVENT_EXTRACTION_WORKFLOW_ID = "event-extraction"
-EVENT_EXTRACTION_CONTRACT_VERSION = 16
+EVENT_EXTRACTION_CONTRACT_VERSION = 17
 EVENT_EXTRACTION_PUBLICATION_POLICY = "native_step_exact_agent_links.v2"
 _AGENT_LINK_BINDINGS = (
     ("batch-extract", EVENT_EXTRACTOR_AGENT_ID, 0),
@@ -150,16 +151,6 @@ def _seed_workflow(extractor, identity, association, signal_analyst, *, agent_ve
             strict_input_validation=True,
         )
 
-    def branch(name, group, prepare, freeze):
-        return Steps(
-            name=name,
-            steps=[
-                function("Prepare " + name, prepare),
-                semantic(name + " Association", "batch-" + group, association),
-                function("Freeze " + name, freeze),
-            ],
-        )
-
     return Workflow(
         id=EVENT_EXTRACTION_WORKFLOW_ID,
         name="Event Extraction",
@@ -167,7 +158,7 @@ def _seed_workflow(extractor, identity, association, signal_analyst, *, agent_ve
         dependencies={},
         description="Extract and deduplicate a batch; match four classes in Parallel; freeze Signals then publish.",
         metadata={
-            "event_extraction_contract_version": 16,
+            "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
             "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
             "event_agent_versions": pins,
         },
@@ -176,26 +167,24 @@ def _seed_workflow(extractor, identity, association, signal_analyst, *, agent_ve
             semantic("Extract and classify Events", "batch-extract", extractor),
             function("Prepare batch identity", batched.prepare_batch_identity),
             semantic("Batch Event Identity", "batch-identity", identity),
-            function("Freeze batch identity", batched.freeze_batch_identity),
+            function("Prepare matching contexts", batched.prepare_parallel_matches),
             Parallel(
                 *[
-                    branch("Geopolitical", "geo", batched.prepare_geo_matches, batched.freeze_geo_matches),
-                    branch("Macroeconomic", "macro", batched.prepare_macro_matches, batched.freeze_macro_matches),
+                    semantic("Geopolitical Association", "batch-geo", association),
+                    semantic("Macroeconomic Association", "batch-macro", association),
                     Steps(
                         name="Industry",
                         steps=[
-                            function("Prepare full chain catalog", batched.prepare_chain_matches),
                             semantic("Batch chain matching", "batch-chain", association),
                             function("Prepare selected chain nodes", batched.prepare_node_matches),
                             semantic("Batch node matching", "batch-node", association),
-                            function("Freeze node matches", batched.freeze_node_matches),
                         ],
                     ),
-                    branch("Company", "company", batched.prepare_company_matches, batched.freeze_company_matches),
+                    semantic("Company Association", "batch-company", association),
                 ],
                 name="Match four Event classes",
             ),
-            function("Freeze all associations", batched.freeze_batch_associations),
+            function("Collect matched Events", batched.collect_parallel_matches),
             Loop(
                 name="Signals by Event class",
                 max_iterations=4,
@@ -205,21 +194,41 @@ def _seed_workflow(extractor, identity, association, signal_analyst, *, agent_ve
                 steps=[
                     function("Prepare class Signal inputs", batched.prepare_batch_signals),
                     semantic("Batch direct Signals", "batch-signal", signal_analyst),
-                    function("Freeze class Signals", batched.freeze_batch_signals),
+                    function("Compile class Signals", batched.freeze_batch_signals),
                 ],
             ),
-            function("Freeze publication package", batched.freeze_publication_package),
             Loop(
                 name="Publish frozen Events",
                 max_iterations=50,
                 forward_iteration_output=False,
                 end_condition=operations.storyline_candidates_complete,
                 human_review=_fail_fast_review(),
-                steps=[function("Publish next frozen Event", batched.publish_next_batch_event)],
+                steps=[function("Publish Event and Signals", batched.publish_prepared_batch_event)],
             ),
             function("Complete frozen batch", operations.complete_storyline_batch),
         ],
     )
+
+
+def _canvas_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Agno 3.0.1 omits container IDs; Studio uses them as graph node keys.
+
+    Add presentation identity only. Native types, Agent links and execution stay unchanged.
+    Native hydration ignores these extra container fields, so reapply on publication.
+    """
+
+    def visit(nodes, path):
+        for index, node in enumerate(nodes):
+            position = f"{path}-{index}"
+            if node.get("type") in {"Parallel", "Steps", "Loop", "Condition", "Router"}:
+                if not node.get("step_id"):
+                    node["step_id"] = f"event-container{position}"
+            for key in ("steps", "else_steps", "choices"):
+                if isinstance(node.get(key), list):
+                    visit(node[key], f"{position}-{key}")
+
+    visit(config.get("steps", []), "")
+    return config
 
 
 def _publish_pinned_workflow(
@@ -246,7 +255,7 @@ def _publish_pinned_workflow(
         workflow_id=workflow.id,
     )
     pinned_ids = {str(link.get("child_component_id")) for link in links if link.get("link_kind") == "step_agent"}
-    expected_count = 8 if (workflow.metadata or {}).get("event_extraction_contract_version") == 16 else 4
+    expected_count = 8 if (workflow.metadata or {}).get("event_extraction_contract_version", 0) >= 16 else 4
     if pinned_ids != EVENT_AGENT_IDS or len(links) != expected_count:
         raise ValueError("Event Extraction must pin every direct Agent Step")
     db = get_postgres_db()
@@ -259,7 +268,7 @@ def _publish_pinned_workflow(
     )
     saved = db.upsert_config(
         component_id=workflow.id,
-        config=workflow.to_dict(),
+        config=_canvas_config(workflow.to_dict()),
         links=links,
         stage="published",
         notes=notes,
@@ -340,6 +349,10 @@ def ensure_event_extraction_workflow(registry: Registry) -> int:
                 )
                 if current is None or not isinstance(current.steps, list) or not current.steps:
                     raise ValueError("Event Extraction published Studio version could not be rehydrated")
+                if _canvas_config(deepcopy(config)) != config:
+                    return _publish_pinned_workflow(
+                        current, agent_versions=versions, notes="Restore stable native container IDs for Studio canvas"
+                    )
                 return version
 
             refreshed = Workflow.load(

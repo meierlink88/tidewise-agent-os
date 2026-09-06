@@ -57,7 +57,9 @@ from matching inputs. Each scheduled run claims one bounded Evidence batch and p
 Events through four class-specific Parallel branches using complete batch contexts.
 Semantic Agents remain direct Steps; a class Loop prepares Signals after matching and a
 deterministic publication Loop writes the frozen package. Code gates skip duplicate,
-empty or already-completed work. See docs/design/event-extraction-workflow.md for v16.
+empty or already-completed work. Native containers carry unique presentation IDs for
+Studio; shared preparation and result collection keep the canvas compact. See
+docs/design/event-extraction-workflow.md for v17.
 
 ### Event Identity
 
