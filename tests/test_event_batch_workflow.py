@@ -259,6 +259,54 @@ class BatchWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, RunStatus.completed, result.content)
         self.assertEqual(self.runtime.data_publications, 1)
 
+    async def test_unknown_no_event_is_audited_and_resume_keeps_candidates(self):
+        unknown = "EVD00000000-0000-4000-8000-000000000001"
+
+        def transform(schema, content):
+            if schema is ClassifiedEventDraft:
+                payload = content.model_dump(mode="json")
+                payload["no_event"].append({"evidence_id": unknown, "reason": "no_real_world_action"})
+                return payload
+            return content
+
+        self.response_transform = transform
+        self.enqueue()
+        with patch.object(self.runtime, "retrieve_history", side_effect=RuntimeError("history unavailable")):
+            with self.assertRaisesRegex(RuntimeError, "history unavailable"):
+                await self.run_flow()
+        pending = next((event_artifact_root() / ".pending").iterdir())
+        rejection_path = pending / "batch-v16" / "extract-rejections.json"
+        rejected_before = rejection_path.read_text()
+        self.assertEqual(
+            json.loads(rejected_before)["items"],
+            [{"evidence_id": unknown, "reason": "NO_EVENT_EVIDENCE_OUTSIDE_BATCH"}],
+        )
+        frozen = json.loads((pending / "batch-v16" / "extract-result.json").read_text())
+        self.assertEqual(frozen["no_event"], [])
+        self.assertEqual(len(frozen["candidates"]), 1)
+        self.assertEqual(set(frozen["candidates"][0]["evidence_ids"]), {e.id for e in self.evidence_input})
+        self.release_synthetic_lease()
+        self.calls.clear()
+        result = await self.run_flow()
+        self.assertEqual(result.status, RunStatus.completed, result.content)
+        self.assertEqual(self.runtime.data_publications, 1)
+        completed = event_artifact_root() / "batches" / pending.name
+        self.assertEqual((completed / "batch-v16" / rejection_path.name).read_text(), rejected_before)
+
+    async def test_unknown_candidate_evidence_still_blocks_publication(self):
+        def transform(schema, content):
+            if schema is ClassifiedEventDraft:
+                payload = content.model_dump(mode="json")
+                payload["candidates"][0]["evidence_ids"].append("EVD00000000-0000-4000-8000-000000000001")
+                return payload
+            return content
+
+        self.response_transform = transform
+        self.enqueue()
+        with self.assertRaisesRegex(ValueError, "Extractor referenced Evidence outside the batch"):
+            await self.run_flow()
+        self.assertEqual(self.runtime.data_publications, 0)
+
     async def test_signal_is_published_without_semantic_reviewer(self):
         def transform(schema, content):
             if schema is BatchSignalDecision:

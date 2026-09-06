@@ -155,9 +155,23 @@ async def prepare_batch_identity(step_input: StepInput, run_context: RunContext)
     ctx = run_context
     raw = _response(step_input, ctx, "extract", ClassifiedEventDraft)
     batch = _batch(ctx)
-    ids = [eid for c in raw.candidates for eid in c.evidence_ids] + [e.evidence_id for e in raw.no_event]
-    if not set(ids) <= {e.id for e in batch.evidences}:
+    expected = {e.id for e in batch.evidences}
+    ids = {eid for c in raw.candidates for eid in c.evidence_ids}
+    if not ids <= expected:
         raise ValueError("Extractor referenced Evidence outside the batch")
+    if _read(ctx, "extract-result") is None:
+        _freeze(
+            ctx,
+            "extract-rejections",
+            {
+                "items": [
+                    {"evidence_id": e.evidence_id, "reason": "NO_EVENT_EVIDENCE_OUTSIDE_BATCH"}
+                    for e in raw.no_event
+                    if e.evidence_id not in expected
+                ]
+            },
+        )
+    raw = raw.model_copy(update={"no_event": [e for e in raw.no_event if e.evidence_id in expected]})
     _freeze(ctx, "extract-result", raw.model_dump(mode="json"))
     normalized = _validate_partition(
         batch,

@@ -1,5 +1,14 @@
 # Event Extraction Workflow
 
+## Unknown no-event bookkeeping (#203)
+
+Batch preparation ignores no_event entries whose Evidence ID is outside the input
+batch. It first records their IDs with NO_EVENT_EVIDENCE_OUTSIDE_BATCH in the existing
+batch-v16/extract-rejections.json artifact, then freezes the filtered extraction result.
+Valid candidates and in-batch dispositions are unchanged. Resumes retain the original
+audit; storage errors still stop execution. Candidate Evidence references remain
+strictly batch-scoped. No model retry, topology change or pending-batch cleanup is added.
+
 ## LLM semantic authority (#201)
 
 This section supersedes the semantic gates described in earlier revisions below.
