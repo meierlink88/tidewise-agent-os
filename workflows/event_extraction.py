@@ -5,11 +5,12 @@ from typing import Any
 from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
-from agno.workflow import Loop, Step, Workflow
+from agno.workflow import Loop, Parallel, Step, Steps, Workflow
 from agno.workflow.types import HumanReview, OnError
 from agno.workflow.workflow import derive_step_links
 
 from agents.event_association import load_event_association_agent
+from agents.event_batch import batch_agent
 from agents.event_extractor import load_event_extractor_agent
 from agents.event_identity import load_event_identity_agent
 from agents.event_signal_analyst import load_event_signal_analyst_agent
@@ -25,18 +26,23 @@ from capabilities.event import (
 from capabilities.event import (
     StorylineAgentVersions as EventAgentVersions,
 )
+from capabilities.event.functions import batch as batched
 from capabilities.event.functions import linear
 from capabilities.event.functions import storyline as operations
 from db import get_postgres_db
 
 EVENT_EXTRACTION_WORKFLOW_ID = "event-extraction"
-EVENT_EXTRACTION_CONTRACT_VERSION = 15
+EVENT_EXTRACTION_CONTRACT_VERSION = 16
 EVENT_EXTRACTION_PUBLICATION_POLICY = "native_step_exact_agent_links.v2"
 _AGENT_LINK_BINDINGS = (
-    ("event-extract", EVENT_EXTRACTOR_AGENT_ID, 0),
-    ("event-resolve", EVENT_IDENTITY_AGENT_ID, 1),
-    ("event-associate", EVENT_ASSOCIATION_AGENT_ID, 2),
-    ("event-signal-analyze", EVENT_SIGNAL_ANALYST_AGENT_ID, 3),
+    ("batch-extract", EVENT_EXTRACTOR_AGENT_ID, 0),
+    ("batch-identity", EVENT_IDENTITY_AGENT_ID, 1),
+    ("batch-geo", EVENT_ASSOCIATION_AGENT_ID, 2),
+    ("batch-macro", EVENT_ASSOCIATION_AGENT_ID, 3),
+    ("batch-chain", EVENT_ASSOCIATION_AGENT_ID, 4),
+    ("batch-node", EVENT_ASSOCIATION_AGENT_ID, 5),
+    ("batch-company", EVENT_ASSOCIATION_AGENT_ID, 6),
+    ("batch-signal", EVENT_SIGNAL_ANALYST_AGENT_ID, 7),
 )
 
 
@@ -55,7 +61,7 @@ def _function_step(name: str, step_id: str, executor: Any) -> Step:
     )
 
 
-def _seed_workflow(
+def _seed_legacy_workflow(
     extractor: Agent,
     identity: Agent,
     association: Agent,
@@ -115,7 +121,7 @@ def _seed_workflow(
         db=get_postgres_db(),
         dependencies={},
         metadata={
-            "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
+            "event_extraction_contract_version": 15,
             "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
             "event_agent_versions": pins,
         },
@@ -123,6 +129,94 @@ def _seed_workflow(
             function("Claim one Evidence batch", operations.prepare_storyline_batch),
             semantic("Event Extractor", "event-extract", extractor),
             candidates,
+            function("Complete frozen batch", operations.complete_storyline_batch),
+        ],
+    )
+
+
+def _seed_workflow(extractor, identity, association, signal_analyst, *, agent_versions) -> Workflow:
+    pins = EventAgentVersions.model_validate(agent_versions).as_mapping()
+
+    def function(name, executor):
+        return _function_step(name, executor.__name__, executor)
+
+    def semantic(name, key, agent):
+        return Step(
+            name=name,
+            step_id=key,
+            agent=batch_agent(agent, key),
+            max_retries=0,
+            human_review=_fail_fast_review(),
+            strict_input_validation=True,
+        )
+
+    def branch(name, group, prepare, freeze):
+        return Steps(
+            name=name,
+            steps=[
+                function("Prepare " + name, prepare),
+                semantic(name + " Association", "batch-" + group, association),
+                function("Freeze " + name, freeze),
+            ],
+        )
+
+    return Workflow(
+        id=EVENT_EXTRACTION_WORKFLOW_ID,
+        name="Event Extraction",
+        db=get_postgres_db(),
+        dependencies={},
+        description="Extract and deduplicate a batch; match four classes in Parallel; freeze Signals then publish.",
+        metadata={
+            "event_extraction_contract_version": 16,
+            "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
+            "event_agent_versions": pins,
+        },
+        steps=[
+            function("Claim one Evidence batch", batched.claim_parallel_batch),
+            semantic("Extract and classify Events", "batch-extract", extractor),
+            function("Prepare batch identity", batched.prepare_batch_identity),
+            semantic("Batch Event Identity", "batch-identity", identity),
+            function("Freeze batch identity", batched.freeze_batch_identity),
+            Parallel(
+                *[
+                    branch("Geopolitical", "geo", batched.prepare_geo_matches, batched.freeze_geo_matches),
+                    branch("Macroeconomic", "macro", batched.prepare_macro_matches, batched.freeze_macro_matches),
+                    Steps(
+                        name="Industry",
+                        steps=[
+                            function("Prepare full chain catalog", batched.prepare_chain_matches),
+                            semantic("Batch chain matching", "batch-chain", association),
+                            function("Prepare selected chain nodes", batched.prepare_node_matches),
+                            semantic("Batch node matching", "batch-node", association),
+                            function("Freeze node matches", batched.freeze_node_matches),
+                        ],
+                    ),
+                    branch("Company", "company", batched.prepare_company_matches, batched.freeze_company_matches),
+                ],
+                name="Match four Event classes",
+            ),
+            function("Freeze all associations", batched.freeze_batch_associations),
+            Loop(
+                name="Signals by Event class",
+                max_iterations=4,
+                forward_iteration_output=False,
+                end_condition=batched.batch_signals_complete,
+                human_review=_fail_fast_review(),
+                steps=[
+                    function("Prepare class Signal inputs", batched.prepare_batch_signals),
+                    semantic("Batch direct Signals", "batch-signal", signal_analyst),
+                    function("Freeze class Signals", batched.freeze_batch_signals),
+                ],
+            ),
+            function("Freeze publication package", batched.freeze_publication_package),
+            Loop(
+                name="Publish frozen Events",
+                max_iterations=50,
+                forward_iteration_output=False,
+                end_condition=operations.storyline_candidates_complete,
+                human_review=_fail_fast_review(),
+                steps=[function("Publish next frozen Event", batched.publish_next_batch_event)],
+            ),
             function("Complete frozen batch", operations.complete_storyline_batch),
         ],
     )
@@ -152,8 +246,9 @@ def _publish_pinned_workflow(
         workflow_id=workflow.id,
     )
     pinned_ids = {str(link.get("child_component_id")) for link in links if link.get("link_kind") == "step_agent"}
-    if pinned_ids != EVENT_AGENT_IDS or len(links) != 4:
-        raise ValueError("Event Extraction must pin exactly its four Studio Agents")
+    expected_count = 8 if (workflow.metadata or {}).get("event_extraction_contract_version") == 16 else 4
+    if pinned_ids != EVENT_AGENT_IDS or len(links) != expected_count:
+        raise ValueError("Event Extraction must pin every direct Agent Step")
     db = get_postgres_db()
     db.upsert_component(
         component_id=workflow.id,
@@ -262,7 +357,9 @@ def ensure_event_extraction_workflow(registry: Registry) -> int:
             def replace_agents(nodes):
                 for node in nodes:
                     if isinstance(node, Step) and node.agent is not None:
-                        node.agent = replacements[node.agent.id]
+                        if node.step_id is None:
+                            raise ValueError("batch Step identity is required")
+                        node.agent = batch_agent(replacements[node.agent.id], node.step_id)
                     for attribute in ("steps", "else_steps", "choices"):
                         children = getattr(node, attribute, None)
                         if isinstance(children, list):

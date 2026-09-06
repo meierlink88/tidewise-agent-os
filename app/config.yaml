@@ -78,7 +78,7 @@ manifest:
       - "处理所有尚未提取的 Raw Document"
 
   event-extraction:
-    description: "每次处理一批 Evidence，仅一个 Event Loop；四个语义 Agent 直接配置为 Step，代码负责跳过、校验和发布。"
+    description: "批量提取 Event，四路 Parallel 按类型批量关联；Agent 直接配置为 Step，匹配后识别 Signal，冻结数据包再确定性发布。"
     quick_prompts:
       - "处理所有已发布且尚未提炼 Event 的 Evidence"
 

@@ -1,6 +1,81 @@
 # Event Extraction Workflow
 
-## v15 ownership and topology
+## v16 current: batch semantic matching
+
+Issue #181 replaces per-Event semantic loops with one batch invocation per class.
+Framework reference: [Agno Parallel](https://docs.agno.com/workflows/workflow-patterns/parallel-workflow).
+The installed `agno==3.0.1` constructors and hydration behavior are covered by native
+Workflow execution and storage roundtrip tests; no package/dependency changes are needed.
+
+```text
+Claim one Evidence batch
+Event Extractor Agent: all Events + primary classification
+Prepare identity → Event Identity Agent → freeze identity
+Parallel
+  Prepare all geopolitical Events + full catalog → Association Agent → freeze
+  Prepare all macro Events + full catalog → Association Agent → freeze
+  Prepare all industrial Events + full chains → Association Agent
+    → prepare selected chains' nodes → Association Agent → freeze
+  Company exact-name/alias + vector recall → batch Association Agent → freeze
+Freeze all associations (publication barrier)
+Signal class Loop (at most four): prepare → Signal Agent → freeze
+Freeze complete publication package
+Publication Loop (no LLM): publish one frozen Event + Signals → finish
+Complete batch
+```
+
+Agents remain native direct Steps; Parallel and both Loops are registered native
+primitives. Functions own data preparation, empty/checkpoint skips, deterministic
+validation and side effects. No Condition nodes or internal Agent pagination loops.
+The scheduler, not an outer Loop, owns the next batch. Extractor freezes one of
+GEOPOLITICAL, MACRO_ECONOMIC, INDUSTRY_CHAIN, COMPANY for every candidate.
+
+Every association invocation receives all Events of that class and a shared full
+catalog. Chain-node inputs include per-Event allowed UUIDs; another Event's selected
+chain cannot lend its nodes to this Event. Company recall uses exact name/alias plus
+bounded BM25/vector candidates (eight search results, maximum four concurrent Event
+queries), never a complete Company scan. The model disambiguates candidates in one
+batch. No matched subject means a terminal local no-publish disposition. A matched
+chain without a node remains publishable, but IndustryChain is not a Signal anchor.
+
+Signals run after the association barrier. Inputs preserve selected eligible anchors
+plus cross-layer exact name/alias matches to each Event's explicit actors/objects.
+These extra candidates do not automatically create Event MENTIONS. Shared candidate
+availability is not shared Evidence. All eligible Variables are supplied together;
+existing per-Event Signal proposal/type/time contracts remain unchanged. Compilation
+retains only proposed endpoints and applies existing deterministic checks before any
+write. No new Signal scope field or graph attribute is introduced.
+
+Eight exact native step-agent links reuse the four existing Agent IDs. Code-owned
+`agents/event_batch.py` profiles provide batch output schemas and preloaded Skill
+guidance on independent Agent/model copies, preserving pinned Studio instructions
+and model settings. The batch contract overrides legacy single-Event/page behavior.
+The hydration adapter binds both the Step's Agent and its active executor. Each
+non-skipped Step invokes its Agent once, without model tools or semantic retries.
+Inputs are explicit JSON text, with a one-million-character safety cap: overflow is
+an explicit error, never silent truncation or hidden pagination. Provider context
+limits still apply; full-catalog acceptance must be measured, not inferred from this cap.
+
+Development acceptance on 2026-09-06 used the real 708-chain catalog with one synthetic
+Event, without publication: 302,797 input characters / 464,823 UTF-8 bytes, 145,385
+provider-reported input tokens, about 18 seconds total with GPT low. This proves one
+full-catalog request is accepted, not broad matching quality or a batch latency guarantee.
+
+Parallel branches freeze separate `batch-v16/<stage>-input.json` and `-result.json`
+files under the existing owned batch lease. They never concurrently update the
+shared journal/cursor. The barrier joins completed branch results sequentially.
+A failed branch prevents all publication; other completed branch results survive.
+Resume reuses frozen input/decisions. Publication keeps existing deterministic IDs
+and Data/graph/Signal receipts; it is not a distributed transaction. Failures before
+a sequential Function regains control retain lease fencing until expiry.
+
+Legacy pending drafts/journals cannot enter v16 without explicit operator
+reconciliation. This change does not migrate, delete or replay them, enable schedules,
+or process real Evidence automatically. After human merge, inspect pending work before
+local startup publishes v16. Historical functions/topology remain registered for old
+version retrieval. The following v15 section is historical, not the current topology.
+
+## v15 historical ownership and topology
 
 Issue #171 simplifies the #165 four-Agent workflow to one batch per invocation and one Event Loop.
 Agents recommend structured meanings only. Functions own retrieval, IDs, validation,

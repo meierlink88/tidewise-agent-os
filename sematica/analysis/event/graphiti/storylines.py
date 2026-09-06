@@ -2,6 +2,9 @@
 
 from typing import Any
 
+from graphiti_core.search.search_config import NodeReranker, NodeSearchConfig, NodeSearchMethod, SearchConfig
+from graphiti_core.search.search_filters import SearchFilters
+
 from sematica.projection.runtime import GRAPHITI_GROUP_ID
 
 PROFILE_FIELDS = {
@@ -32,7 +35,44 @@ PROFILE_FIELDS = {
 
 class GraphitiStorylineCatalog:
     def __init__(self, graphiti: Any):
+        self._graphiti = graphiti
         self._driver = graphiti.driver
+
+    async def companies(self, terms: list[str]) -> list[dict[str, Any]]:
+        """Exact names/aliases plus bounded lexical/vector recall; never an identity decision."""
+        exact = await self.profiles(["Company"], terms=terms)
+        by_id = {p["uuid"]: p for p in exact}
+        query = " ".join(sorted({term.strip() for term in terms if term.strip()}))
+        if query:
+            result = await self._graphiti.search_(
+                query,
+                config=SearchConfig(
+                    node_config=NodeSearchConfig(
+                        search_methods=[NodeSearchMethod.bm25, NodeSearchMethod.cosine_similarity],
+                        reranker=NodeReranker.rrf,
+                    ),
+                    limit=8,
+                ),
+                group_ids=[GRAPHITI_GROUP_ID],
+                search_filter=SearchFilters(node_labels=["Company"]),
+            )
+            for node in result.nodes:
+                if node.group_id != GRAPHITI_GROUP_ID or "Company" not in node.labels:
+                    continue
+                attrs = node.attributes or {}
+                if not attrs.get("data_object_id"):
+                    continue
+                by_id.setdefault(
+                    node.uuid,
+                    {
+                        "uuid": node.uuid,
+                        "business_id": attrs["data_object_id"],
+                        "name": node.name,
+                        "entity_type": "Company",
+                        "profile": {key: attrs[key] for key in PROFILE_FIELDS["Company"] if attrs.get(key) is not None},
+                    },
+                )
+        return [by_id[key] for key in sorted(by_id)]
 
     async def profiles(
         self, labels: list[str], *, terms: list[str] | None = None, chain_uuids: list[str] | None = None

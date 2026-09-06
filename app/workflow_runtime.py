@@ -8,6 +8,7 @@ from agno.run.agent import RunCancelledEvent, RunErrorEvent
 from agno.workflow import Step, StepInput, StepOutput, Workflow
 
 from agents.event_association import bind_event_skills
+from app.event_batch_runtime import bind_batch_step
 from app.event_step_runtime import bind_event_step
 from capabilities.collection.functions import ArticleFailureRecordingError, article_review_gate, fail_current_article
 from capabilities.event import STORYLINE_AGENT_IDS
@@ -117,7 +118,9 @@ def _bind_nested_review(workflow: Workflow, node: Any) -> None:
         node.agent.workflow_id = workflow.id
         node.agent.db = None
         bind_event_skills(node.agent)
-        if (workflow.metadata or {}).get("event_extraction_contract_version", 0) >= 15:
+        if (workflow.metadata or {}).get("event_extraction_contract_version", 0) >= 16:
+            bind_batch_step(node)
+        elif (workflow.metadata or {}).get("event_extraction_contract_version", 0) >= 15:
             bind_event_step(node)
     for attribute in ("steps", "else_steps", "choices"):
         children = getattr(node, attribute, None)

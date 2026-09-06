@@ -56,6 +56,8 @@ class EventWorkflowRuntime(Protocol):
 
     async def storyline_variables(self) -> list[VariableCandidate]: ...
 
+    async def company_profiles(self, terms: list[str]) -> list[dict[str, Any]]: ...
+
     async def retrieve_signal_candidates(
         self,
         event: EventAnalysisInput,

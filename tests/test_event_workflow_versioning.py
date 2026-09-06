@@ -7,8 +7,10 @@ from agno.registry import Registry
 from agno.workflow import Workflow
 
 from capabilities.event.functions import event_extraction_complete, event_extraction_required
+from capabilities.event.functions.batch import BATCH_FUNCTIONS
 from capabilities.event.functions.linear import LINEAR_EVENT_FUNCTIONS
 from capabilities.event.functions.storyline import STORYLINE_FUNCTIONS
+from tests import test_event_batch_workflow as batch_fixtures
 from tests import test_event_storyline_workflow as fixtures
 from workflows.event_extraction import (
     EVENT_EXTRACTION_CONTRACT_VERSION,
@@ -19,7 +21,7 @@ from workflows.event_extraction import (
 
 class EventWorkflowVersionTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.harness = fixtures.StorylineWorkflowTest(methodName="runTest")
+        self.harness = batch_fixtures.BatchWorkflowTest(methodName="runTest")
         self.harness.setUp()
         self.database = MagicMock()
         self.database.upsert_config.return_value = {"version": 30}
@@ -51,9 +53,9 @@ class EventWorkflowVersionTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(ensure_event_extraction_workflow(MagicMock()), 30)
         self.assertEqual(self.database.upsert_config.call_count, 1)
 
-    def test_changed_pins_publish_four_exact_links(self):
+    def test_changed_pins_publish_eight_exact_links(self):
         self.publish()
-        self.flow.steps[2].max_iterations = 7
+        self.flow.steps[7].max_iterations = 7
         newer = {**fixtures.PINS, "event-association": 3}
         with (
             patch("workflows.event_extraction.get_postgres_db", return_value=self.database),
@@ -63,7 +65,8 @@ class EventWorkflowVersionTest(unittest.IsolatedAsyncioTestCase):
             ensure_event_extraction_workflow(MagicMock())
         config = self.database.upsert_config.call_args.kwargs
         self.assertEqual(config["config"]["metadata"]["event_agent_versions"], newer)
-        self.assertEqual(config["config"]["steps"][2]["max_iterations"], 7)
+        self.assertEqual(config["config"]["steps"][7]["max_iterations"], 7)
+        self.assertEqual(len(config["links"]), 8)
         self.assertEqual({link["child_component_id"]: link["child_version"] for link in config["links"]}, newer)
 
     def test_contract_upgrade_replaces_legacy_topology(self):
@@ -86,6 +89,7 @@ class EventWorkflowVersionTest(unittest.IsolatedAsyncioTestCase):
             functions=[
                 *LINEAR_EVENT_FUNCTIONS,
                 *STORYLINE_FUNCTIONS,
+                *BATCH_FUNCTIONS,
                 event_extraction_complete,
                 event_extraction_required,
             ]
@@ -102,7 +106,7 @@ class EventWorkflowVersionTest(unittest.IsolatedAsyncioTestCase):
             )
         self.assertIsNotNone(hydrated)
         self.assertEqual(dict(loads), fixtures.PINS)
-        self.assertEqual(len(loads), 4)
+        self.assertEqual(len(loads), 8)
         self.assertEqual(hydrated.to_dict()["steps"], publication["config"]["steps"])
         hydrated.db = None
         self.harness.enqueue()
