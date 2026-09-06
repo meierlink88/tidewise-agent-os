@@ -7,17 +7,22 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from agno.db.base import SessionType
+from agno.db.sqlite import SqliteDb
+from agno.models.response import ModelResponse
 from agno.run import RunContext
 from agno.run.agent import RunOutput
 from agno.run.base import RunStatus
-from agno.workflow import StepInput, StepOutput
+from agno.workflow import Step, StepInput, StepOutput
 
 from agents.title_curator import build_title_curator_agent
+from app.workflow_runtime import install_raw_collection_session_compatibility
 from capabilities.collection.functions import review
 from capabilities.collection.internal import article_queue as queue
 from capabilities.collection.internal.buffer import write_title_curation, write_tool_batch
 from capabilities.collection.internal.models import Candidate, TitleCurationDecision, TitleCurationDraft
 from capabilities.evidence import ArticleReviewDraft, ArticleReviewRequest
+from capabilities.evidence.functions import publish_evidence, transfer_legacy_raw_documents
 from capabilities.evidence.internal.storage import checkpoint_path
 from tests import test_evidence_extraction as fixtures
 from workflows.raw_collection import _seed_workflow
@@ -275,6 +280,97 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first["transferred_staged_articles"], 1)
         self.assertEqual(second["transferred_staged_articles"], 0)
         self.assertEqual(queue.queue_counts()["excluded"], 1)
+
+    def test_legacy_cursor_does_not_advance_before_durable_enqueue(self) -> None:
+        helper = fixtures.EvidenceExtractionTest()
+        helper._publish_raw_fixture()
+        with self.assertRaisesRegex(RuntimeError, "disk unavailable"):
+            transfer_legacy_raw_documents(lambda prepared: (_ for _ in ()).throw(RuntimeError("disk unavailable")))
+        self.assertFalse(checkpoint_path().exists())
+        self.assertEqual(transfer_legacy_raw_documents(queue.enqueue_legacy_document), 1)
+        self.assertEqual(transfer_legacy_raw_documents(queue.enqueue_legacy_document), 0)
+        self.assertEqual(queue.queue_counts()["pending"], 1)
+
+    async def test_reacquired_published_article_retains_original_object_and_skips_model(self) -> None:
+        helper = fixtures.EvidenceExtractionTest()
+        helper._publish_raw_fixture()
+        prepared = helper._prepared()
+        publication = helper._validated(prepared)
+        raw_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        with patch(
+            "capabilities.evidence.functions.extraction.post_publication",
+            side_effect=[
+                {"id": raw_id},
+                {"raw_evidence_id": raw_id, "ids": [evidence_id], "items": [{"input_index": 0, "id": evidence_id}]},
+            ],
+        ):
+            await publish_evidence(StepInput(previous_step_content=publication))
+        key, _ = queue.enqueue_candidate(self.candidate(prepared.source_url), "reacquired")
+        self.assertNotEqual(queue.read_prepared(key).document_sha256, prepared.document_sha256)
+        result = await review.prepare_next_article(StepInput(), self.context)
+        self.assertFalse(review.article_needs_review(StepInput(previous_step_content=result.content)))
+        with (
+            patch.object(queue, "configured_raw_document_store") as store,
+            patch("capabilities.evidence.functions.extraction.post_publication") as post,
+        ):
+            await review.publish_reviewed_article(StepInput(), self.context)
+        post.assert_not_called()
+        uploaded = store.return_value.publish_markdown.call_args.kwargs
+        self.assertEqual(uploaded["object_key"], prepared.document_path)
+        self.assertEqual(uploaded["sha256"], prepared.document_sha256)
+        self.assertEqual(queue.read_state(key)["status"], "completed")
+
+    async def test_workflow_owns_session_even_when_pinned_agent_restores_db(self) -> None:
+        key, _ = queue.enqueue_candidate(self.candidate(), "session-test")
+        db = SqliteDb(db_file=str(queue.queue_root() / "session-test.db"))
+        agent = build_title_curator_agent()
+        agent.db = db  # Simulate Agno's pinned component rehydration.
+        install_raw_collection_session_compatibility()
+        self.assertIsNone(agent.workflow_id)  # Standalone REST calls keep persistence.
+        workflow = _seed_workflow(agent)
+        workflow.db = db
+        assert isinstance(workflow.steps, list)
+        workflow.steps[0] = Step(name="existing-queue", executor=lambda step_input: StepOutput(content={}))
+        response = ArticleReviewDraft(article_key=key, is_relevant=False, extraction=None)
+        with patch.object(
+            agent.model,
+            "aresponse",
+            new=AsyncMock(
+                return_value=ModelResponse(
+                    content=response.model_dump_json(),
+                )
+            ),
+        ):
+            result = await workflow.arun(input="session check", run_id="owner-test", session_id="owner-test")
+        self.assertEqual(result.status, RunStatus.completed)
+        self.assertIs(agent.db, db)
+        self.assertEqual(agent.workflow_id, "raw-collection")
+        session = db.get_session("owner-test", session_type=SessionType.WORKFLOW)
+        assert session is not None and not isinstance(session, dict)
+        self.assertEqual(session.workflow_id, "raw-collection")
+
+    async def test_publication_condition_fails_workflow_instead_of_silently_continuing(self) -> None:
+        key, _ = queue.enqueue_candidate(self.candidate(), "failure-test")
+        agent = build_title_curator_agent()
+        agent.db = None
+        workflow = _seed_workflow(agent)
+        workflow.db = None
+        assert isinstance(workflow.steps, list)
+        workflow.steps[0] = Step(name="existing-queue", executor=lambda step_input: StepOutput(content={}))
+        draft = ArticleReviewDraft(
+            article_key=key, is_relevant=True, extraction=fixtures.EvidenceExtractionTest._draft()
+        )
+        with (
+            patch.object(agent, "arun", new=AsyncMock(return_value=RunOutput(content=draft))) as analyze,
+            patch.object(review, "upload_article"),
+            patch("capabilities.evidence.functions.extraction.post_publication", side_effect=RuntimeError("offline")),
+            self.assertRaisesRegex(RuntimeError, "offline"),
+        ):
+            await workflow.arun(input="fail closed", run_id="failure-test", session_id="failure-test")
+        self.assertEqual(analyze.call_count, 1)
+        self.assertEqual(queue.read_state(key)["status"], "pending")
+        self.assertTrue((queue.item_root(key) / "publication.json").exists())
 
 
 if __name__ == "__main__":

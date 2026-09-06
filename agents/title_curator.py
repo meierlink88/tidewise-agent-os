@@ -15,7 +15,7 @@ from capabilities.evidence import ArticleReviewDraft
 from db import get_postgres_db
 
 TITLE_CURATOR_AGENT_ID = "title-curator"
-TITLE_CURATOR_CONTRACT_VERSION = 9
+TITLE_CURATOR_CONTRACT_VERSION = 10
 TITLE_CURATOR_AGENT_NAME = "Raw Evidence Reviewer"
 TITLE_CURATOR_SEED_SHA256_KEY = "article_review_seed_sha256"
 _SEED_PROMPT = Path(__file__).with_name("title_curator.seed.md")

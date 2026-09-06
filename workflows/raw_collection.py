@@ -22,7 +22,7 @@ from capabilities.collection.functions import (
 from db import get_postgres_db
 
 RAW_COLLECTION_WORKFLOW_ID = "raw-collection"
-RAW_COLLECTION_CONTRACT_VERSION = 19
+RAW_COLLECTION_CONTRACT_VERSION = 20
 RETIRED_COLLECTION_QUERY_PLANNER_AGENT_ID = "raw-collector"
 
 
@@ -97,6 +97,7 @@ def _seed_workflow(curator: Agent, *, dependencies: dict[str, object] | None = N
                     Condition(
                         name="review-required",
                         evaluator=article_needs_review,
+                        human_review=_fail_fast_review(),
                         steps=[
                             Step(
                                 name="review-and-extract",
@@ -122,6 +123,7 @@ def _seed_workflow(curator: Agent, *, dependencies: dict[str, object] | None = N
                     Condition(
                         name="publish-eligible-article",
                         evaluator=article_has_evidence,
+                        human_review=_fail_fast_review(),
                         steps=[
                             Step(
                                 name="publish-article-and-evidence",

@@ -13,6 +13,7 @@ from agents.investment_reviewer import INVESTMENT_REVIEWER_AGENT_ID, load_invest
 from agents.tidewise_assistant import tidewise_assistant
 from agents.title_curator import TITLE_CURATOR_AGENT_ID, filter_model, load_title_curator_agent
 from app.settings import default_model, sol_medium_model
+from app.workflow_runtime import install_raw_collection_session_compatibility
 from capabilities.collection import (
     CollectionRequest,
     PreparedArtifactSet,
@@ -147,6 +148,8 @@ class TidewiseRegistry(Registry):
             return load_investment_reviewer_agent(self)
         return None
 
+
+install_raw_collection_session_compatibility()
 
 registry = TidewiseRegistry(
     name="Tidewise AgentOS Registry",
