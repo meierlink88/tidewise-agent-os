@@ -16,6 +16,23 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class UatIngressContractTest(TestCase):
+    def test_gpt_agent_model_probe_matches_agno_rest_shape(self) -> None:
+        observed = {
+            "name": "OpenAIResponses",
+            "model": "gpt-5.6-sol",
+            "provider": "OpenAI",
+        }
+
+        self.assertTrue(smoke_uat._is_expected_agent_model(observed))
+        for field, value in (
+            ("name", "OpenAIChat"),
+            ("model", "deepseek-v4-flash"),
+            ("provider", "DeepSeek"),
+        ):
+            with self.subTest(field=field):
+                self.assertFalse(smoke_uat._is_expected_agent_model({**observed, field: value}))
+        self.assertFalse(smoke_uat._is_expected_agent_model(None))
+
     def test_failure_diagnostics_redact_neo4j_auth_values(self) -> None:
         diagnostics = REPOSITORY_ROOT / "infra/uat/collect-diagnostics.sh"
         leaked_value = "neo4j/unsafe-example-value"
