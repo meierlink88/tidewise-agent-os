@@ -18,8 +18,8 @@ from app.settings import default_model, event_model, is_event_model
 
 
 class EventModelsTest(unittest.IsolatedAsyncioTestCase):
-    def test_all_event_agents_use_deepseek_thinking_low(self):
-        with patch.dict("os.environ", {"DEEPSEEK_USE_THINKING": "false"}):
+    def test_all_event_agents_disable_thinking_independent_of_shared_default(self):
+        with patch.dict("os.environ", {"DEEPSEEK_USE_THINKING": "true"}):
             for build in (
                 build_event_extractor_agent,
                 build_event_identity_agent,
@@ -30,9 +30,9 @@ class EventModelsTest(unittest.IsolatedAsyncioTestCase):
                     model = build().model
                     self.assertIsInstance(model, DeepSeek)
                     self.assertTrue(is_event_model(model))
-                    self.assertTrue(model.use_thinking)
-                    self.assertEqual(model.reasoning_effort, "low")
-            self.assertFalse(default_model().use_thinking)
+                    self.assertFalse(model.use_thinking)
+                    self.assertIsNone(model.reasoning_effort)
+            self.assertTrue(default_model().use_thinking)
 
     def test_batch_profile_survives_registry_model_rehydration(self):
         model = Agent.from_dict(Agent(model=event_model()).to_dict(), registry=registry).model
@@ -43,16 +43,24 @@ class EventModelsTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(runtime_model.max_retries, 0)
         self.assertEqual(runtime_model.timeout, 180)
         params = runtime_model.get_request_params(response_format={"type": "json_object"})
-        self.assertEqual(params["extra_body"]["thinking"], {"type": "enabled"})
-        self.assertEqual(params["reasoning_effort"], "low")
+        self.assertEqual(params["extra_body"]["thinking"], {"type": "disabled"})
+        self.assertNotIn("reasoning_effort", params)
         self.assertEqual(params["response_format"], {"type": "json_object"})
 
-    def test_old_non_thinking_and_other_efforts_are_migrated(self):
+    def test_old_thinking_profile_stays_loadable_but_requires_migration(self):
         self.assertFalse(is_event_model(default_model()))
-        for effort in (None, "high", "max"):
+        for effort in ("low", "high", "max"):
             model = event_model()
             model.reasoning_effort = effort
             self.assertFalse(is_event_model(model))
+        old = event_model()
+        old.name = "EventDeepSeek-low"
+        old.use_thinking = True
+        old.reasoning_effort = "low"
+        restored = Agent.from_dict(Agent(model=old).to_dict(), registry=registry).model
+        self.assertTrue(restored.use_thinking)
+        self.assertEqual(restored.reasoning_effort, "low")
+        self.assertFalse(is_event_model(restored))
 
     async def test_transport_timeout_is_not_retried_by_sdk(self):
         attempts = []

@@ -24,6 +24,7 @@ from capabilities.event.internal.storage import (
     _load_frozen_batch,
     _load_lease,
     _runtime_batch,
+    event_artifact_root,
     release_event_batch_lease,
 )
 from sematica.analysis.event.graphiti.storylines import GraphitiStorylineCatalog
@@ -101,6 +102,8 @@ class BatchWorkflowTest(unittest.IsolatedAsyncioTestCase):
             )
         else:
             raise AssertionError(schema)
+        if self.response_transform:
+            content = self.response_transform(schema, content)
         return RunOutput(agent_id=agent.id, content=content, status=RunStatus.completed)
 
     def setUp(self):
@@ -115,6 +118,7 @@ class BatchWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.empty_first_match = False
         self.match_limit = None
         self.draft_override = None
+        self.response_transform = None
         self.evidence_input = self.fixture.evidences()
 
     def tearDown(self):
@@ -170,8 +174,105 @@ class BatchWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, RunStatus.completed, result.content)
         self.assertEqual(self.runtime.data_publications, 0)
 
-    async def test_empty_match_without_reason_does_not_block_valid_event(self):
-        self.empty_first_match = True
+    async def test_invalid_identity_is_ignored_not_a_batch_failure(self):
+        def transform(schema, content):
+            if schema is BatchIdentityDecision:
+                content.events[0].decision = content.events[0].decision.model_copy(
+                    update={"decision": "SAME_EVENT", "matched_event_ids": ["invented"]}
+                )
+            return content
+
+        self.response_transform = transform
+        self.prepare_two_events()
+        self.enqueue()
+        result = await self.run_flow()
+        self.assertEqual(result.status, RunStatus.completed, result.content)
+        self.assertEqual(self.runtime.data_publications, 1)
+
+    async def test_invalid_duplicate_reference_does_not_block_valid_event(self):
+        def transform(schema, content):
+            if schema is BatchIdentityDecision:
+                content.events[0].duplicate_of = "invented"
+            return content
+
+        self.response_transform = transform
+        self.prepare_two_events()
+        self.enqueue()
+        result = await self.run_flow()
+        self.assertEqual(result.status, RunStatus.completed, result.content)
+        self.assertEqual(self.runtime.data_publications, 1)
+
+    async def test_invalid_and_duplicate_signals_do_not_block_valid_signal(self):
+        draft = self.fixture.signal_draft()
+
+        def transform(schema, content):
+            if schema is BatchSignalDecision:
+                item = content.events[0]
+                content.events[0] = item.model_copy(
+                    update={
+                        "no_signal_reason": None,
+                        "proposals": [
+                            draft.model_copy(update={"anchor_uuid": "invented"}),
+                            draft.model_copy(update={"variable_uuid": "invented"}),
+                            draft,
+                            draft,
+                        ],
+                    }
+                )
+            return content
+
+        self.response_transform = transform
+        self.enqueue()
+        # Fail after normalization, then prove recovery retains both diagnostics and good signals.
+        with patch.object(functions.legacy, "freeze_storyline_signal_page", side_effect=RuntimeError("compile failed")):
+            with self.assertRaisesRegex(RuntimeError, "compile failed"):
+                await self.run_flow()
+        pending = next((event_artifact_root() / ".pending").iterdir())
+        rejection_path = pending / "batch-v16" / "signal-chain-rejections.json"
+        rejected_before = rejection_path.read_text()
+        self.assertEqual(len(json.loads(rejected_before)["items"]), 3)
+        self.release_synthetic_lease()
+        self.calls.clear()
+        result = await self.run_flow()
+        self.assertEqual(result.status, RunStatus.completed, result.content)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.runtime.data_publications, 1)
+        self.assertEqual(self.runtime.signal_projections, 1)
+        completed = event_artifact_root() / "batches" / pending.name
+        self.assertEqual((completed / "batch-v16" / rejection_path.name).read_text(), rejected_before)
+
+    async def test_review_rejected_signal_does_not_block_event(self):
+        def transform(schema, content):
+            if schema is BatchSignalDecision:
+                content.events[0] = content.events[0].model_copy(
+                    update={
+                        "no_signal_reason": None,
+                        "proposals": [self.fixture.signal_draft()],
+                    }
+                )
+            return content
+
+        self.response_transform = transform
+        self.enqueue()
+        with patch.object(functions.ControlledSignalReviewer, "review_candidate", return_value=False):
+            result = await self.run_flow()
+        self.assertEqual(result.status, RunStatus.completed, result.content)
+        self.assertEqual(self.runtime.data_publications, 1)
+        self.assertEqual(self.runtime.signal_projections, 0)
+
+    async def test_invalid_match_does_not_block_valid_matches(self):
+        def transform(schema, content):
+            if schema is BatchAssociationDecision:
+                content.events[0].matches.append(content.events[0].matches[0].model_copy(update={"uuid": "invented"}))
+            return content
+
+        self.response_transform = transform
+        self.enqueue()
+        result = await self.run_flow()
+        self.assertEqual(result.status, RunStatus.completed, result.content)
+        self.assertEqual(self.runtime.data_publications, 1)
+
+    def prepare_two_events(self):
         self.evidence_input = []
         self.draft_override = {"candidates": [], "no_event": []}
         for label in ("first", "second"):
@@ -187,6 +288,10 @@ class BatchWorkflowTest(unittest.IsolatedAsyncioTestCase):
                 "event_class": "INDUSTRY_CHAIN",
             }
             self.draft_override["candidates"].append(candidate)
+
+    async def test_empty_match_without_reason_does_not_block_valid_event(self):
+        self.empty_first_match = True
+        self.prepare_two_events()
         self.enqueue()
         result = await self.run_flow()
         self.assertEqual(result.status, RunStatus.completed, result.content)
@@ -291,7 +396,7 @@ class BatchBoundaryTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "exactly once"):
             functions._coverage(response.events, ["one", "two"])
 
-    def test_node_from_other_events_chain_is_rejected(self):
+    def test_node_from_other_events_chain_is_omitted_and_recorded(self):
         response = BatchAssociationDecision(
             events=[
                 {
@@ -308,9 +413,13 @@ class BatchBoundaryTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(functions, "_required", return_value=request),
             patch.object(functions, "_response", return_value=response),
+            patch.object(functions, "_read", return_value=None),
+            patch.object(functions, "_freeze") as freeze,
         ):
-            with self.assertRaisesRegex(ValueError, "outside this Event"):
-                functions._freeze_match(MagicMock(), MagicMock(), "match-node")
+            functions._freeze_match(MagicMock(), MagicMock(), "match-node")
+        saved = {call.args[1]: call.args[2] for call in freeze.call_args_list}
+        self.assertEqual(saved["match-node-result"]["events"][0]["matches"], [])
+        self.assertEqual(saved["match-node-rejections"]["items"][0]["reason"], "MATCH_OUTSIDE_EVENT_CANDIDATES")
 
     async def test_company_recall_combines_exact_and_vector_without_unowned_nodes(self):
         from types import SimpleNamespace

@@ -1,5 +1,38 @@
 # Event Extraction Workflow
 
+## Non-thinking and item-local model discrepancies (#199)
+
+New versions of the four Event Agents use `EventDeepSeek-none`: explicit
+`use_thinking=False`, no reasoning effort, regardless of the shared environment flag.
+JSON mode, 32768-token output ceiling and 180-second/no-retry transport remain unchanged.
+The Registry still reconstructs historical `EventDeepSeek-low` pins with thinking enabled;
+new-version migration must not silently change an old batch's model settings.
+
+The batch LLM boundary ignores extra fields as before, deduplicates association UUIDs,
+normalizes blank unused explanations, and supplies a technical explanation for explicitly
+empty Signal results. Missing lists, invalid required data, ambiguous/missing candidate keys
+and Evidence partition failures remain errors, not inferred successful processing.
+
+Batch identity now reuses the existing deterministic identity resolver: invalid historical
+references yield an IGNORED candidate unless an exact authoritative occurrence resolves it.
+Invalid batch duplicate references also yield IGNORED with NONCOMPLIANT_IDENTITY_OUTPUT;
+they do not merge Evidence or manufacture NEW_EVENT. Other candidates continue.
+Out-of-scope association matches are omitted. Invalid Signal endpoints, repeated pairs and
+deterministically rejected proposals are omitted; valid proposals and matched Events continue.
+Neither relaxed parsing nor low confidence overrides identity, endpoint/type or temporal safety.
+The remaining Signal compilation and formal graph/Data contracts are unchanged.
+
+Match/Signal omissions are retained in `batch-v16/*-rejections.json` with candidate key,
+endpoint IDs and a technical reason. Normalized results and existing journals retain ordinary
+empty-result explanations. Rejections are written before results; resumed compilation reuses
+the result and preserves its original rejection audit. Storage/provider failures still stop;
+there is no catch-all fallback, extra LLM retry or Workflow topology change.
+
+Verification uses synthetic native workflow runs and model wire tests. Real workflow runs,
+Schedule enablement and old-batch reconciliation are operator actions. This change does not
+clear pending data. Rollback restores the previous boundary/profile; existing published objects
+and receipts are not removed, and existing cached batch results are not relabelled or regenerated.
+
 ## Event thinking profile (#197)
 
 Event Extractor, Identity, Association and Signal Analyst now use the fixed
