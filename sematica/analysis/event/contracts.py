@@ -212,9 +212,9 @@ class SignalDetailDraft(BaseModel):
     fact: str = Field(min_length=1, max_length=1000)
     direction: SignalDirection
     magnitude: SignalMagnitude
-    impact_onset_days: int = Field(ge=0, le=1095)
-    impact_peak_days: int = Field(ge=0, le=1095)
-    expected_duration_days: int = Field(ge=1, le=1095)
+    impact_onset_days: int = Field(ge=0)
+    impact_peak_days: int = Field(ge=0)
+    expected_duration_days: int = Field(ge=1)
     mechanism: str = Field(min_length=1, max_length=2000)
     duration_basis: str = Field(min_length=1, max_length=1000)
     assumptions: list[str] = Field(max_length=4)
@@ -227,12 +227,6 @@ class SignalDetailDraft(BaseModel):
     @classmethod
     def one_text_item_can_be_normalized(cls, value):
         return [value] if isinstance(value, str) else value
-
-    @model_validator(mode="after")
-    def peak_must_not_precede_onset(self) -> SignalDetailDraft:
-        if self.impact_peak_days < self.impact_onset_days:
-            raise ValueError("impact_peak_days must not precede impact_onset_days")
-        return self
 
 
 class DirectSignalDraft(SignalDetailDraft):

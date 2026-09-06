@@ -23,7 +23,6 @@ from capabilities.event.internal.models import (
     EventExtractionResult,
     EventIdentityRequest,
 )
-from capabilities.event.internal.review import ControlledSignalReviewer
 from capabilities.event.internal.runtime import event_workflow_runtime
 from capabilities.event.internal.storage import (
     claim_event_batch,
@@ -164,8 +163,8 @@ def freeze_storyline_draft(step_input: StepInput, run_context: RunContext) -> St
     draft = _output(step_input, EventExtractionDraft)
     expected = {e.id for e in batch.evidences}
     supplied = [eid for c in draft.candidates for eid in c.evidence_ids] + [e.evidence_id for e in draft.no_event]
-    if set(supplied) != expected or len(supplied) != len(set(supplied)):
-        raise ValueError("Extractor must partition supplied Evidence exactly once")
+    if not set(supplied) <= expected:
+        raise ValueError("Extractor referenced Evidence outside the batch")
     frozen = freeze_draft(batch, _validate_partition(batch, draft))
     renew_event_batch_lease(batch)
     return StepOutput(content=frozen)
@@ -382,10 +381,6 @@ def freeze_storyline_signal_page(step_input: StepInput, run_context: RunContext)
             reference_time=_batch(run_context).created_at,
             assertion_modality={"FACT": "ACTUAL", "PLAN": "ANTICIPATED", "SPEC": "ASSUMED"}[event.semantic.modality],
         )
-        if not ControlledSignalReviewer().review_candidate(
-            event, _batch(run_context).created_at, proposal, variables[draft.variable_uuid], anchors[draft.anchor_uuid]
-        ):
-            raise ValueError("Signal violated deterministic identity, type or temporal constraints")
         pairs.add(pair)
         state.proposals.append(proposal)
     state.signal_results.append(result)

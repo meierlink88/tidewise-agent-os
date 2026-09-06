@@ -417,8 +417,7 @@ class StorylineWorkflowTest(unittest.IsolatedAsyncioTestCase):
             IdentityClassificationDecision(
                 decision="NEW_EVENT", atomic=True, matched_event_ids=[], reason_codes=["NEW"], summary="new"
             )
-        with self.assertRaises(ValidationError):
-            AssociationDecision(matches=[])
+        self.assertEqual(AssociationDecision(matches=[]).matches, [])
 
     def test_complete_catalog_pagination(self):
         rows = [

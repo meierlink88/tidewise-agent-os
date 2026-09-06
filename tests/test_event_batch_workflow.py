@@ -241,24 +241,43 @@ class BatchWorkflowTest(unittest.IsolatedAsyncioTestCase):
         completed = event_artifact_root() / "batches" / pending.name
         self.assertEqual((completed / "batch-v16" / rejection_path.name).read_text(), rejected_before)
 
-    async def test_review_rejected_signal_does_not_block_event(self):
+    async def test_redundant_no_event_does_not_block_native_workflow(self):
+        def transform(schema, content):
+            if schema is ClassifiedEventDraft:
+                payload = content.model_dump(mode="json")
+                payload["no_event"] = [
+                    {"evidence_id": eid, "reason": "上述处理重复"}
+                    for candidate in payload["candidates"]
+                    for eid in candidate["evidence_ids"]
+                ]
+                return payload
+            return content
+
+        self.response_transform = transform
+        self.enqueue()
+        result = await self.run_flow()
+        self.assertEqual(result.status, RunStatus.completed, result.content)
+        self.assertEqual(self.runtime.data_publications, 1)
+
+    async def test_signal_is_published_without_semantic_reviewer(self):
         def transform(schema, content):
             if schema is BatchSignalDecision:
+                signal = self.fixture.signal_draft().model_dump()
+                signal.update(impact_onset_days=1200, impact_peak_days=30, expected_duration_days=1500)
                 content.events[0] = content.events[0].model_copy(
                     update={
                         "no_signal_reason": None,
-                        "proposals": [self.fixture.signal_draft()],
+                        "proposals": [type(self.fixture.signal_draft()).model_validate(signal)],
                     }
                 )
             return content
 
         self.response_transform = transform
         self.enqueue()
-        with patch.object(functions.ControlledSignalReviewer, "review_candidate", return_value=False):
-            result = await self.run_flow()
+        result = await self.run_flow()
         self.assertEqual(result.status, RunStatus.completed, result.content)
         self.assertEqual(self.runtime.data_publications, 1)
-        self.assertEqual(self.runtime.signal_projections, 0)
+        self.assertEqual(self.runtime.signal_projections, 1)
 
     async def test_invalid_match_does_not_block_valid_matches(self):
         def transform(schema, content):

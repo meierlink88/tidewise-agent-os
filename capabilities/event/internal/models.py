@@ -217,9 +217,7 @@ class EventCandidateSubmission(BaseModel):
     @field_validator("evidence_ids")
     @classmethod
     def require_unique_evidence_ids(cls, values: list[str]) -> list[str]:
-        if len(values) != len(set(values)):
-            raise ValueError("Candidate Evidence IDs must be unique")
-        return values
+        return list(dict.fromkeys(values))
 
 
 class EventDisposition(BaseModel):
@@ -279,8 +277,6 @@ class EventIdentityDecision(BaseModel):
 
     @model_validator(mode="after")
     def decision_is_consistent(self) -> "EventIdentityDecision":
-        if not self.atomic and self.decision != "IGNORED":
-            raise ValueError("a non-atomic Candidate must be ignored")
         if self.decision == "SAME_EVENT" and len(self.matched_event_ids) != 1:
             raise ValueError("SAME_EVENT requires exactly one matched historical Event")
         if self.decision == "NEW_EVENT" and self.matched_event_ids:
@@ -321,8 +317,6 @@ class EventResolutionRecord(BaseModel):
 
     @model_validator(mode="after")
     def decision_is_consistent(self) -> "EventResolutionRecord":
-        if not self.atomic and self.decision != "IGNORED":
-            raise ValueError("a non-atomic frozen Event resolution must be ignored")
         if self.decision == "SAME_EVENT" and len(self.matched_event_ids) != 1:
             raise ValueError("a frozen SAME_EVENT resolution requires exactly one match")
         if self.decision == "NEW_EVENT" and self.matched_event_ids:

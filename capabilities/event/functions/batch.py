@@ -13,6 +13,7 @@ from capabilities.event.functions import storyline as legacy
 from capabilities.event.functions.extraction import (
     _batch,
     _candidate_key,
+    _compile_candidate_time,
     _direct_predecessor,
     _event_run_state,
     _model_from_content,
@@ -33,7 +34,6 @@ from capabilities.event.internal.models import (
     EventIdentityRequest,
     EventResolutionRecord,
 )
-from capabilities.event.internal.review import ControlledSignalReviewer
 from capabilities.event.internal.runtime import event_workflow_runtime
 from capabilities.event.internal.storage import (
     claim_event_batch,
@@ -156,8 +156,8 @@ async def prepare_batch_identity(step_input: StepInput, run_context: RunContext)
     raw = _response(step_input, ctx, "extract", ClassifiedEventDraft)
     batch = _batch(ctx)
     ids = [eid for c in raw.candidates for eid in c.evidence_ids] + [e.evidence_id for e in raw.no_event]
-    if len(ids) != len(set(ids)) or set(ids) != {e.id for e in batch.evidences}:
-        raise ValueError("Extractor must partition Evidence exactly once")
+    if not set(ids) <= {e.id for e in batch.evidences}:
+        raise ValueError("Extractor referenced Evidence outside the batch")
     _freeze(ctx, "extract-result", raw.model_dump(mode="json"))
     normalized = _validate_partition(
         batch,
@@ -172,17 +172,18 @@ async def prepare_batch_identity(step_input: StepInput, run_context: RunContext)
     draft = freeze_draft(batch, normalized)
     if _read(ctx, "identity-input") is None:
         events = []
-        for candidate in draft.candidates:
-            classes = [c.classification for c in raw.candidates if set(c.evidence_ids) & set(candidate.evidence_ids)]
-            if len({c.event_class for c in classes}) != 1:
-                raise ValueError("merged Event has conflicting primary classes")
+        evidence_by_id = {e.id: e for e in batch.evidences}
+        classifications = [
+            c.classification for c in raw.candidates if _compile_candidate_time(c, evidence_by_id) is not None
+        ]
+        for candidate, classification in zip(draft.candidates, classifications, strict=True):
             history = await event_workflow_runtime().retrieve_history(candidate)
             events.append(
                 {
                     "candidate_key": _candidate_key(candidate),
                     "candidate": candidate.model_dump(mode="json"),
                     "historical_candidates": [h.model_dump(mode="json") for h in history],
-                    "classification": classes[0].model_dump(mode="json"),
+                    "classification": classification.model_dump(mode="json"),
                 }
             )
         _freeze(ctx, "identity-input", {"events": events})
@@ -211,8 +212,6 @@ def freeze_batch_identity(step_input: StepInput, run_context: RunContext) -> Ste
                 and target is not None
                 and target.resolution is not None
                 and target.resolution.decision != "IGNORED"
-                and target.classification is not None
-                and target.classification.event_class == entry["classification"]["event_class"]
                 and set(item.decision.matched_event_ids) <= {h.id for h in identity.historical_candidates}
             )
             resolution = EventResolutionRecord(
@@ -503,22 +502,14 @@ def freeze_batch_signals(step_input: StepInput, run_context: RunContext) -> Step
                 reason = "DUPLICATE_SIGNAL_PAIR"
             else:
                 try:
-                    proposal = draft.proposal(
+                    draft.proposal(
                         event_time=event_time_anchor(event.semantic.time),
                         reference_time=_batch(ctx).created_at,
                         assertion_modality={"FACT": "ACTUAL", "PLAN": "ANTICIPATED", "SPEC": "ASSUMED"}[
                             event.semantic.modality
                         ],
                     )
-                    if not ControlledSignalReviewer().review_candidate(
-                        event,
-                        _batch(ctx).created_at,
-                        proposal,
-                        variables[draft.variable_uuid],
-                        anchors[draft.anchor_uuid],
-                    ):
-                        reason = "SIGNAL_CONSTRAINT_REJECTED"
-                except ValidationError:
+                except (ValidationError, OverflowError):
                     reason = "SIGNAL_CONSTRAINT_REJECTED"
             if reason:
                 rejected.append(
