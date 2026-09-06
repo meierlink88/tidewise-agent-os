@@ -53,7 +53,9 @@ GeopoliticRivalry, MacroEconomic, IndustryChain/ChainNode or Company identities.
 selects the catalog, not its inferred downstream impact. Association is not a Signal and does not
 prove a Variable changed. Functions validate selected IDs and write only existing-entity MENTIONS;
 the new Event path never invokes free Graphiti entity extraction. Candidate assets are excluded
-from matching inputs. See docs/design/event-extraction-workflow.md for the four-Agent v14 workflow.
+from matching inputs. Each scheduled run claims one bounded Evidence batch and processes its
+Events in one configurable Loop. Semantic Agents remain direct Steps; code gates skip duplicate,
+empty or already-completed work. See docs/design/event-extraction-workflow.md for the v15 workflow.
 
 ### Event Identity
 

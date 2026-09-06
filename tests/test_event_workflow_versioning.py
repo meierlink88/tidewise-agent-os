@@ -1,4 +1,4 @@
-"""Exact-version storage and direct-Agent rehydration for the v14 Event Workflow."""
+"""Exact-version storage and direct-Agent rehydration for the linear Event Workflow."""
 
 import unittest
 from unittest.mock import MagicMock, patch
@@ -7,6 +7,7 @@ from agno.registry import Registry
 from agno.workflow import Workflow
 
 from capabilities.event.functions import event_extraction_complete, event_extraction_required
+from capabilities.event.functions.linear import LINEAR_EVENT_FUNCTIONS
 from capabilities.event.functions.storyline import STORYLINE_FUNCTIONS
 from tests import test_event_storyline_workflow as fixtures
 from workflows.event_extraction import (
@@ -52,7 +53,7 @@ class EventWorkflowVersionTest(unittest.IsolatedAsyncioTestCase):
 
     def test_changed_pins_publish_four_exact_links(self):
         self.publish()
-        self.flow.steps[0].max_iterations = 7
+        self.flow.steps[2].max_iterations = 7
         newer = {**fixtures.PINS, "event-association": 3}
         with (
             patch("workflows.event_extraction.get_postgres_db", return_value=self.database),
@@ -62,7 +63,7 @@ class EventWorkflowVersionTest(unittest.IsolatedAsyncioTestCase):
             ensure_event_extraction_workflow(MagicMock())
         config = self.database.upsert_config.call_args.kwargs
         self.assertEqual(config["config"]["metadata"]["event_agent_versions"], newer)
-        self.assertEqual(config["config"]["steps"][0]["max_iterations"], 7)
+        self.assertEqual(config["config"]["steps"][2]["max_iterations"], 7)
         self.assertEqual({link["child_component_id"]: link["child_version"] for link in config["links"]}, newer)
 
     def test_contract_upgrade_replaces_legacy_topology(self):
@@ -81,7 +82,14 @@ class EventWorkflowVersionTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_published_roundtrip_resolves_exact_agents_and_executes_real_nested_steps(self):
         publication = self.publish()
-        registry = Registry(functions=[*STORYLINE_FUNCTIONS, event_extraction_complete, event_extraction_required])
+        registry = Registry(
+            functions=[
+                *LINEAR_EVENT_FUNCTIONS,
+                *STORYLINE_FUNCTIONS,
+                event_extraction_complete,
+                event_extraction_required,
+            ]
+        )
         loads = []
 
         def load_agent(*, id, version, **kwargs):

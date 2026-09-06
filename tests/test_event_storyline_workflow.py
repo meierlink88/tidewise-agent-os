@@ -1,4 +1,4 @@
-"""Four semantic Steps exercised through real Agno Loops/Conditions and durable journals."""
+"""Four direct semantic Steps, one Event Loop, and durable journals."""
 
 import json
 import unittest
@@ -158,6 +158,129 @@ class StorylineWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.runtime.signal_projections, 1)
         publications = [call for call in self.runtime.calls if call[0] == "publish"]
         self.assertEqual({p["uuid"] for p in publications[0][1]}, {"chain-server", "anchor-server"})
+
+    def test_single_loop_no_condition_in_serialized_workflow(self):
+        def flatten(nodes):
+            for node in nodes:
+                yield node
+                yield from flatten(node.get("steps", []))
+
+        nodes = list(flatten(self.workflow().to_dict()["steps"]))
+        self.assertEqual(sum(node.get("type") == "Loop" for node in nodes), 1)
+        self.assertFalse(any(node.get("type") == "Condition" for node in nodes))
+
+    async def test_one_batch_claim_per_invocation(self):
+        from capabilities.event.internal.storage import claim_event_batch
+
+        self.enqueue()
+        with patch("capabilities.event.functions.storyline.claim_event_batch", wraps=claim_event_batch) as claim:
+            result = await self.run_flow()
+        self.assertEqual(result.status, RunStatus.completed)
+        self.assertEqual(claim.call_count, 1)
+
+    async def test_empty_batch_invokes_no_agent(self):
+        result = await self.run_flow()
+        self.assertEqual(result.status, RunStatus.completed)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.runtime.data_publications, 0)
+
+    async def test_zero_candidates_completes_without_identity(self):
+        from capabilities.event.internal.models import EventExtractionDraft
+
+        self.enqueue()
+        original = self.respond
+
+        async def response(agent, *args, **kwargs):
+            if agent.id == "event-extractor":
+                self.calls.append((agent.id, None))
+                draft = EventExtractionDraft(
+                    candidates=[],
+                    no_event=[{"evidence_id": e.id, "reason": "no_event"} for e in self.fixture.evidences()],
+                )
+                return RunOutput(agent_id=agent.id, content=draft, status=RunStatus.completed)
+            return await original(agent, *args, **kwargs)
+
+        self.respond = response
+        result = await self.run_flow()
+        self.assertEqual(result.status, RunStatus.completed)
+        self.assertEqual([key for key, _ in self.calls], ["event-extractor"])
+
+    async def test_ignored_first_candidate_does_not_skip_second(self):
+        self.enqueue()
+        original = self.respond
+        identity_calls = 0
+
+        async def response(agent, *args, **kwargs):
+            nonlocal identity_calls
+            result = await original(agent, *args, **kwargs)
+            if agent.id == "event-extractor":
+                draft = result.content
+                first = draft.candidates[0].model_copy(deep=True)
+                second = first.model_copy(deep=True)
+                first.evidence_ids = [self.fixture.FIRST_EVIDENCE_ID]
+                second.evidence_ids = [self.fixture.SECOND_EVIDENCE_ID]
+                second.event = second.event.model_copy(
+                    update={"semantic": second.event.semantic.model_copy(update={"stage": "EFFECTIVE"})}
+                )
+                draft.candidates = [first, second]
+            elif agent.id == "event-identity":
+                identity_calls += 1
+                if identity_calls == 1:
+                    result.content = IdentityClassificationDecision(
+                        decision="IGNORED",
+                        atomic=False,
+                        matched_event_ids=[],
+                        reason_codes=["NON_ATOMIC"],
+                        summary="ignored",
+                    )
+            return result
+
+        self.respond = response
+        result = await self.run_flow()
+        self.assertEqual(result.status, RunStatus.completed)
+        self.assertEqual(identity_calls, 2)
+        self.assertEqual(self.runtime.data_publications, 1)
+        self.assertEqual([key for key, _ in self.calls].count("event-signal-analyst"), 1)
+
+    async def test_real_async_stream_uses_same_linear_gates(self):
+        self.enqueue()
+
+        def response(agent, *args, **kwargs):
+            async def events():
+                yield await self.respond(agent, *args, **kwargs)
+
+            return events()
+
+        with (
+            patch.object(Agent, "arun", new=response),
+            patch("capabilities.event.internal.queue.read_resolved_evidences", return_value=self.fixture.evidences()),
+        ):
+            events = [event async for event in self.workflow().arun(input="run", stream=True)]
+        self.assertTrue(events)
+        self.assertEqual(self.runtime.data_publications, 1)
+        self.assertEqual(self.runtime.signal_projections, 1)
+
+    async def test_rest_exposes_linear_topology_and_runs_one_batch(self):
+        from agno.os import AgentOS
+        from fastapi.testclient import TestClient
+
+        self.enqueue()
+        flow = self.workflow()
+
+        async def response(agent, *args, **kwargs):
+            return await self.respond(agent, *args, **kwargs)
+
+        with (
+            patch.object(Agent, "arun", new=response),
+            patch("capabilities.event.internal.queue.read_resolved_evidences", return_value=self.fixture.evidences()),
+            TestClient(AgentOS(workflows=[flow]).get_app()) as client,
+        ):
+            detail = client.get("/workflows/event-extraction")
+            self.assertEqual(detail.status_code, 200)
+            self.assertEqual([s["type"] for s in detail.json()["steps"]], ["Step", "Step", "Loop", "Step"])
+            result = client.post("/workflows/event-extraction/runs", data={"message": "run", "stream": "false"})
+            self.assertEqual(result.status_code, 200, result.text)
+        self.assertEqual(self.runtime.data_publications, 1)
 
     async def test_renamed_steps_do_not_change_execution(self):
         self.enqueue()
