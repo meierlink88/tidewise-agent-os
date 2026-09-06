@@ -2,6 +2,15 @@
 
 ## Ubiquitous language
 
+### GeopoliticRivalry
+
+A Data-owned geopolitical storyline with one core proposition and one primary GeopoliticDomain.
+Its graph node combines storyline facts with the domain code, name, description and full ordered tactics.
+Candidate assets and main transmission are post-match research references. Event-facing summary excludes
+these downstream references. Graph identity derives from the authoritative GPR ID. The local initialization
+consumes an operator-exported joined Data snapshot; AgentOS has no Data PostgreSQL runtime dependency.
+Neo4j stores tactics as JSON array text and candidate assets as a native string array.
+
 ### Atomic Evidence
 
 The smallest complete, source-grounded business proposition from which an Event may be formed. It distinguishes the
