@@ -8,14 +8,14 @@ from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
 
-from app.settings import default_model
+from app.settings import is_sol_medium_model, sol_medium_model
 from capabilities.event import EVENT_EXTRACTOR_AGENT_ID, EventExtractionDraft
 from db import get_postgres_db
 
-EVENT_EXTRACTOR_CONTRACT_VERSION = 6
+EVENT_EXTRACTOR_CONTRACT_VERSION = 7
 EVENT_EXTRACTOR_DESCRIPTION = "Groups mapped local Evidence into single-real-world-action Event Candidates."
 _SEED_PROMPT = Path(__file__).with_name("event_extractor.seed.md")
-_RUNTIME_CONTRACT = """Event Extractor runtime contract version 6:
+_RUNTIME_CONTRACT = """Event Extractor runtime contract version 7:
 - Consume exactly the supplied frozen EventExtractionBatch.
 - Partition every Evidence ID exactly once across candidates and no_event.
 - Merge only the same core actor, real-world action, direct object, stage, and compatible occurrence time.
@@ -50,6 +50,7 @@ def _seed_instructions() -> str:
 
 def _configure(agent: Agent, instructions: str) -> Agent:
     agent.db = get_postgres_db()
+    agent.model = sol_medium_model()
     agent.name = "Event Extractor"
     agent.description = EVENT_EXTRACTOR_DESCRIPTION
     agent.tools = []
@@ -90,10 +91,11 @@ def _configure(agent: Agent, instructions: str) -> Agent:
 
 
 def _has_runtime_contract(agent: Agent) -> bool:
-    """Reject Studio drift outside the prompt/model fields this Agent may own."""
+    """Reject Studio drift outside the prompt field this Agent may own."""
 
     return all(
         (
+            is_sol_medium_model(agent.model),
             not agent.tools,
             agent.tool_call_limit is None,
             agent.tool_choice is None,
@@ -135,7 +137,7 @@ def build_event_extractor_agent() -> Agent:
             id=EVENT_EXTRACTOR_AGENT_ID,
             name="Event Extractor",
             description=EVENT_EXTRACTOR_DESCRIPTION,
-            model=default_model(),
+            model=sol_medium_model(),
             instructions=instructions,
         ),
         instructions,

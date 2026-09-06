@@ -6,16 +6,17 @@ from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
 
-from app.settings import default_model
+from app.settings import is_sol_medium_model, sol_medium_model
 from db import get_postgres_db
 
 INVESTMENT_REASONER_AGENT_ID = "investment-reasoner"
-INVESTMENT_REASONER_CONTRACT_VERSION = 6
+INVESTMENT_REASONER_CONTRACT_VERSION = 7
 _PROMPT = Path(__file__).with_name("investment_reasoner.seed.md")
 
 
 def _configure(agent: Agent) -> Agent:
     agent.db = get_postgres_db()
+    agent.model = sol_medium_model()
     agent.name = "Investment Reasoner"
     agent.description = "Interprets ontology-typed graph data and performs bounded cross-layer and topology reasoning."
     agent.tools = []
@@ -35,7 +36,7 @@ def _configure(agent: Agent) -> Agent:
 
 
 def build_investment_reasoner_agent() -> Agent:
-    return _configure(Agent(id=INVESTMENT_REASONER_AGENT_ID, model=default_model()))
+    return _configure(Agent(id=INVESTMENT_REASONER_AGENT_ID, model=sol_medium_model()))
 
 
 def ensure_investment_reasoner_agent(registry: Registry) -> int:
@@ -48,10 +49,9 @@ def ensure_investment_reasoner_agent(registry: Registry) -> int:
         current = Agent.load(INVESTMENT_REASONER_AGENT_ID, db=db, registry=registry, version=version)
         if current is None:
             raise ValueError("Investment Reasoner could not be rehydrated")
-        if (
-            dict(current.metadata or {}).get("investment_reasoner_contract_version")
-            == INVESTMENT_REASONER_CONTRACT_VERSION
-        ):
+        if dict(current.metadata or {}).get(
+            "investment_reasoner_contract_version"
+        ) == INVESTMENT_REASONER_CONTRACT_VERSION and is_sol_medium_model(current.model):
             return version
         saved = _configure(current).save(
             db=db,

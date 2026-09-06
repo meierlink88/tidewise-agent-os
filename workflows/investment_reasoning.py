@@ -22,6 +22,7 @@ from db import get_postgres_db
 
 INVESTMENT_REASONING_WORKFLOW_ID = "investment-reasoning"
 INVESTMENT_REASONING_CONTRACT_VERSION = 12
+RETIRED_INVESTMENT_PLANNER_AGENT_ID = "investment-planner"
 INVESTMENT_REASONING_DESCRIPTION = (
     "Freezes the Schedule Event window, analyzes geopolitical and macro impacts in sequence, "
     "then loads all Signal-rooted industry topology for bounded node transmission, reviews lineage, "
@@ -151,3 +152,19 @@ def ensure_investment_reasoning_workflow(registry: Registry) -> int:
     if not isinstance(published, int):
         raise ValueError("Investment Reasoning seed failed")
     return published
+
+
+def retire_investment_planner_agent() -> bool:
+    """Soft-archive the unused legacy Planner while preserving historical audit links."""
+    db = get_postgres_db()
+    component = db.get_component(RETIRED_INVESTMENT_PLANNER_AGENT_ID, component_type=ComponentType.AGENT)
+    if component is None:
+        return False
+    version = component.get("current_version")
+    if not isinstance(version, int):
+        raise ValueError("retired Investment Planner has no published version")
+    return db.delete_component(
+        RETIRED_INVESTMENT_PLANNER_AGENT_ID,
+        expected_current_version=version,
+        require_no_dependents=False,
+    )

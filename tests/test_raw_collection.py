@@ -862,6 +862,54 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(agent.db is None for agent in agent_steps))
         self.assertEqual(migrated.metadata["raw_collection_contract_version"], RAW_COLLECTION_CONTRACT_VERSION)
 
+    def test_current_workflow_republishes_only_the_new_curator_version_pin(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 22}
+        db.get_config.return_value = {
+            "config": {
+                "metadata": {"raw_collection_contract_version": RAW_COLLECTION_CONTRACT_VERSION},
+            }
+        }
+        db.get_links.return_value = [
+            {
+                "link_kind": "step_agent",
+                "link_key": "studio-filter-step",
+                "child_component_id": "title-curator",
+                "child_version": 27,
+                "position": 1,
+            }
+        ]
+        db.upsert_config.return_value = {"version": 23}
+        old_curator = Agent(id="title-curator", instructions="old published prompt")
+        current = _seed_workflow(old_curator, dependencies={"title_curator_agent_config_version": 27})
+        current.name = "Studio Customized Raw Collection"
+        curator = LoadedTitleCuratorAgent(
+            agent=Agent(id="title-curator", instructions="new published prompt"),
+            version=28,
+            instructions_sha256="new-curator-sha256",
+        )
+
+        with (
+            patch("workflows.raw_collection.get_postgres_db", return_value=db),
+            patch("workflows.raw_collection.Workflow.load", return_value=current),
+            patch("workflows.raw_collection.load_title_curator_agent", return_value=curator),
+        ):
+            version = ensure_raw_collection_workflow(MagicMock())
+
+        self.assertEqual(version, 23)
+        self.assertEqual(current.name, "Studio Customized Raw Collection")
+        self.assertEqual(
+            current.dependencies,
+            {
+                "title_curator_agent_component_id": "title-curator",
+                "title_curator_agent_config_version": 28,
+                "title_curator_instructions_sha256": "new-curator-sha256",
+            },
+        )
+        published_links = db.upsert_config.call_args.kwargs["links"]
+        self.assertEqual(published_links[0]["child_version"], 28)
+        self.assertEqual(published_links[0]["link_key"], "studio-filter-step")
+
     def test_retire_collection_query_planner_soft_archives_current_version(self) -> None:
         db = MagicMock()
         db.get_component.return_value = {"current_version": 9}

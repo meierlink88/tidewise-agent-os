@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from agno.agent import Agent
+from agno.models.deepseek import DeepSeek
 
 from agents.event_extractor import (
     EVENT_EXTRACTOR_CONTRACT_VERSION,
@@ -108,6 +109,27 @@ class EventAgentContractTest(unittest.TestCase):
                 self.assertEqual(current.tools, [])
                 self.assertIsNone(current.knowledge)
                 self.assertIs(current.output_schema, output_schema)
+                save.assert_called_once()
+                self.assertIn("runtime contract repair", save.call_args.kwargs["notes"])
+
+    def test_model_drift_is_repaired_without_replacing_the_studio_prompt(self) -> None:
+        for module, agent_id, _, _, _, build, ensure in self.CASES:
+            with self.subTest(agent_id=agent_id):
+                database = MagicMock()
+                database.get_component.return_value = {"current_version": 41}
+                instructions = f"Studio customized prompt for {agent_id}"
+                current = build()
+                current.instructions = instructions
+                current.model = DeepSeek(id="deepseek-v4-flash")
+                with (
+                    patch(f"{module}.get_postgres_db", return_value=database),
+                    patch(f"{module}.Agent.load", return_value=current),
+                    patch.object(current, "save", autospec=True, return_value=42) as save,
+                ):
+                    self.assertEqual(ensure(MagicMock()), 42)
+
+                self.assertEqual(current.instructions, instructions)
+                self.assertEqual(current.model.id, "gpt-5.6-sol")
                 save.assert_called_once()
                 self.assertIn("runtime contract repair", save.call_args.kwargs["notes"])
 

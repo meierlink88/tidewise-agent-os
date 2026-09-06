@@ -8,15 +8,15 @@ from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
 
-from app.settings import default_model
+from app.settings import is_sol_medium_model, sol_medium_model
 from capabilities.event import EVENT_IDENTITY_AGENT_ID, EventIdentityDecision
 from db import get_postgres_db
 
-EVENT_IDENTITY_CONTRACT_VERSION = 2
+EVENT_IDENTITY_CONTRACT_VERSION = 3
 EVENT_IDENTITY_SEED_SHA256_KEY = "event_identity_seed_sha256"
 EVENT_IDENTITY_DESCRIPTION = "Assesses Event atomicity against bounded Graphiti Event recall."
 _SEED_PROMPT = Path(__file__).with_name("event_identity.seed.md")
-_RUNTIME_CONTRACT = """Event Identity runtime contract version 2:
+_RUNTIME_CONTRACT = """Event Identity runtime contract version 3:
 - Consume exactly one prepared Event Candidate and its bounded Graphiti historical Event candidates.
 - Decide only NEW_EVENT, SAME_EVENT, RELATED_BUT_DISTINCT, or IGNORED.
 - Treat actor, one real-world action, direct object, stage, and occurrence time as the Event identity dimensions.
@@ -58,6 +58,7 @@ def _seed_metadata(instructions: str) -> dict[str, int | str]:
 
 def _configure(agent: Agent, instructions: str) -> Agent:
     agent.db = get_postgres_db()
+    agent.model = sol_medium_model()
     agent.name = "Event Identity"
     agent.description = EVENT_IDENTITY_DESCRIPTION
     agent.tools = []
@@ -98,10 +99,11 @@ def _configure(agent: Agent, instructions: str) -> Agent:
 
 
 def _has_runtime_contract(agent: Agent) -> bool:
-    """Reject Studio drift outside the prompt/model fields this Agent may own."""
+    """Reject Studio drift outside the prompt field this Agent may own."""
 
     return all(
         (
+            is_sol_medium_model(agent.model),
             not agent.tools,
             agent.tool_call_limit is None,
             agent.tool_choice is None,
@@ -143,7 +145,7 @@ def build_event_identity_agent() -> Agent:
             id=EVENT_IDENTITY_AGENT_ID,
             name="Event Identity",
             description=EVENT_IDENTITY_DESCRIPTION,
-            model=default_model(),
+            model=sol_medium_model(),
             instructions=instructions,
         ),
         instructions,
