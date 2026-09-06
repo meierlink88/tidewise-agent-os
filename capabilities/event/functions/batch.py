@@ -523,7 +523,57 @@ async def publish_next_batch_event(step_input: StepInput, run_context: RunContex
     return legacy.finish_storyline_candidate(step_input, run_context)
 
 
+async def prepare_parallel_matches(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Commit identity and prepare one explicit input per native Parallel branch."""
+    freeze_batch_identity(step_input, run_context)
+    inputs = {}
+    for group in GROUPS:
+        prepared = await _prepare_match(run_context, group)
+        inputs["batch-" + group] = prepared.content
+    return StepOutput(content={"batch_inputs": inputs})
+
+
+def collect_parallel_matches(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Join native outputs by stable Step ID; save good branches before reporting failures."""
+    outputs: dict[str, StepOutput] = {}
+
+    def visit(output: StepOutput) -> None:
+        if output.step_id:
+            outputs[output.step_id] = output
+        for child in output.steps or []:
+            visit(child)
+
+    for output in (step_input.previous_step_outputs or {}).values():
+        visit(output)
+    failures = []
+    for group in ("geo", "macro", "node", "company"):
+        key = "match-" + group
+        if _read(run_context, key + "-result") is not None:
+            continue
+        branch_output = outputs.get("batch-" + group)
+        if branch_output is None or not branch_output.success:
+            failures.append(key)
+            continue
+        try:
+            _freeze_match(StepInput(previous_step_outputs={"result": branch_output}), run_context, key)
+        except ValueError:
+            failures.append(key)
+    if failures:
+        raise ValueError("missing batch checkpoint after Parallel: " + ", ".join(failures))
+    return freeze_batch_associations(step_input, run_context)
+
+
+async def publish_prepared_batch_event(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Freeze the package once, then reuse the existing receipt-aware publisher."""
+    if _read(run_context, "publication-package") is None:
+        freeze_publication_package(step_input, run_context)
+    return await publish_next_batch_event(step_input, run_context)
+
+
 BATCH_FUNCTIONS: list[Callable[..., Any]] = [
+    prepare_parallel_matches,
+    collect_parallel_matches,
+    publish_prepared_batch_event,
     claim_parallel_batch,
     prepare_batch_identity,
     freeze_batch_identity,

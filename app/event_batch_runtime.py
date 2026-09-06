@@ -14,8 +14,10 @@ _execute_stream = Step.execute_stream
 _aexecute_stream = Step.aexecute_stream
 
 
-def _input(value: StepInput) -> StepInput | None:
+def _input(value: StepInput, step_id: str | None = None) -> StepInput | None:
     envelope = value.previous_step_content
+    if isinstance(envelope, dict) and "batch_inputs" in envelope:
+        envelope = envelope["batch_inputs"].get(step_id)
     if not isinstance(envelope, dict) or "batch_call" not in envelope or "input" not in envelope:
         raise ValueError("batch Step requires prepared input envelope")
     if envelope["input"] is None:
@@ -27,17 +29,17 @@ def _input(value: StepInput) -> StepInput | None:
 
 
 def _execute_batch(step, step_input, **kwargs):
-    prepared = _input(step_input)
+    prepared = _input(step_input, step.step_id)
     return _execute(step, prepared, **kwargs) if prepared else StepOutput(content={"skipped": True})
 
 
 async def _aexecute_batch(step, step_input, **kwargs):
-    prepared = _input(step_input)
+    prepared = _input(step_input, step.step_id)
     return await _aexecute(step, prepared, **kwargs) if prepared else StepOutput(content={"skipped": True})
 
 
 def _stream_batch(step, step_input, **kwargs):
-    prepared = _input(step_input)
+    prepared = _input(step_input, step.step_id)
     if prepared is None:
         yield StepOutput(content={"skipped": True})
         return
@@ -47,7 +49,7 @@ def _stream_batch(step, step_input, **kwargs):
 
 
 async def _astream_batch(step, step_input, **kwargs):
-    prepared = _input(step_input)
+    prepared = _input(step_input, step.step_id)
     if prepared is None:
         yield StepOutput(content={"skipped": True})
         return

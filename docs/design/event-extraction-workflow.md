@@ -1,6 +1,49 @@
 # Event Extraction Workflow
 
-## v16 current: batch semantic matching
+## v17 current: compact native canvas
+
+Issue #183 keeps the v16 matching and publication contracts, while reducing visible
+leaf Steps from 26 to 17. No Agent is hidden inside a Function and no custom parallel
+executor is introduced.
+
+```text
+Claim batch → Extract/classify Agent → Prepare identity → Identity Agent
+Prepare matching contexts (save identity + prepare four class inputs)
+Parallel
+  Geopolitical Association Agent
+  Macroeconomic Association Agent
+  Industry Steps: chain Agent → prepare selected nodes → node Agent
+  Company Association Agent
+Collect matched Events (validate/save branch results + assemble associations)
+Signal class Loop: prepare → Signal Agent → compile
+Publication Loop: freeze package if missing + publish Event/Signals
+Complete batch
+```
+
+The existing input adapter selects the prepared input by the native Agent Step's
+stable ID. It still makes one call, with no new routing or semantic retry mechanism.
+The collector traverses native Parallel outputs by Step ID, saving successful
+branches before reporting a failed branch. A process crash/cancellation before the
+collector runs can require repeating an uncheckpointed branch; already frozen
+chain decisions and other checkpoints remain reusable. No publication occurs until
+all branches and Signal classes have completed.
+
+### Studio canvas compatibility
+
+The actual Studio page reproduced missing Parallel branches and sixteen occurrences
+of `step-undefined` in edge endpoints. Agno 3.0.1 native `Parallel`, `Steps` and `Loop`
+serialization omits `step_id`, while Studio uses it as canvas identity. Publication
+now adds deterministic unique container IDs without changing native types or Agent
+links. Native hydration ignores these presentation fields, so publication reapplies
+them; an otherwise-current published config missing IDs is repaired once.
+
+Acceptance includes native configuration roundtrip/execution and the actual Studio
+page: the Parallel container and four branches are visible, with no undefined edges.
+This is a serializer compatibility fix, not a replacement UI or executor. v17 retains
+the `batch-v16` artifact contract and exact Agent pins. It does not reconcile older
+pending journals, run real Evidence, alter schedules or change graph contracts.
+
+## v16 previous: batch semantic matching
 
 Issue #181 replaces per-Event semantic loops with one batch invocation per class.
 Framework reference: [Agno Parallel](https://docs.agno.com/workflows/workflow-patterns/parallel-workflow).

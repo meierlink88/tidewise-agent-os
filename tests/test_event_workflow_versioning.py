@@ -14,6 +14,7 @@ from tests import test_event_batch_workflow as batch_fixtures
 from tests import test_event_storyline_workflow as fixtures
 from workflows.event_extraction import (
     EVENT_EXTRACTION_CONTRACT_VERSION,
+    _canvas_config,
     _publish_pinned_workflow,
     ensure_event_extraction_workflow,
 )
@@ -52,6 +53,46 @@ class EventWorkflowVersionTest(unittest.IsolatedAsyncioTestCase):
         ):
             self.assertEqual(ensure_event_extraction_workflow(MagicMock()), 30)
         self.assertEqual(self.database.upsert_config.call_count, 1)
+
+    def test_published_canvas_nodes_have_unique_ids_including_containers(self):
+        publication = self.publish()
+        identifiers = []
+
+        def visit(nodes):
+            for node in nodes:
+                self.assertTrue(node.get("step_id"), node.get("name"))
+                identifiers.append(node["step_id"])
+                visit(node.get("steps", []))
+
+        visit(publication["config"]["steps"])
+        self.assertEqual(len(identifiers), len(set(identifiers)))
+
+    def test_compact_parallel_keeps_direct_agents_and_only_industry_sequence(self):
+        config = self.publish()["config"]
+        parallel = next(s for s in config["steps"] if s["type"] == "Parallel")
+        self.assertEqual([s["type"] for s in parallel["steps"]], ["Step", "Step", "Steps", "Step"])
+        industry = parallel["steps"][2]
+        self.assertEqual(
+            [s["step_id"] for s in industry["steps"]], ["batch-chain", "prepare_node_matches", "batch-node"]
+        )
+
+        def leaf_count(nodes):
+            return sum(1 if n["type"] == "Step" else leaf_count(n.get("steps", [])) for n in nodes)
+
+        self.assertEqual(leaf_count(config["steps"]), 17)
+
+    def test_missing_presentation_ids_are_repaired_without_changing_agent_pins(self):
+        self.publish()
+        self.database.get_config.return_value["config"]["steps"][5].pop("step_id")
+        with (
+            patch("workflows.event_extraction.get_postgres_db", return_value=self.database),
+            patch("workflows.event_extraction._loaded_agents", return_value=self.loaded(fixtures.PINS)),
+            patch.object(Workflow, "load", return_value=self.flow),
+        ):
+            ensure_event_extraction_workflow(MagicMock())
+        publication = self.database.upsert_config.call_args.kwargs
+        self.assertTrue(publication["config"]["steps"][5]["step_id"])
+        self.assertEqual(publication["config"]["metadata"]["event_agent_versions"], fixtures.PINS)
 
     def test_changed_pins_publish_eight_exact_links(self):
         self.publish()
@@ -107,7 +148,7 @@ class EventWorkflowVersionTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(hydrated)
         self.assertEqual(dict(loads), fixtures.PINS)
         self.assertEqual(len(loads), 8)
-        self.assertEqual(hydrated.to_dict()["steps"], publication["config"]["steps"])
+        self.assertEqual(_canvas_config(hydrated.to_dict())["steps"], publication["config"]["steps"])
         hydrated.db = None
         self.harness.enqueue()
         result = await self.harness.run_flow(hydrated)
