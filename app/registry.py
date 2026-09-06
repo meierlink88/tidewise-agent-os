@@ -3,6 +3,7 @@
 from agno.agent import Agent
 from agno.registry import Registry
 
+from agents.event_association import EVENT_ASSOCIATION_AGENT_ID, load_event_association_agent
 from agents.event_extractor import EVENT_EXTRACTOR_AGENT_ID, load_event_extractor_agent
 from agents.event_identity import EVENT_IDENTITY_AGENT_ID, load_event_identity_agent
 from agents.event_signal_analyst import EVENT_SIGNAL_ANALYST_AGENT_ID, load_event_signal_analyst_agent
@@ -40,6 +41,7 @@ from capabilities.collection.functions import (
     validate_article_review,
 )
 from capabilities.event import (
+    AssociationDecision,
     EventExtractionBatch,
     EventExtractionDraft,
     EventExtractionResult,
@@ -48,6 +50,8 @@ from capabilities.event import (
     EventSignalAnalysisDraft,
     EventSignalAnalysisRequest,
     EventSignalClassificationRequest,
+    IdentityClassificationDecision,
+    SignalDecision,
 )
 from capabilities.event.functions import (
     analyze_signals,
@@ -68,6 +72,7 @@ from capabilities.event.functions import (
     resolve_events,
     signal_analysis_complete,
 )
+from capabilities.event.functions.storyline import STORYLINE_FUNCTIONS
 from capabilities.evidence import (
     ArticleReviewDraft,
     ArticleReviewRequest,
@@ -141,6 +146,8 @@ class TidewiseRegistry(Registry):
             return load_event_extractor_agent(self).agent
         if agent_id == EVENT_IDENTITY_AGENT_ID:
             return load_event_identity_agent(self).agent
+        if agent_id == EVENT_ASSOCIATION_AGENT_ID:
+            return load_event_association_agent(self).agent
         if agent_id == EVENT_SIGNAL_ANALYST_AGENT_ID:
             return load_event_signal_analyst_agent(self).agent
         if agent_id == INVESTMENT_REASONER_AGENT_ID:
@@ -160,6 +167,9 @@ registry = TidewiseRegistry(
     models=[default_model(), sol_medium_model(), filter_model("low"), filter_model("none")],
     dbs=[get_postgres_db()],
     schemas=[
+        AssociationDecision,
+        IdentityClassificationDecision,
+        SignalDecision,
         ArticleReviewDraft,
         ArticleReviewRequest,
         CollectionRequest,
@@ -206,6 +216,7 @@ registry = TidewiseRegistry(
         InvestmentReportWorkflowOutput,
     ],
     functions=[
+        *STORYLINE_FUNCTIONS,
         article_has_evidence,
         article_needs_review,
         article_processing_complete,

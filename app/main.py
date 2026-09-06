@@ -10,6 +10,7 @@ from pathlib import Path
 from agno.os import AgentOS
 from agno.utils.log import log_info
 
+from agents.event_association import ensure_event_association_agent
 from agents.event_extractor import ensure_event_extractor_agent
 from agents.event_identity import ensure_event_identity_agent
 from agents.event_signal_analyst import ensure_event_signal_analyst_agent
@@ -100,6 +101,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     ensure_evidence_extractor_agent(registry)
     ensure_event_extractor_agent(registry)
     ensure_event_identity_agent(registry)
+    ensure_event_association_agent(registry)
     ensure_event_signal_analyst_agent(registry)
     ensure_investment_reasoner_agent(registry)
     ensure_investment_report_writer_agent(registry)

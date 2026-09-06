@@ -28,6 +28,7 @@ from sematica.analysis.event.contracts import (
     VariableCandidate,
 )
 from sematica.analysis.event.graphiti import GraphitiCandidateRetriever, GraphitiSignalFactProjector
+from sematica.analysis.event.graphiti.storylines import GraphitiStorylineCatalog
 from sematica.graphiti.runtime import create_agentos_graphiti
 from sematica.ingestion.episcode.event.adapters import DataEventClient, GraphitiEventHistory
 from sematica.ingestion.episcode.event.contracts import (
@@ -36,6 +37,7 @@ from sematica.ingestion.episcode.event.contracts import (
     HistoricalEvent,
 )
 from sematica.ingestion.episcode.event.stages.episode import GraphitiEpisodeStage
+from sematica.ingestion.episcode.event.stages.selected_episode import SelectedEventEpisodeStage
 
 
 @dataclass
@@ -66,6 +68,8 @@ class LocalEventWorkflowRuntime:
         self._registry = registry
         self._history = GraphitiEventHistory(graphiti)
         self._episode_stage = GraphitiEpisodeStage(graphiti)
+        self._selected_episode_stage = SelectedEventEpisodeStage(graphiti)
+        self._storyline_catalog = GraphitiStorylineCatalog(graphiti)
         self._candidate_retriever = GraphitiCandidateRetriever(graphiti)
         self._signal_projector = GraphitiSignalFactProjector(graphiti)
 
@@ -117,6 +121,7 @@ class LocalEventWorkflowRuntime:
         *,
         existing: EventPublicationRecord | None,
         checkpoint: PublicationCheckpoint,
+        associations: list[dict[str, str]] | None = None,
     ) -> EventPublicationRecord:
         """Publish an already-resolved Candidate and checkpoint each irreversible boundary."""
 
@@ -166,7 +171,11 @@ class LocalEventWorkflowRuntime:
                 )
             )
 
-        episode_uuid = await self._episode_stage.execute(historical)
+        episode_uuid = (
+            await self._episode_stage.execute(historical)
+            if associations is None
+            else await self._selected_episode_stage.execute(historical, associations)
+        )
         return EventPublicationRecord(
             candidate_key=candidate_key,
             decision=decision,
@@ -180,6 +189,14 @@ class LocalEventWorkflowRuntime:
             episode_uuid=episode_uuid,
             published_event=_published(historical),
         )
+
+    async def storyline_profiles(
+        self, labels: list[str], *, terms: list[str] | None = None, chain_uuids: list[str] | None = None
+    ) -> list[dict[str, Any]]:
+        return await self._storyline_catalog.profiles(labels, terms=terms, chain_uuids=chain_uuids)
+
+    async def storyline_variables(self) -> list[VariableCandidate]:
+        return [VariableCandidate.model_validate(row) for row in await self._storyline_catalog.variables()]
 
     async def retrieve_signal_candidates(
         self,

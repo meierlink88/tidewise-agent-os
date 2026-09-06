@@ -18,6 +18,7 @@ from agno.run.agent import RunOutput
 from agno.run.base import RunStatus
 from agno.workflow import Step, Workflow
 
+from agents.event_association import LoadedEventAssociationAgent
 from agents.event_extractor import (
     EVENT_EXTRACTOR_CONTRACT_VERSION,
     LoadedEventExtractorAgent,
@@ -45,6 +46,8 @@ from capabilities.event import (
     EventSignalAnalysisDraft,
     EventSignalAnalysisRequest,
     EventSignalClassificationRequest,
+    IdentityClassificationDecision,
+    SignalDecision,
     configure_event_workflow_runtime,
 )
 from capabilities.event.functions import enqueue_evidence_artifact
@@ -78,10 +81,10 @@ from sematica.analysis.event.contracts import (
 )
 from sematica.analysis.event.errors import PermanentEventAnalysisFailure
 from sematica.ingestion.episcode.event.contracts import EventCandidateDTO, HistoricalEvent
+from tests.legacy_event_workflow import seed_legacy_workflow as _seed_workflow
 from workflows.event_extraction import (
     EVENT_EXTRACTION_CONTRACT_VERSION,
     EVENT_EXTRACTION_PUBLICATION_POLICY,
-    _seed_workflow,
     ensure_event_extraction_workflow,
 )
 
@@ -640,8 +643,8 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             workflow.metadata,
             {
-                "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
-                "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
+                "event_extraction_contract_version": 13,
+                "event_extraction_publication_policy": "code_managed_exact_agent_links.v1",
                 "event_agent_versions": self.AGENT_VERSIONS,
             },
         )
@@ -2140,6 +2143,10 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
             patch("workflows.event_extraction.load_event_extractor_agent", return_value=loaded[0]),
             patch("workflows.event_extraction.load_event_identity_agent", return_value=loaded[1]),
             patch("workflows.event_extraction.load_event_signal_analyst_agent", return_value=loaded[2]),
+            patch(
+                "workflows.event_extraction.load_event_association_agent",
+                return_value=LoadedEventAssociationAgent(Agent(id="event-association"), 2, "d" * 64),
+            ),
             patch.object(Agent, "save", autospec=True) as agent_save,
         ):
             version = ensure_event_extraction_workflow(MagicMock())
@@ -2152,37 +2159,19 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
             {
                 "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
                 "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
-                "event_agent_versions": self.AGENT_VERSIONS,
+                "event_agent_versions": {**self.AGENT_VERSIONS, "event-association": 2},
             },
         )
         publication = database.upsert_config.call_args.kwargs
         self.assertEqual(publication["stage"], "published")
         self.assertEqual(publication["config"]["metadata"], component_metadata)
         self.assertEqual(
-            publication["links"],
-            [
-                {
-                    "link_kind": "step_agent",
-                    "link_key": "event-extract",
-                    "child_component_id": "event-extractor",
-                    "child_version": 11,
-                    "position": 0,
-                },
-                {
-                    "link_kind": "step_agent",
-                    "link_key": "event-resolve",
-                    "child_component_id": "event-identity",
-                    "child_version": 13,
-                    "position": 1,
-                },
-                {
-                    "link_kind": "step_agent",
-                    "link_key": "event-signal-analyze",
-                    "child_component_id": "event-signal-analyst",
-                    "child_version": 17,
-                    "position": 3,
-                },
-            ],
+            {link["child_component_id"]: link["child_version"] for link in publication["links"]},
+            {**self.AGENT_VERSIONS, "event-association": 2},
+        )
+        self.assertEqual(
+            {link["link_key"] for link in publication["links"]},
+            {"event-extract", "event-resolve", "event-associate", "event-signal-analyze"},
         )
 
     def test_agent_contract_migrations_reconfigure_code_fields_without_replacing_studio_instructions(self) -> None:
@@ -2200,7 +2189,7 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
                 "event-identity",
                 "event_identity_contract_version",
                 EVENT_IDENTITY_CONTRACT_VERSION,
-                EventIdentityDecision,
+                IdentityClassificationDecision,
                 ensure_event_identity_agent,
             ),
             (
@@ -2208,7 +2197,7 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
                 "event-signal-analyst",
                 "event_signal_analyst_contract_version",
                 EVENT_SIGNAL_ANALYST_CONTRACT_VERSION,
-                EventSignalAnalysisDraft,
+                SignalDecision,
                 ensure_event_signal_analyst_agent,
             ),
         )
@@ -2250,7 +2239,7 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
                 )
 
     def test_current_workflow_rejects_incomplete_agent_version_metadata_or_links(self) -> None:
-        complete_versions = dict(self.AGENT_VERSIONS)
+        complete_versions = {**self.AGENT_VERSIONS, "event-association": 2}
         complete_links = [
             {
                 "link_kind": "step_agent",
@@ -2262,6 +2251,7 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
             for step_id, agent_id, position in (
                 ("event-extract", "event-extractor", 0),
                 ("event-resolve", "event-identity", 1),
+                ("event-associate", "event-association", 2),
                 ("event-signal-analyze", "event-signal-analyst", 3),
             )
             for version in (complete_versions[agent_id],)

@@ -253,6 +253,24 @@ def freeze_draft(batch: EventExtractionBatch, draft: EventExtractionDraft) -> Ev
         return draft
 
 
+def load_storyline_journal(batch_id: str):
+    from capabilities.event.internal.storyline_models import StorylineJournal
+
+    path = pending_directory(batch_id) / "storyline_journal.json"
+    return StorylineJournal.model_validate_json(path.read_text()) if path.exists() else None
+
+
+def write_storyline_journal(batch: EventExtractionBatch, journal) -> None:
+    from capabilities.event.internal.storyline_models import StorylineJournal
+
+    validated = StorylineJournal.model_validate(journal)
+    with _owned_batch_lock(batch):
+        _atomic_write_json(
+            pending_directory(batch.batch_id) / "storyline_journal.json",
+            validated.model_dump(mode="json", by_alias=True),
+        )
+
+
 def load_draft(batch_id: str) -> EventExtractionDraft:
     try:
         return EventExtractionDraft.model_validate_json(

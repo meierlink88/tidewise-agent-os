@@ -23,7 +23,7 @@ from agents.event_signal_analyst import (
     build_event_signal_analyst_agent,
     ensure_event_signal_analyst_agent,
 )
-from capabilities.event import EventExtractionDraft, EventIdentityDecision, EventSignalAnalysisDraft
+from capabilities.event import EventExtractionDraft, IdentityClassificationDecision, SignalDecision
 
 
 class EventAgentContractTest(unittest.TestCase):
@@ -53,7 +53,7 @@ class EventAgentContractTest(unittest.TestCase):
             "event-identity",
             "event_identity_contract_version",
             EVENT_IDENTITY_CONTRACT_VERSION,
-            EventIdentityDecision,
+            IdentityClassificationDecision,
             build_event_identity_agent,
             ensure_event_identity_agent,
         ),
@@ -62,7 +62,7 @@ class EventAgentContractTest(unittest.TestCase):
             "event-signal-analyst",
             "event_signal_analyst_contract_version",
             EVENT_SIGNAL_ANALYST_CONTRACT_VERSION,
-            EventSignalAnalysisDraft,
+            SignalDecision,
             build_event_signal_analyst_agent,
             ensure_event_signal_analyst_agent,
         ),
@@ -135,15 +135,13 @@ class EventAgentContractTest(unittest.TestCase):
 
     def test_signal_analyst_contract_supports_ranked_intents_and_direct_cross_layer_signals(self) -> None:
         agent = build_event_signal_analyst_agent()
-        self.assertGreaterEqual(EVENT_SIGNAL_ANALYST_CONTRACT_VERSION, 7)
-        self.assertIn("ranking hints", str(agent.additional_context))
-        self.assertIn("Company Events may directly affect", str(agent.additional_context))
-        self.assertIn("IndustryChain is a retrieval and aggregation context", str(agent.additional_context))
-        self.assertIn("retrieval as recall, not evidence", str(agent.additional_context))
-        self.assertIn("LOW confidence never authorizes", str(agent.additional_context))
-        self.assertIn("宽泛对象缩小", str(agent.instructions))
-        self.assertIn("一跳", str(agent.instructions))
-        self.assertIn("检索意图", str(agent.instructions))
+        self.assertGreaterEqual(EVENT_SIGNAL_ANALYST_CONTRACT_VERSION, 9)
+        self.assertIn("pre-publication Event", str(agent.additional_context))
+        self.assertIn("do not classify again", str(agent.additional_context))
+        self.assertIn("directly supported", str(agent.additional_context))
+        self.assertIsNotNone(agent.skills)
+        self.assertIn("低置信度不能替代直接证据", str(agent.instructions))
+        self.assertIn("IndustryChain", str(agent.instructions))
 
 
 if __name__ == "__main__":
