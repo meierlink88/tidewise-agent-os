@@ -2,8 +2,9 @@
 
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from agno.agent import Agent
 from agno.models.deepseek import DeepSeek
 from agno.models.openai import OpenAIResponses
 
@@ -15,12 +16,36 @@ from agents.investment_reasoner import build_investment_reasoner_agent
 from agents.investment_report_writer import build_investment_report_writer_agent
 from agents.investment_reviewer import build_investment_reviewer_agent
 from agents.tidewise_assistant import tidewise_assistant
-from agents.title_curator import build_title_curator_agent
+from agents.title_curator import build_title_curator_agent, ensure_title_curator_agent, load_title_curator_agent
 from app.registry import registry
 from app.settings import SOL_MEDIUM_DEFAULT_BASE_URL, SOL_MEDIUM_MODEL_ID, is_sol_medium_model, sol_medium_model
 
 
 class ModelRegistryTest(unittest.TestCase):
+    def test_filter_low_survives_registry_round_trip_without_changing_other_agents(self) -> None:
+        with patch.dict(os.environ, {"RAW_EVIDENCE_FILTER_REASONING_EFFORT": "low"}):
+            agent = build_title_curator_agent()
+            restored = Agent.from_dict(agent.to_dict(), registry=registry)
+            assert isinstance(restored.model, OpenAIResponses)
+            self.assertEqual(restored.model.reasoning_effort, "low")
+            db = MagicMock()
+            db.get_component.return_value = {"current_version": 29}
+            with (
+                patch("agents.title_curator.get_postgres_db", return_value=db),
+                patch("agents.title_curator.Agent.load", return_value=restored),
+            ):
+                self.assertEqual(ensure_title_curator_agent(registry), 29)
+                loaded = load_title_curator_agent(registry).agent
+            assert isinstance(loaded.model, OpenAIResponses)
+            self.assertEqual(loaded.model.reasoning_effort, "low")
+            self.assertTrue(is_sol_medium_model(build_evidence_extractor_agent().model))
+            self.assertTrue(is_sol_medium_model(registry.get_model(SOL_MEDIUM_MODEL_ID)))
+
+    def test_filter_rejects_unknown_reasoning_level(self) -> None:
+        with patch.dict(os.environ, {"RAW_EVIDENCE_FILTER_REASONING_EFFORT": "light"}):
+            with self.assertRaisesRegex(ValueError, "must be none, low, or medium"):
+                build_title_curator_agent()
+
     def test_sol_medium_model_uses_agno_openai_responses_configuration(self) -> None:
         with patch.dict(
             os.environ,
@@ -54,6 +79,7 @@ class ModelRegistryTest(unittest.TestCase):
         assert isinstance(sol, OpenAIResponses)
         self.assertEqual(sol.reasoning_effort, "medium")
 
+    @patch.dict(os.environ, {"RAW_EVIDENCE_FILTER_REASONING_EFFORT": "medium"})
     def test_all_agents_use_sol_medium(self) -> None:
         agents = (
             tidewise_assistant,

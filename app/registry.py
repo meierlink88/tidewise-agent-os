@@ -11,7 +11,7 @@ from agents.investment_reasoner import INVESTMENT_REASONER_AGENT_ID, load_invest
 from agents.investment_report_writer import INVESTMENT_REPORT_WRITER_AGENT_ID, load_investment_report_writer_agent
 from agents.investment_reviewer import INVESTMENT_REVIEWER_AGENT_ID, load_investment_reviewer_agent
 from agents.tidewise_assistant import tidewise_assistant
-from agents.title_curator import TITLE_CURATOR_AGENT_ID, load_title_curator_agent
+from agents.title_curator import TITLE_CURATOR_AGENT_ID, filter_model, load_title_curator_agent
 from app.settings import default_model, sol_medium_model
 from capabilities.collection import (
     CollectionRequest,
@@ -140,7 +140,8 @@ class TidewiseRegistry(Registry):
 
 registry = TidewiseRegistry(
     name="Tidewise AgentOS Registry",
-    models=[default_model(), sol_medium_model()],
+    # Distinct names preserve per-Agent effort when Agno restores pinned Workflow steps.
+    models=[default_model(), sol_medium_model(), filter_model("low"), filter_model("none")],
     dbs=[get_postgres_db()],
     schemas=[
         CollectionRequest,
