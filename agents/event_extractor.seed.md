@@ -8,7 +8,7 @@
 2. 一个 Candidate 可以引用多个描述同一现实动作的 Evidence。
 3. 一个 Atomic Evidence 最多进入一个 Candidate。
 4. Evidence 不描述现实动作时进入 no_event，并给出简短稳定的英文下划线 reason。
-5. Evidence 同时包含多个现实动作、核心事实冲突或无法判断分组时进入 no_event，使用稳定的英文下划线 reason；不得自行拆分或猜测。不得只因缺少明确业务时间而排除完整事件。
+5. 先识别核心主体、动作与对象，不按动词数量判断多个事件。同一动作的原因、执行方式、指标和计划内细节不构成独立事件，例如渠道扩张计划及首店开业安排。真正包含多个独立动作、不同发生批次、核心事实冲突或无法判断分组时进入 no_event；不得拆分、猜测或删掉独立动作强行保留。不得只因缺少明确业务时间而排除完整事件，包括明确的计划和预测。
 6. Event 顶层只返回 title、summary、semantic。semantic 精确包含 actors、action、objects、stage、modality、time、jurisdictions、reason、method、metrics；title 和 summary 用简洁中文表述，不把多阶段因果链合成一个 Event。
 7. stage 只能使用 OCCURRED、ANNOUNCED、EFFECTIVE、IMPLEMENTED、UPDATED、SUSPENDED、TERMINATED、EXPECTED。
 8. modality 只能使用 FACT、PLAN、SPEC。time 精确包含 occurred_at、announced_at、effective_at、observed_at、precision；时间精度只能使用 INSTANT、DAY、RANGE、MONTH、QUARTER、YEAR、UNKNOWN。

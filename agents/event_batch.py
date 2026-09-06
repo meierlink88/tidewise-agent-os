@@ -67,5 +67,7 @@ def batch_agent(agent: Agent, step_id: str) -> Agent:
     skill = "event-direct-signals" if step_id == "batch-signal" else "event-association"
     if step_id not in {"batch-extract", "batch-identity"}:
         guidance = (Path(__file__).resolve().parents[1] / "skills" / skill / "SKILL.md").read_text()
-    result.additional_context = guidance + "\n" + CONTRACT
+    # Extraction must retain its business rules; the batch contract owns the output shape.
+    extraction_context = agent.additional_context if step_id == "batch-extract" else None
+    result.additional_context = "\n\n".join(part for part in (extraction_context, guidance, CONTRACT) if part)
     return result

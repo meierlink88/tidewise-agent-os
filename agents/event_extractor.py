@@ -12,10 +12,10 @@ from app.settings import is_sol_low_model, sol_low_model
 from capabilities.event import EVENT_EXTRACTOR_AGENT_ID, EventExtractionDraft
 from db import get_postgres_db
 
-EVENT_EXTRACTOR_CONTRACT_VERSION = 7
+EVENT_EXTRACTOR_CONTRACT_VERSION = 8
 EVENT_EXTRACTOR_DESCRIPTION = "Groups mapped local Evidence into single-real-world-action Event Candidates."
 _SEED_PROMPT = Path(__file__).with_name("event_extractor.seed.md")
-_RUNTIME_CONTRACT = """Event Extractor runtime contract version 7:
+_RUNTIME_CONTRACT = """Event Extractor runtime contract version 8:
 - Consume exactly the supplied frozen EventExtractionBatch.
 - Partition every Evidence ID exactly once across candidates and no_event.
 - Merge only the same core actor, real-world action, direct object, stage, and compatible occurrence time.
@@ -28,6 +28,17 @@ _RUNTIME_CONTRACT = """Event Extractor runtime contract version 7:
 - Extract only explicit business times into occurred_at, announced_at, or effective_at. Always return observed_at
   as null; the Workflow compiles it deterministically from Evidence published_at, otherwise collected_at.
 - Do not reject an otherwise atomic Event solely because explicit business time is unavailable.
+- Missing or imprecise business time is NOT a no_event reason. Keep supported PLAN/SPEC events too;
+  leave unsupported business timestamps null. Never substitute publication time for occurrence time.
+- Count independent real-world actions, not verbs, metrics, causes or implementation details.
+  A retail expansion plan with its first-store schedule is one plan; a price change with its supply
+  causes is one price event. Preserve material qualifications without promoting plans to completed facts.
+  Truly independent actions or incompatible occurrences remain no_event; do not split an Evidence,
+  silently discard independent actions, or merge distinct stages to force a single candidate.
+- For batch classification judge the directly described action/object, not the actor's entity type
+  or a predicted downstream impact. National sector-specific semiconductor exports can be INDUSTRY_CHAIN;
+  economy-wide trade balances and monetary policy are MACRO_ECONOMIC. A company product launch is COMPANY;
+  interstate sanctions or military actions are GEOPOLITICAL. Return only one supported primary class.
 - Never query history, call tools, publish, or invent a formal Evidence ID.
 """
 
