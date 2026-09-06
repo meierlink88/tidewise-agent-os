@@ -1,5 +1,30 @@
 # Event Extraction Workflow
 
+## LLM semantic authority (#201)
+
+This section supersedes the semantic gates described in earlier revisions below.
+The LLM owns Event grouping, classification, identity, semantic time, reason/method/
+metrics, association and Signal conclusions. Preparation no longer merges candidates
+by text comparison, overrides identity using exact-occurrence matching, substitutes
+Evidence fields for model conclusions, or runs ControlledSignalReviewer. Signal
+durations are not capped at three years, and peak/onset ordering is not second-guessed.
+
+Evidence may support multiple Events. Candidate-backed Evidence wins over redundant
+no_event bookkeeping; repeated references are deduplicated. Unassigned Evidence keeps
+an explicit unassigned_by_model disposition. An entirely absent Event timestamp may
+still use source publication/collection time as observed_at, without inventing business
+time. Classification follows the original candidate order, not a semantic rematch.
+
+Required structure, valid reference IDs, one target ID for SAME_EVENT, candidate-key
+correlation, endpoint existence, serialization, leases, immutable checkpoints and
+publication receipts remain technical safeguards. They do not assess whether a model
+conclusion is economically correct. Nonempty match/Signal lists take precedence over
+unused no-match/no-signal explanations. Catalog routing remains unchanged.
+
+Verification is offline/synthetic; real Event workflow runs and pending-batch cleanup
+remain operator actions. No workflow topology, model profile or Agent pin changes.
+Rollback restores the prior functions/contracts and does not delete published data.
+
 ## Non-thinking and item-local model discrepancies (#199)
 
 New versions of the four Event Agents use `EventDeepSeek-none`: explicit

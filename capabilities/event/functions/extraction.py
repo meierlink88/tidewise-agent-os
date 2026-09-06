@@ -6,7 +6,6 @@ import hashlib
 import json
 import logging
 import traceback
-from collections import Counter
 from datetime import datetime
 from typing import Any, Literal, NoReturn, cast
 from uuid import uuid4
@@ -16,7 +15,6 @@ from agno.run.base import RunStatus
 from agno.workflow import StepInput, StepOutput
 from pydantic import ValidationError
 
-from capabilities.event.internal.identity import same_occurrence
 from capabilities.event.internal.models import (
     EVENT_AGENT_IDS,
     EVENT_EXTRACTOR_AGENT_ID,
@@ -48,7 +46,6 @@ from capabilities.event.internal.models import (
     EventWorkflowProgress,
 )
 from capabilities.event.internal.queue import pending_queue_items
-from capabilities.event.internal.review import ControlledSignalReviewer
 from capabilities.event.internal.runtime import event_workflow_runtime
 from capabilities.event.internal.storage import (
     claim_event_batch,
@@ -91,12 +88,6 @@ _SIGNAL_REQUEST = "signal_request"
 _EVENT_AGENT_EXECUTION_VERSIONS = "event_agent_execution_versions"
 _EVENT_RESOLUTION_LIMIT = 50
 _EVENT_SIGNAL_TASK_LIMIT = _EVENT_RESOLUTION_LIMIT * 2
-
-_BUSINESS_TIME_STAGES: dict[str, frozenset[str]] = {
-    "occurred_at": frozenset({"OCCURRED", "IMPLEMENTED", "UPDATED", "SUSPENDED", "TERMINATED"}),
-    "announced_at": frozenset({"ANNOUNCED"}),
-    "effective_at": frozenset({"EFFECTIVE", "EXPECTED"}),
-}
 
 
 def _raise_stage_failure(stage: str, batch_id: str, error: Exception) -> NoReturn:
@@ -272,53 +263,30 @@ def _compile_candidate_time(
     candidate: EventCandidateSubmission,
     evidence_by_id: dict[str, Any],
 ) -> EventCandidateSubmission | None:
-    """Compile missing business time from immutable source observation metadata."""
+    """Preserve model time; fill only an absent timestamp with source observation time."""
 
     time = candidate.event.semantic.time
     supporting_evidence = [
         evidence_by_id[evidence_id] for evidence_id in candidate.evidence_ids if evidence_id in evidence_by_id
     ]
 
-    def supported_business_time(field: str, value: datetime | None) -> tuple[datetime | None, str | None]:
-        if value is None:
-            return None, None
-        supported_stages = _BUSINESS_TIME_STAGES[field]
-        supported_times = []
-        for evidence in supporting_evidence:
-            evidence_time = evidence.semantic.time
-            if (
-                evidence.semantic.stage in supported_stages
-                and evidence_time.precision == time.precision
-                and evidence_time.start_at is not None
-                and evidence_time.end_at is not None
-                and evidence_time.start_at <= value <= evidence_time.end_at
-            ):
-                supported_times.append(evidence_time)
-        if not supported_times:
-            return None, None
-        selected = min(supported_times, key=lambda item: (item.start_at, item.end_at))
-        return selected.start_at, selected.precision
-
-    occurred_at, occurred_precision = supported_business_time("occurred_at", time.occurred_at)
-    announced_at, announced_precision = supported_business_time("announced_at", time.announced_at)
-    effective_at, effective_precision = supported_business_time("effective_at", time.effective_at)
-    business_time = occurred_at or announced_at or effective_at
-    business_precision = occurred_precision or announced_precision or effective_precision
+    if any((time.occurred_at, time.announced_at, time.effective_at, time.observed_at)):
+        return candidate
     source_times = sorted(
         observed
         for evidence in supporting_evidence
         if (observed := evidence.published_at or evidence.collected_at) is not None
     )
-    observed_at = None if business_time is not None else (source_times[0] if source_times else None)
-    if business_time is None and observed_at is None:
+    observed_at = source_times[0] if source_times else None
+    if observed_at is None:
         return None
     semantic_payload = candidate.event.semantic.model_dump(mode="json")
     semantic_payload["time"] = {
-        "occurred_at": occurred_at,
-        "announced_at": announced_at,
-        "effective_at": effective_at,
+        "occurred_at": None,
+        "announced_at": None,
+        "effective_at": None,
         "observed_at": observed_at,
-        "precision": "INSTANT" if observed_at is not None else (business_precision or time.precision),
+        "precision": "INSTANT",
     }
     event_payload = candidate.event.model_dump(mode="json")
     event_payload["semantic"] = semantic_payload
@@ -340,82 +308,17 @@ def _validate_partition(batch: EventExtractionBatch, draft: EventExtractionDraft
             )
         else:
             compiled_candidates.append(compiled)
-    occurrence_merged: list[EventCandidateSubmission] = []
-    for candidate in compiled_candidates:
-        duplicate_index = next(
-            (
-                index
-                for index, existing in enumerate(occurrence_merged)
-                if same_occurrence(candidate.event, existing.event)
-            ),
-            None,
-        )
-        if duplicate_index is None:
-            occurrence_merged.append(candidate)
-            continue
-        existing = occurrence_merged[duplicate_index]
-        occurrence_merged[duplicate_index] = existing.model_copy(
-            update={"evidence_ids": sorted(set(existing.evidence_ids) | set(candidate.evidence_ids))}
-        )
-
-    candidate_counts = Counter(
-        evidence_id
-        for candidate in occurrence_merged
-        for evidence_id in candidate.evidence_ids
-        if evidence_id in expected
-    )
-    ambiguous = {evidence_id for evidence_id, count in candidate_counts.items() if count > 1}
-    normalized_candidates: list[EventCandidateSubmission] = []
-    for candidate in occurrence_merged:
-        retained = sorted(
-            evidence_id
-            for evidence_id in candidate.evidence_ids
-            if evidence_id in expected and evidence_id not in ambiguous
-        )
-        if retained:
-            supporting_semantics = [evidence_by_id[evidence_id].semantic for evidence_id in retained]
-
-            def compatible_text(field_name: Literal["reason", "method"]) -> str | None:
-                # The pinned Extractor owns semantic compatibility. This gate
-                # admits only its verbatim Evidence-supported choice, recovers
-                # a sole source value, and otherwise preserves a null conflict
-                # disposition instead of accepting an invented paraphrase.
-                values = sorted(
-                    {value for semantic in supporting_semantics if (value := getattr(semantic, field_name)) is not None}
-                )
-                proposed = getattr(candidate.event.semantic, field_name)
-                if proposed in values:
-                    return proposed
-                return values[0] if len(values) == 1 else None
-
-            metrics = [metric for semantic in supporting_semantics for metric in semantic.metrics]
-            semantic_payload = candidate.event.semantic.model_dump(mode="json")
-            semantic_payload.update(
-                reason=compatible_text("reason"),
-                method=compatible_text("method"),
-                metrics=[metric.model_dump(mode="json") for metric in metrics],
-            )
-            event_payload = candidate.event.model_dump(mode="json")
-            event_payload["semantic"] = semantic_payload
-            normalized_candidates.append(
-                EventCandidateSubmission.model_validate(
-                    {
-                        "event": event_payload,
-                        "evidence_ids": retained,
-                    }
-                )
-            )
+    # LLM owns grouping and all semantic fields; code only validates references.
+    normalized_candidates = compiled_candidates
+    for candidate in normalized_candidates:
+        if not set(candidate.evidence_ids) <= expected:
+            raise ValueError("Event references Evidence outside the batch")
 
     candidate_ids = {evidence_id for candidate in normalized_candidates for evidence_id in candidate.evidence_ids}
     dispositions_by_id: dict[str, EventDisposition] = {}
     for disposition in [*draft.no_event, *time_dispositions]:
         if disposition.evidence_id in expected and disposition.evidence_id not in candidate_ids:
             dispositions_by_id.setdefault(disposition.evidence_id, disposition)
-    for evidence_id in ambiguous:
-        dispositions_by_id[evidence_id] = EventDisposition(
-            evidence_id=evidence_id,
-            reason="ambiguous_candidate_assignment",
-        )
     for evidence_id in expected - candidate_ids - set(dispositions_by_id):
         dispositions_by_id[evidence_id] = EventDisposition(evidence_id=evidence_id, reason="unassigned_by_model")
     return EventExtractionDraft(
@@ -599,32 +502,6 @@ async def prepare_event_resolution(step_input: StepInput, run_context: RunContex
 
 def _validated_resolution(request: EventIdentityRequest, content: Any) -> EventResolutionRecord:
     history_by_id = {item.id: item for item in request.historical_candidates}
-    exact_ids = sorted(
-        item.id
-        for item in request.historical_candidates
-        if same_occurrence(
-            EventCandidateDTO.model_validate(request.candidate.event.model_dump(mode="json")),
-            item.event,
-        )
-    )
-    if len(exact_ids) > 1:
-        return EventResolutionRecord(
-            candidate_key=request.candidate_key,
-            decision="IGNORED",
-            atomic=True,
-            matched_event_ids=exact_ids,
-            reason_codes=["MULTIPLE_STRONG_EVENT_MATCHES"],
-            summary="Multiple exact historical Event identities conflict.",
-        )
-    if len(exact_ids) == 1:
-        return EventResolutionRecord(
-            candidate_key=request.candidate_key,
-            decision="SAME_EVENT",
-            atomic=True,
-            matched_event_ids=exact_ids,
-            reason_codes=["SAME_REAL_WORLD_OCCURRENCE"],
-            summary="The exact formal Event occurrence already exists.",
-        )
     try:
         decision = _model_from_content(EventIdentityDecision, content)
         if not set(decision.matched_event_ids) <= set(history_by_id):
@@ -931,12 +808,6 @@ async def _validated_signal_analysis(
     event_id = request.analysis.event.id
     try:
         draft = _model_from_content(EventSignalAnalysisDraft, content)
-        if draft.classification != request.classification:
-            raise ValueError("Signal Agent changed the frozen Event classification")
-        if draft.proposals and draft.no_signal_reason is not None:
-            raise ValueError("Signal proposals cannot coexist with a no-Signal reason")
-        if not draft.proposals and not (draft.no_signal_reason or "").strip():
-            raise ValueError("an empty Signal proposal set requires a no-Signal reason")
     except (ValidationError, ValueError, TypeError, json.JSONDecodeError):
         return _noncompliant_signal(event_id, request.classification)
 
@@ -948,7 +819,6 @@ async def _validated_signal_analysis(
         Literal["ACTUAL", "ANTICIPATED", "SOURCE_FORECAST", "ASSUMED"],
         {"FACT": "ACTUAL", "PLAN": "ANTICIPATED", "SPEC": "ASSUMED"}[request.analysis.event.event.semantic.modality],
     )
-    reviewer = ControlledSignalReviewer()
     accepted: list[SignalProposal] = []
     pairs: set[tuple[str, str]] = set()
     reason_codes = set(draft.reason_codes)
@@ -966,10 +836,7 @@ async def _validated_signal_analysis(
                 reference_time=request.analysis.reference_time,
                 assertion_modality=assertion_modality,
             )
-        except (ValidationError, ValueError, TypeError):
-            reason_codes.add("SIGNAL_REVIEW_REJECTED")
-            continue
-        if not await reviewer.review(request.analysis, request.classification, proposal, variable, anchor):
+        except (ValidationError, ValueError, TypeError, OverflowError):
             reason_codes.add("SIGNAL_REVIEW_REJECTED")
             continue
         accepted.append(proposal)
@@ -986,7 +853,7 @@ async def _validated_signal_analysis(
     return EventSignalAnalysisRecord(
         event_id=event_id,
         status=status,
-        classification=request.classification,
+        classification=draft.classification or request.classification,
         proposals=accepted,
         reason_codes=sorted(reason_codes),
     )

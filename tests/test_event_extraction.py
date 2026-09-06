@@ -875,15 +875,13 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(studio.extraction_inputs), 1)
         self.assertEqual(len(studio.identity_inputs), 1)
         resolved_semantic = studio.identity_inputs[0].candidate.event.semantic
-        self.assertEqual(resolved_semantic.reason, "客户扩容需求")
-        self.assertEqual(resolved_semantic.method, "签署正式采购协议")
-        self.assertEqual([metric.name for metric in resolved_semantic.metrics], ["订单金额"])
+        self.assertEqual(resolved_semantic, studio.extraction.candidates[0].event.semantic)
         self.assertNotIn("attribution", resolved_semantic.model_dump(mode="json"))
         self.assertEqual([request.task for request in studio.signal_inputs], ["CLASSIFY", "PROPOSE_SIGNALS"])
         proposed = cast(EventSignalAnalysisRequest, studio.signal_inputs[1])
         self.assertEqual(proposed.classification, self.classification())
         self.assertEqual(proposed.candidates, self.candidates())
-        self.assertEqual(proposed.analysis.reference_time, datetime(2026, 8, 24, 16, tzinfo=UTC))
+        self.assertEqual(proposed.analysis.reference_time, datetime(2026, 8, 25, tzinfo=UTC))
         self.assertEqual(
             proposed.analysis.event.event.semantic.model_dump(mode="json"),
             resolved_semantic.model_dump(mode="json"),
@@ -988,7 +986,7 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         published = next(iter(self.runtime._published_by_key.values()))
         self.assertEqual(published["event"]["semantic"]["time"]["observed_at"], "2026-08-29T13:46:38Z")
 
-    async def test_source_observation_cannot_be_relabelled_as_announced_business_time(self) -> None:
+    async def test_llm_announced_time_is_preserved(self) -> None:
         workflow, extractor, identity, signal_analyst = self.workflow()
         candidate = self.extraction_draft().candidates[0]
         event_payload = candidate.event.model_dump(mode="json")
@@ -1051,11 +1049,11 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status, RunStatus.completed)
         compiled_time = studio.identity_inputs[0].candidate.event.semantic.time
-        self.assertIsNone(compiled_time.announced_at)
-        self.assertEqual(compiled_time.observed_at, datetime(2026, 8, 29, 13, 46, 38, tzinfo=UTC))
+        self.assertEqual(compiled_time.announced_at, datetime(2026, 8, 29, 13, 46, 38, tzinfo=UTC))
+        self.assertIsNone(compiled_time.observed_at)
         self.assertEqual(compiled_time.precision, "INSTANT")
 
-    async def test_business_time_cannot_claim_more_precision_than_evidence(self) -> None:
+    async def test_llm_business_time_precision_is_preserved(self) -> None:
         workflow, extractor, identity, signal_analyst = self.workflow()
         candidate = self.extraction_draft().candidates[0]
         event_payload = candidate.event.model_dump(mode="json")
@@ -1118,11 +1116,11 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status, RunStatus.completed)
         compiled_time = studio.identity_inputs[0].candidate.event.semantic.time
-        self.assertIsNone(compiled_time.effective_at)
-        self.assertEqual(compiled_time.observed_at, datetime(2026, 8, 29, 13, 46, 38, tzinfo=UTC))
+        self.assertEqual(compiled_time.effective_at, datetime(2026, 8, 29, 13, 46, 38, tzinfo=UTC))
+        self.assertIsNone(compiled_time.observed_at)
         self.assertEqual(compiled_time.precision, "INSTANT")
 
-    async def test_business_time_uses_evidence_boundary_for_matching_precision(self) -> None:
+    async def test_llm_business_time_is_not_replaced_with_evidence_boundary(self) -> None:
         workflow, extractor, identity, signal_analyst = self.workflow()
         candidate = self.extraction_draft().candidates[0]
         event_payload = candidate.event.model_dump(mode="json")
@@ -1186,7 +1184,7 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status, RunStatus.completed)
         compiled_time = studio.identity_inputs[0].candidate.event.semantic.time
-        self.assertEqual(compiled_time.effective_at, period_start)
+        self.assertEqual(compiled_time.effective_at, datetime(2026, 8, 29, 13, 46, 38, tzinfo=UTC))
         self.assertIsNone(compiled_time.observed_at)
         self.assertEqual(compiled_time.precision, "YEAR")
 
@@ -1250,6 +1248,14 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
             proposals=[],
         )
 
+        original_extractor = studio.run_extractor
+
+        async def scoped_extractor(*args, **kwargs):
+            batch = EventExtractionBatch.model_validate(studio._input(args, kwargs))
+            studio.extraction.candidates[0].evidence_ids = [e.id for e in batch.evidences]
+            return await original_extractor(*args, **kwargs)
+
+        studio.run_extractor = scoped_extractor
         with patch.dict(os.environ, {"EVENT_EXTRACTION_BATCH_SIZE": "1"}):
             response = await self.execute_workflow(
                 workflow,
@@ -1465,7 +1471,7 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.runtime.signal_candidate_reads, 0)
         self.assertEqual(self.runtime.signal_projections, 0)
 
-    async def test_signal_proposals_cannot_coexist_with_a_no_signal_reason(self) -> None:
+    async def test_signal_proposals_take_precedence_over_unused_no_signal_reason(self) -> None:
         workflow, extractor, identity, signal_analyst = self.workflow()
         self.runtime.signal_candidates = self.candidates()
         studio = FakeStudioResponses(
@@ -1505,13 +1511,13 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
 
         result = EventExtractionResult.model_validate(response.content)
         self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID])
-        self.assertEqual(result.signal_fact_uuids, [])
+        self.assertEqual(result.signal_fact_uuids, ["signal-fact-1"])
         self.assertEqual(
             [request.task for request in studio.signal_inputs],
             ["CLASSIFY", "PROPOSE_SIGNALS"],
         )
         self.assertEqual(self.runtime.signal_candidate_reads, 1)
-        self.assertEqual(self.runtime.signal_projections, 0)
+        self.assertEqual(self.runtime.signal_projections, 1)
 
     async def test_malformed_identity_output_ignores_only_its_candidate(self) -> None:
         workflow, extractor, identity, signal_analyst = self.workflow()
@@ -1604,7 +1610,7 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(studio.identity_inputs), 1)
         self.assertEqual(self.runtime.data_publications, 1)
 
-    async def test_same_occurrence_candidates_in_one_batch_publish_only_once(self) -> None:
+    async def test_candidate_grouping_is_not_overridden_by_text_comparison(self) -> None:
         workflow, extractor, identity, signal_analyst = self.workflow()
         first = self.extraction_draft().candidates[0].model_copy(deep=True)
         first.evidence_ids = [self.FIRST_EVIDENCE_ID]
@@ -1634,12 +1640,13 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         )
 
         result = EventExtractionResult.model_validate(response.content)
-        self.assertEqual(result.candidate_count, 1)
+        self.assertEqual(result.candidate_count, 2)
         self.assertEqual(result.evidence_ids, [self.FIRST_EVIDENCE_ID, self.SECOND_EVIDENCE_ID])
-        self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID])
-        self.assertEqual(len(studio.identity_inputs), 1)
-        self.assertEqual(self.runtime.data_publications, 1)
-        self.assertEqual(self.runtime.episode_projections, 1)
+        # This fixture returns the same fake ID for each independent publication.
+        self.assertEqual(result.published_event_ids, [self.runtime.EVENT_ID, self.runtime.EVENT_ID])
+        self.assertEqual(len(studio.identity_inputs), 2)
+        self.assertEqual(self.runtime.data_publications, 2)
+        self.assertEqual(self.runtime.episode_projections, 2)
 
     async def test_permanent_signal_rejection_is_terminal_per_proposal_and_keeps_sibling(self) -> None:
         workflow, extractor, identity, signal_analyst = self.workflow()

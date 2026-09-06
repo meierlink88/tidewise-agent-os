@@ -79,8 +79,6 @@ class AssociationDecision(BaseModel):
 
     @model_validator(mode="after")
     def require_unambiguous_result(self):
-        if bool(self.matches) == bool(self.no_match_reason):
-            raise ValueError("return matches or an explicit no-match reason")
         if len({item.uuid for item in self.matches}) != len(self.matches):
             raise ValueError("duplicate association UUID")
         return self
@@ -91,12 +89,6 @@ class SignalDecision(BaseModel):
 
     proposals: list[DirectSignalDraft] = Field(max_length=30)
     no_signal_reason: str | None = Field(default=None, min_length=1, max_length=1000)
-
-    @model_validator(mode="after")
-    def require_unambiguous_result(self):
-        if bool(self.proposals) == bool(self.no_signal_reason):
-            raise ValueError("return proposals or an explicit no-signal reason")
-        return self
 
 
 class StorylineCandidateState(BaseModel):

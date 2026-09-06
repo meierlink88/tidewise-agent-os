@@ -36,6 +36,14 @@ class ClassifiedEventDraft(EventLLMResponse):
     candidates: list[ClassifiedCandidate] = Field(max_length=50)
     no_event: list[EventDisposition]
 
+    @model_validator(mode="after")
+    def remove_redundant_dispositions(self):
+        assigned = {eid for candidate in self.candidates for eid in candidate.evidence_ids}
+        self.no_event = list(
+            {item.evidence_id: item for item in self.no_event if item.evidence_id not in assigned}.values()
+        )
+        return self
+
 
 class BatchIdentityItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -70,7 +78,7 @@ class BatchAssociationItem(AssociationDecision):
                 matches.append(match)
             value["matches"] = matches
             reason = value.get("no_match_reason")
-            if reason is None or (isinstance(reason, str) and not reason.strip()):
+            if matches or reason is None or (isinstance(reason, str) and not reason.strip()):
                 value["no_match_reason"] = None if matches else "Model returned no matches without an explanation"
         return value
 
@@ -88,7 +96,7 @@ class BatchSignalItem(SignalDecision):
     def explain_explicit_empty_signals(cls, value):
         if isinstance(value, dict) and isinstance(value.get("proposals"), list):
             reason = value.get("no_signal_reason")
-            if reason is None or (isinstance(reason, str) and not reason.strip()):
+            if value["proposals"] or reason is None or (isinstance(reason, str) and not reason.strip()):
                 return {
                     **value,
                     "no_signal_reason": None
