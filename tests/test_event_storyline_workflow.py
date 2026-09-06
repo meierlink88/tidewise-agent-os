@@ -25,7 +25,7 @@ from sematica.analysis.event.graphiti.storylines import GraphitiStorylineCatalog
 from sematica.ingestion.episcode.event.stages.selected_episode import SelectedEventEpisodeStage
 from tests import test_event_extraction as legacy
 from tests.test_event_extraction import FakeEventWorkflowRuntime
-from workflows.event_extraction import _seed_workflow
+from workflows.event_extraction import _seed_legacy_workflow as _seed_workflow
 
 PINS = {"event-extractor": 11, "event-identity": 13, "event-association": 2, "event-signal-analyst": 17}
 

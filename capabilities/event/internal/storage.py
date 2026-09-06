@@ -260,6 +260,26 @@ def load_storyline_journal(batch_id: str):
     return StorylineJournal.model_validate_json(path.read_text()) if path.exists() else None
 
 
+def load_batch_checkpoint(batch_id: str, key: str) -> dict | None:
+    """Independent v16 step artifacts avoid read/modify/write races across branches."""
+    if not key.replace("-", "").isalnum():
+        raise ValueError("invalid batch checkpoint key")
+    path = pending_directory(batch_id) / "batch-v16" / f"{key}.json"
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def freeze_batch_checkpoint(batch: EventExtractionBatch, key: str, payload: dict) -> dict:
+    with _owned_batch_lock(batch):
+        existing = load_batch_checkpoint(batch.batch_id, key)
+        if existing is not None:
+            if existing != payload:
+                raise ValueError("batch checkpoint is immutable")
+            return existing
+        _atomic_write_json(pending_directory(batch.batch_id) / "batch-v16" / f"{key}.json", payload)
+    renew_event_batch_lease(batch)
+    return payload
+
+
 def write_storyline_journal(batch: EventExtractionBatch, journal) -> None:
     from capabilities.event.internal.storyline_models import StorylineJournal
 

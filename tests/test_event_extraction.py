@@ -2171,7 +2171,16 @@ class EventExtractionWorkflowTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             {link["link_key"] for link in publication["links"]},
-            {"event-extract", "event-resolve", "event-associate", "event-signal-analyze"},
+            {
+                "batch-extract",
+                "batch-identity",
+                "batch-geo",
+                "batch-macro",
+                "batch-chain",
+                "batch-node",
+                "batch-company",
+                "batch-signal",
+            },
         )
 
     def test_agent_contract_migrations_reconfigure_code_fields_without_replacing_studio_instructions(self) -> None:

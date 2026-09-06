@@ -54,8 +54,10 @@ selects the catalog, not its inferred downstream impact. Association is not a Si
 prove a Variable changed. Functions validate selected IDs and write only existing-entity MENTIONS;
 the new Event path never invokes free Graphiti entity extraction. Candidate assets are excluded
 from matching inputs. Each scheduled run claims one bounded Evidence batch and processes its
-Events in one configurable Loop. Semantic Agents remain direct Steps; code gates skip duplicate,
-empty or already-completed work. See docs/design/event-extraction-workflow.md for the v15 workflow.
+Events through four class-specific Parallel branches using complete batch contexts.
+Semantic Agents remain direct Steps; a class Loop prepares Signals after matching and a
+deterministic publication Loop writes the frozen package. Code gates skip duplicate,
+empty or already-completed work. See docs/design/event-extraction-workflow.md for v16.
 
 ### Event Identity
 

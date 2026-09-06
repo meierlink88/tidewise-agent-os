@@ -1,5 +1,11 @@
 """Local Evidence to Event Candidate extraction capability."""
 
+from capabilities.event.internal.batch_models import (
+    BatchAssociationDecision,
+    BatchIdentityDecision,
+    BatchSignalDecision,
+    ClassifiedEventDraft,
+)
 from capabilities.event.internal.local_runtime import create_local_event_workflow_runtime
 from capabilities.event.internal.models import (
     EVENT_AGENT_IDS,
@@ -38,6 +44,10 @@ from capabilities.event.internal.storyline_models import (
 )
 
 __all__ = [
+    "BatchAssociationDecision",
+    "BatchIdentityDecision",
+    "BatchSignalDecision",
+    "ClassifiedEventDraft",
     "EVENT_ASSOCIATION_AGENT_ID",
     "STORYLINE_AGENT_IDS",
     "AssociationDecision",

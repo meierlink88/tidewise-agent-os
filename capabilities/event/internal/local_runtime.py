@@ -61,6 +61,9 @@ def _published(event: HistoricalEvent) -> PublishedEvent:
 class LocalEventWorkflowRuntime:
     """Expose native Graphiti ingestion/search and the existing Data contract only."""
 
+    async def company_profiles(self, terms: list[str]) -> list[dict[str, Any]]:
+        return await self._storyline_catalog.companies(terms)
+
     def __init__(self, graphiti: Any, data: DataEventClient, db: BaseDb, registry: Registry) -> None:
         self._graphiti = graphiti
         self._data = data

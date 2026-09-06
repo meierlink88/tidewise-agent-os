@@ -43,6 +43,10 @@ from capabilities.collection.functions import (
 )
 from capabilities.event import (
     AssociationDecision,
+    BatchAssociationDecision,
+    BatchIdentityDecision,
+    BatchSignalDecision,
+    ClassifiedEventDraft,
     EventExtractionBatch,
     EventExtractionDraft,
     EventExtractionResult,
@@ -73,6 +77,7 @@ from capabilities.event.functions import (
     resolve_events,
     signal_analysis_complete,
 )
+from capabilities.event.functions.batch import BATCH_FUNCTIONS
 from capabilities.event.functions.linear import LINEAR_EVENT_FUNCTIONS
 from capabilities.event.functions.storyline import STORYLINE_FUNCTIONS
 from capabilities.evidence import (
@@ -177,6 +182,10 @@ registry = TidewiseRegistry(
     models=[default_model(), sol_low_model()],
     dbs=[get_postgres_db()],
     schemas=[
+        BatchAssociationDecision,
+        BatchIdentityDecision,
+        BatchSignalDecision,
+        ClassifiedEventDraft,
         AssociationDecision,
         IdentityClassificationDecision,
         SignalDecision,
@@ -228,6 +237,7 @@ registry = TidewiseRegistry(
         InvestmentReportWorkflowOutput,
     ],
     functions=[
+        *BATCH_FUNCTIONS,
         *STORYLINE_FUNCTIONS,
         *LINEAR_EVENT_FUNCTIONS,
         article_has_evidence,
