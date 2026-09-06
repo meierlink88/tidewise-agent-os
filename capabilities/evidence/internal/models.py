@@ -373,6 +373,30 @@ class EvidenceExtractionDraft(BaseModel):
         return accepted
 
 
+class ArticleReviewRequest(EvidenceAnalysisRequest):
+    """One complete article, with an identity echoed by its reviewer."""
+
+    article_key: str
+
+
+class ArticleReviewDraft(BaseModel):
+    """One reading: relevance plus the unchanged Evidence extraction envelope."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    article_key: str
+    is_relevant: bool = Field(strict=True)
+    extraction: EvidenceExtractionDraft | None
+
+    @model_validator(mode="after")
+    def validate_branch(self) -> "ArticleReviewDraft":
+        if self.is_relevant and self.extraction is None:
+            raise ValueError("Relevant articles must return an extraction envelope")
+        if not self.is_relevant and self.extraction is not None:
+            raise ValueError("Irrelevant articles must not return Evidence")
+        return self
+
+
 class RawEvidencePublication(BaseModel):
     """Data Service Raw Evidence request body."""
 

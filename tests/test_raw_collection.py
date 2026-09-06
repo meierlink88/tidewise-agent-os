@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 from agno.agent import Agent
 from agno.run import RunContext
-from agno.workflow import Loop, Step, StepInput, StepOutput
+from agno.workflow import Condition, Loop, Step, StepInput, StepOutput
 from pydantic import ValidationError
 
 from agents.title_curator import (
@@ -769,11 +769,13 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(version, 9)
         self.assertIn("is_relevant", current.instructions)
-        self.assertIn("完整 content", current.instructions)
+        self.assertIn("完整原文", current.instructions)
         self.assertIn("全球风险偏好", current.instructions)
         self.assertNotIn("reason_code", current.instructions)
         self.assertNotIn("uncertain", current.instructions)
-        self.assertIs(current.output_schema, TitleCurationDraft)
+        from capabilities.evidence import ArticleReviewDraft
+
+        self.assertIs(current.output_schema, ArticleReviewDraft)
         self.assertEqual(current.metadata["title_curator_contract_version"], TITLE_CURATOR_CONTRACT_VERSION)
 
     def test_studio_workflow_seed_round_trips_registered_functions(self) -> None:
@@ -781,20 +783,19 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         seeded = _seed_workflow(curator)
         serialized_steps = cast(list[dict[str, object]], seeded.to_dict()["steps"])
         serialized_loop_steps = cast(list[dict[str, object]], serialized_steps[1]["steps"])
+        serialized_review_steps = cast(list[dict[str, object]], serialized_loop_steps[1]["steps"])
         self.assertEqual(
-            [item.get("agent_id") for item in serialized_loop_steps if item.get("agent_id") is not None],
+            [item.get("agent_id") for item in serialized_review_steps if item.get("agent_id") is not None],
             ["title-curator"],
         )
         self.assertIsInstance(seeded.steps, list)
         steps = cast(list[Step | Loop], seeded.steps)
         self.assertIsInstance(steps[0], Step)
         self.assertIsInstance(steps[1], Loop)
-        self.assertIsInstance(steps[2], Step)
-        self.assertEqual(
-            [step.name for step in steps], ["collect-raw-evidence", "filter-raw-evidence", "publish-raw-evidence"]
-        )
+        self.assertEqual([step.name for step in steps], ["collect-raw-evidence", "process-articles"])
         loop = cast(Loop, steps[1])
-        inner_steps = cast(list[Step], loop.steps)
+        review_condition = cast(Condition, loop.steps[1])
+        inner_steps = cast(list[Step], review_condition.steps)
         self.assertEqual(
             [step.agent.name for step in inner_steps if step.agent is not None],
             ["Raw Evidence Filter"],
@@ -805,12 +806,13 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
                 for step in inner_steps
             ],
             [
-                "prepare_raw_evidence_filter_batch",
                 "title-curator",
-                "save_raw_evidence_filter_batch",
+                "save_article_review",
             ],
         )
-        self.assertIs(loop.end_condition, raw_evidence_filter_complete)
+        from capabilities.collection.functions import article_processing_complete
+
+        self.assertIs(loop.end_condition, article_processing_complete)
         self.assertFalse(loop.forward_iteration_output)
         self.assertTrue(all(step.max_retries == 0 for step in inner_steps))
 
@@ -857,7 +859,8 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(migrated.db, db)
         steps = cast(list[Step | Loop], migrated.steps)
         loop = cast(Loop, steps[1])
-        agent_steps = [step.agent for step in cast(list[Step], loop.steps) if step.agent is not None]
+        condition = cast(Condition, loop.steps[1])
+        agent_steps = [step.agent for step in cast(list[Step], condition.steps) if step.agent is not None]
         self.assertEqual([agent.id for agent in agent_steps], ["title-curator"])
         self.assertTrue(all(agent.db is None for agent in agent_steps))
         self.assertEqual(migrated.metadata["raw_collection_contract_version"], RAW_COLLECTION_CONTRACT_VERSION)
@@ -964,12 +967,11 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(response.stdout)
         result = payload[0] if isinstance(payload, list) else payload
         self.assertEqual(result["status"], "COMPLETED")
-        self.assertEqual(result["content"]["candidate_counts"]["results_pending"], 0)
         steps = {item["step_name"]: item for item in result["step_results"]}
         self.assertEqual(steps["collect-raw-evidence"]["executor_type"], "function")
-        self.assertEqual(steps["filter-raw-evidence"]["step_type"], "Loop")
-        self.assertIsNone(steps["filter-raw-evidence"]["executor_type"])
-        self.assertEqual(steps["publish-raw-evidence"]["executor_type"], "function")
+        self.assertEqual(steps["process-articles"]["step_type"], "Loop")
+        self.assertIsNone(steps["process-articles"]["executor_type"])
+        self.assertNotIn("publish-raw-evidence", steps)
 
 
 if __name__ == "__main__":

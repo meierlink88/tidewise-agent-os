@@ -13,6 +13,7 @@ from agents.investment_reviewer import INVESTMENT_REVIEWER_AGENT_ID, load_invest
 from agents.tidewise_assistant import tidewise_assistant
 from agents.title_curator import TITLE_CURATOR_AGENT_ID, filter_model, load_title_curator_agent
 from app.settings import default_model, sol_medium_model
+from app.workflow_runtime import install_raw_collection_session_compatibility
 from capabilities.collection import (
     CollectionRequest,
     PreparedArtifactSet,
@@ -21,11 +22,19 @@ from capabilities.collection import (
     TitleCurationRequest,
 )
 from capabilities.collection.functions import (
+    article_has_evidence,
+    article_needs_review,
+    article_processing_complete,
+    collect_articles,
     collect_raw_evidence,
+    prepare_next_article,
     prepare_raw_evidence_filter_batch,
     publish_raw_evidence,
+    publish_reviewed_article,
     raw_evidence_filter_complete,
+    save_article_review,
     save_raw_evidence_filter_batch,
+    validate_article_review,
 )
 from capabilities.event import (
     EventExtractionBatch,
@@ -57,6 +66,8 @@ from capabilities.event.functions import (
     signal_analysis_complete,
 )
 from capabilities.evidence import (
+    ArticleReviewDraft,
+    ArticleReviewRequest,
     EvidenceAnalysisRequest,
     EvidenceCategoryCatalog,
     EvidenceExtractionDraft,
@@ -138,12 +149,16 @@ class TidewiseRegistry(Registry):
         return None
 
 
+install_raw_collection_session_compatibility()
+
 registry = TidewiseRegistry(
     name="Tidewise AgentOS Registry",
     # Distinct names preserve per-Agent effort when Agno restores pinned Workflow steps.
     models=[default_model(), sol_medium_model(), filter_model("low"), filter_model("none")],
     dbs=[get_postgres_db()],
     schemas=[
+        ArticleReviewDraft,
+        ArticleReviewRequest,
         CollectionRequest,
         TitleCurationRequest,
         TitleCurationDraft,
@@ -188,6 +203,14 @@ registry = TidewiseRegistry(
         InvestmentReportWorkflowOutput,
     ],
     functions=[
+        article_has_evidence,
+        article_needs_review,
+        article_processing_complete,
+        collect_articles,
+        prepare_next_article,
+        publish_reviewed_article,
+        save_article_review,
+        validate_article_review,
         platform_identity,
         collect_raw_evidence,
         prepare_raw_evidence_filter_batch,

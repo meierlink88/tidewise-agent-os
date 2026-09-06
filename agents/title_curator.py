@@ -11,17 +11,19 @@ from agno.models.openai import OpenAIResponses
 from agno.registry import Registry
 
 from app.settings import SOL_MEDIUM_MODEL_ID, sol_medium_model
-from capabilities.collection import TitleCurationDraft
+from capabilities.evidence import ArticleReviewDraft
 from db import get_postgres_db
 
 TITLE_CURATOR_AGENT_ID = "title-curator"
-TITLE_CURATOR_CONTRACT_VERSION = 8
-TITLE_CURATOR_AGENT_NAME = "Raw Evidence Filter"
+TITLE_CURATOR_CONTRACT_VERSION = 10
+TITLE_CURATOR_AGENT_NAME = "Raw Evidence Reviewer"
+TITLE_CURATOR_SEED_SHA256_KEY = "article_review_seed_sha256"
 _SEED_PROMPT = Path(__file__).with_name("title_curator.seed.md")
 
 
 def filter_model(effort: str | None = None) -> OpenAIResponses:
     model = sol_medium_model()
+    model.timeout = 120
     effort = (
         (effort if effort is not None else getenv("RAW_EVIDENCE_FILTER_REASONING_EFFORT", "medium")).strip().lower()
     )
@@ -46,19 +48,24 @@ def _seed_instructions() -> str:
     instructions = _SEED_PROMPT.read_text(encoding="utf-8").strip()
     if not instructions:
         raise ValueError("Title Curator seed prompt is empty")
-    return instructions
+    # Reuse the exact Evidence prompt rather than maintaining a second extraction policy.
+    evidence_rules = _SEED_PROMPT.with_name("evidence_extractor.seed.md").read_text(encoding="utf-8").strip()
+    return instructions + "\n\n以下提取规则仅适用于相关文章的 extraction 字段：\n" + evidence_rules
 
 
 def _configure(agent: Agent) -> Agent:
     agent.db = get_postgres_db()
     agent.model = filter_model()
     agent.name = TITLE_CURATOR_AGENT_NAME
-    agent.description = "Filters collected material for political-economic and equity-research relevance."
+    agent.description = "Reviews one complete article and extracts source-grounded Evidence in the same reading."
     agent.instructions = _seed_instructions()
     agent.tools = []
     agent.retries = 0
-    agent.output_schema = TitleCurationDraft
-    agent.structured_outputs = True
+    agent.output_schema = ArticleReviewDraft
+    # Match the existing tolerant Evidence draft contract; validate the JSON envelope locally.
+    agent.structured_outputs = False
+    agent.use_json_mode = True
+    agent.parse_response = True
     agent.add_datetime_to_context = False
     agent.add_history_to_context = False
     agent.store_tool_messages = False
@@ -67,6 +74,7 @@ def _configure(agent: Agent) -> Agent:
         **dict(agent.metadata or {}),
         "title_curator_contract_version": TITLE_CURATOR_CONTRACT_VERSION,
         "raw_evidence_filter_reasoning_effort": agent.model.reasoning_effort,
+        TITLE_CURATOR_SEED_SHA256_KEY: hashlib.sha256(_seed_instructions().encode()).hexdigest(),
     }
     return agent
 
@@ -98,6 +106,8 @@ def ensure_title_curator_agent(registry: Registry) -> int:
         expected_model = filter_model()
         if (
             dict(current.metadata or {}).get("title_curator_contract_version") == TITLE_CURATOR_CONTRACT_VERSION
+            and dict(current.metadata or {}).get(TITLE_CURATOR_SEED_SHA256_KEY)
+            == hashlib.sha256(_seed_instructions().encode()).hexdigest()
             and isinstance(current.model, OpenAIResponses)
             and current.model.id == SOL_MEDIUM_MODEL_ID
             and current.model.name == expected_model.name

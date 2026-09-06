@@ -1,5 +1,8 @@
 # Raw Collection Workflow
 
+The following describes the pre-contract-19 pipeline. Current runtime design is
+[Per-article review](article-review-workflow.md); historical batch functions remain for artifact recovery/tests.
+
 ## Outcome
 
 Raw Collection has three business-visible Steps and one semantic filtering Agent:

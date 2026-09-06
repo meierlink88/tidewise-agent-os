@@ -7,11 +7,9 @@ manifest:
       - "给我一个新增采集 Workflow 的实施顺序"
 
   title-curator:
-    description: "Raw Evidence Filter：根据标题和摘要作出二元投研相关性判断；生产请运行 Raw Collection Workflow。"
+    description: "逐篇阅读全文，一次完成相关性判断和 Evidence 提取；日常处理运行 Raw Collection。"
     quick_prompts:
-      - "判断这批标题是否具有A股投研价值"
-      - "保留政策、产业和上市公司相关标题"
-      - "过滤娱乐、体育和生活方式噪声标题"
+      - "审阅给定完整文章：相关则按给定分类目录提取 Evidence，无关则跳过"
 
   evidence-extractor:
     description: "一次阅读完成 Raw Evidence 唯一分类、语义补充和原子 Evidence 提取；生产处理请运行 Evidence Extraction Workflow。"
@@ -62,12 +60,12 @@ manifest:
       - "Ping"
 
   raw-collection:
-    description: "采集、过滤并发布最新 Raw Evidence Artifact。"
+    description: "采集后逐篇去重、一次审阅并提取 Evidence；排除无关材料，逐篇发布 Raw Evidence 与 Evidence。"
     quick_prompts:
       - "采集全球范围最新发布、可能影响中国A股板块和产业链行情的政经事实资讯。"
 
   evidence-extraction:
-    description: "增量读取 Raw Collection Manifest 索引，冻结分类目录，并发布唯一分类的 Raw Evidence 和原子 Evidence。"
+    description: "仅供历史材料维护：读取旧 Raw Manifest。新采集在 Raw Collection 内直接提取并发布 Evidence，不再独立调度。"
     quick_prompts:
       - "处理所有尚未提取的 Raw Document"
 
