@@ -386,23 +386,17 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         draft.raw_evidence.category_code = "UNKNOWN_CATEGORY"
         step_input = StepInput(previous_step_content=draft)
 
-        output = curate_evidence(step_input, self._run_context("run-unknown-category", prepared))
-
-        skip = SkippedEvidencePublication.model_validate(output.content)
-        self.assertEqual(skip.reason, "UNKNOWN_CATEGORY")
-        self.assertEqual(skip.prepared_raw, prepared)
+        with self.assertRaisesRegex(ValueError, "UNKNOWN_CATEGORY"):
+            curate_evidence(step_input, self._run_context("run-unknown-category", prepared))
 
     def test_nonconforming_llm_envelope_is_skipped_instead_of_failing_workflow(self) -> None:
         self._publish_raw_fixture()
         prepared = self._prepared()
-        output = curate_evidence(
-            StepInput(previous_step_content='{"raw_evidence": {}, "evidences": "invalid"}'),
-            self._run_context("run-invalid-envelope", prepared),
-        )
-
-        skip = SkippedEvidencePublication.model_validate(output.content)
-        self.assertEqual(skip.reason, "NONCOMPLIANT_LLM_OUTPUT")
-        self.assertEqual(skip.prepared_raw, prepared)
+        with self.assertRaisesRegex(ValueError, "NONCOMPLIANT_LLM_OUTPUT"):
+            curate_evidence(
+                StepInput(previous_step_content='{"raw_evidence": {}, "evidences": "invalid"}'),
+                self._run_context("run-invalid-envelope", prepared),
+            )
 
     def test_prepare_reads_manifest_index_and_strips_artifact_wrapper(self) -> None:
         self._publish_raw_fixture()

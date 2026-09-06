@@ -4,16 +4,16 @@
 
 ## 当前组件
 
-- Agent Model：所有 Agent 统一使用 Agno `OpenAIResponses` 的 `gpt-5.6-sol`，固定 medium reasoning。
+- Agent Model：所有 Agent 使用 Agno `OpenAIResponses` 的 `gpt-5.6-sol`，默认 medium；文章 Reviewer 可通过 `RAW_EVIDENCE_FILTER_REASONING_EFFORT` 独立配置。
 - Graphiti Model：独立的图运行时仍使用 DeepSeek V4 Flash，不属于 Agent 模型切换范围。
-- Agent：`title-curator`（Raw Evidence Filter），对采集素材做投研相关性判断，由 Raw Collection Workflow 调用。
+- Agent：`title-curator`（Raw Evidence Reviewer），一次阅读全文完成相关性判断及 Evidence 提取。
 - Agent：`evidence-extractor`，从 Raw Evidence 提取 Atomic Evidence，由 Studio/PostgreSQL 管理。
 - Agent：`event-extractor`，按主体、动作、对象、阶段与时间身份语义把同批 Evidence 提炼为 Event Candidate。
 - Agent：`investment-reasoner`、`investment-report-writer`、`investment-reviewer`，分别负责分层影响与 Signal 传导、报告中文撰写和推理/报告审核。
 - Workflow：`local-ping`，无模型依赖的运行时检查。
 - Workflow：`deployment-check`，检查数据库、MCP、组件和调度状态。
-- Workflow：`raw-collection`，由 Agno Studio/PostgreSQL 管理编排版本，执行采集、语义过滤、确定性去重和 manifest-last 发布。
-- Workflow：`evidence-extraction`，增量提取并发布 Atomic Evidence，回写正式 Evidence ID。
+- Workflow：`raw-collection`，由 Agno Studio/PostgreSQL 管理编排版本，执行文章版本去重、逐篇审阅提取、Evidence 去重和逐篇发布。
+- Workflow：`evidence-extraction`，保留为历史维护入口，不再默认独立调度。
 - Workflow：`event-extraction`，冻结本地 Evidence，发布去重后 Event，投影 Graphiti 并构建 Signal Fact。
 - Workflow：`investment-reasoning`，由 Schedule 命题直接触发，按地缘政治→宏观经济→产业链及节点逐层推导，仅从有效 Signal 根形成方向结论；生成固定报告后由独立幂等发布 Step 交付，当前本地默认使用文件 Mock Publisher。
 - Projection CLI：`sematica.projection.company_cli`，从 Data API 投影 canonical Company，并只对图中已有 Industry/ChainNode 做可恢复的受限模型映射；写入禁止使用 Graphiti Episode。
@@ -71,8 +71,9 @@ docker compose rm -f agentos neo4j
 ## 采集提示词与数据
 
 `raw-collection` 直接使用 Schedule message 作为采集 query，不再注册或运行 Query Planner Agent。
-Workflow 仅包含 `collect-raw-evidence`、`filter-raw-evidence` 和 `publish-raw-evidence` 三个业务步骤。
-`Raw Evidence Filter` 由 `agents/title_curator.py` 维护，结合标题、来源、发布时间和有界正文摘要排除非政经素材。
+Workflow 先执行 `collect-raw-evidence`，再循环逐篇执行准备、审阅并提取、保存审阅、校验去重、条件发布。
+`Raw Evidence Reviewer` 由 `agents/title_curator.py` 维护，读取完整原文，无关或无有效 Evidence 时仅本地归档。
+发布失败重用冻结结果；没有独立发布回执步骤。合同和迁移方法见 [逐篇工作流设计](docs/design/article-review-workflow.md)。
 
 `raw-collection` 首次启动时也会创建一个 Studio 发布版本。Workflow 编排可在 Studio
 中创建新版本并发布；步骤使用的 Agent 和自定义 Function 实现在 Git 中维护。采集
@@ -85,22 +86,22 @@ Artifact 构建和发布的文件操作会卸载到工作线程，因此单 Work
 Agent 或 Workflow。
 
 新环境显式执行一次 `python -m scripts.seed_schedules` 后，会得到默认的
-`raw-collection-hourly`、`evidence-extraction-every-10-minutes`、
+`raw-collection-hourly`、
 `event-extraction-every-minute` 和 `investment-reasoning-daily` Schedule。默认名称只用于首次
 创建；之后名称、cron、endpoint、payload 和启停状态均由 PostgreSQL 与 AgentOS Control Panel
 管理。应用启动仅按 Workflow endpoint 做只读缺失、重复和启停检查，不创建或覆盖 Schedule，
 因此 Control Panel 中的改名和其他运行配置会跨容器重启保留。
 
-采集结果默认位于项目根目录 `data/collector/`。接受的文章在 manifest 可见前以
+采集结果默认位于项目根目录 `data/collector/`。有效文章在发布 Data API 前以
 `documents/YYYY/MM/DD/<document-sha256>.md` 内容寻址路径同时幂等写入 AgentOS 自有 MinIO
-`raw-evidence` bucket 和本地 Artifact：
+`raw-evidence` bucket；所有原文保存在本地逐篇队列：
 
-- `documents/`：接受的原始资讯 Markdown。
-- `runs/<run_id>/`：候选账本、汇总和 manifest。
-- `indexes/title-dedup-index.tsv`：新版标题跨运行去重索引；历史 `dedup-index.tsv` 仅保留为只读 URL 兼容索引。
+- `article-queue/items/`：原文、审阅结果、冻结发布内容和处理状态。
+- `article-queue/pending/`、`excluded/`、`completed/`：待处理、排除和完成标记。
+- `.pending/<run_id>/batches/`：采集结果缓冲；历史 `documents/`、`runs/`、`indexes/` 保留供迁移。
 
 `data/` 已被 Git 忽略。可通过 `.env` 的 `COLLECTOR_DATA_DIR` 替换宿主机目录。
-Evidence Extraction 仍用本地完整 Markdown 作为模型输入，但通过版本化 Data Service API 的既有
+Reviewer 使用完整正文作为模型输入，但通过版本化 Data Service API 的既有
 `raw_text` 字段只提交 `/{bucket}/{object_key}` 相对路径。Data Service 不读取或代理对象，也不向 AgentOS
 暴露自己的 PostgreSQL、MinIO 或其他基础设施；AgentOS 只持有自身 MinIO 的写凭据。
 

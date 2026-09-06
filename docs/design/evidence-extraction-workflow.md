@@ -1,5 +1,9 @@
 # Evidence Extraction Workflow
 
+The independent reader below is now a historical maintenance entry point. Daily extraction is part of
+[Raw Collection per-article review](article-review-workflow.md). Evidence contracts remain unchanged; malformed
+LLM envelopes and unknown category codes now fail for retry rather than becoming terminal skips.
+
 ## Outcome
 
 Incrementally consume completed Raw Collection manifests, classify each accepted Raw Evidence against the formal

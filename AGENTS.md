@@ -11,7 +11,7 @@
 ```text
 AgentOS (app/main.py)
 ├── Tidewise Assistant (agents/tidewise_assistant.py)
-├── Raw Evidence Filter (Agno Studio/PostgreSQL component; seeded by agents/title_curator.py)
+├── Raw Evidence Reviewer (single-article relevance + Evidence; seeded by agents/title_curator.py)
 ├── Evidence Extractor  (Agno Studio/PostgreSQL component; seeded by agents/evidence_extractor.py)
 ├── Event Extractor     (Agno Studio/PostgreSQL component; seeded by agents/event_extractor.py)
 ├── Event Identity      (Agno Studio/PostgreSQL component; seeded by agents/event_identity.py)
@@ -20,7 +20,7 @@ AgentOS (app/main.py)
 ├── Local Ping         (workflows/local_ping.py)
 ├── Deployment Check   (workflows/deployment_check.py)
 ├── Raw Collection     (Agno Studio/PostgreSQL component; seeded by workflows/raw_collection.py)
-├── Evidence Extraction (Agno Studio/PostgreSQL component; seeded by workflows/evidence_extraction.py)
+├── Evidence Extraction (historical maintenance; no default Schedule; workflows/evidence_extraction.py)
 ├── Event Extraction    (Agno Studio/PostgreSQL component; seeded by workflows/event_extraction.py)
 └── Investment Reasoning (Agno Studio/PostgreSQL component; seeded by workflows/investment_reasoning.py)
 ```
@@ -93,7 +93,8 @@ Workflow endpoint 出现多条 Schedule 必须视为配置错误，避免重复�
 - 本地 DB：`postgres:5432/agent_os`，角色 `agent_os_runtime`。
 - 本地 `RUNTIME_ENV=dev`；生产必须为 `prd` 并配置 JWT/JWKS。
 - Studio 创建的组件属于运行时状态；准备进入生产的组件必须回写代码、评审并版本化。
-- Raw Evidence Filter 与 Raw Collection 是显式混合组件：Function 与运行合同由 Git 管理，当前发布的 Filter Agent 提示词和 Workflow 编排由 Agno Studio 在 PostgreSQL 中版本化；每次运行加载当前发布版。
+- Raw Evidence Reviewer 与 Raw Collection 是显式混合组件：Function 与运行合同由 Git 管理，当前发布的 Reviewer Agent 提示词和 Workflow 编排由 Agno Studio 在 PostgreSQL 中版本化；每次运行加载当前发布版。
+- Raw Collection 逐篇审阅并提取 Evidence，逐篇发布 Raw/Evidence 后才进入下一篇。无关或无有效 Evidence 的原文仅保留在本地排除队列；文章身份、发布重放与历史迁移见 `docs/design/article-review-workflow.md`。
 
 ## 开发与验证
 

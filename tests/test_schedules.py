@@ -9,7 +9,6 @@ from app.schedules import (
     EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
     EVENT_EXTRACTION_SCHEDULE_PROMPT,
     EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
-    EVIDENCE_EXTRACTION_SCHEDULE_PROMPT,
     INVESTMENT_REASONING_SCHEDULE_ENDPOINT,
     INVESTMENT_REASONING_SCHEDULE_PROMPT,
     RAW_COLLECTION_SCHEDULE_ENDPOINT,
@@ -68,13 +67,13 @@ class ScheduleSeedTest(unittest.TestCase):
             SimpleNamespace(
                 id="evidence-a",
                 name="Evidence A",
-                endpoint=EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
+                endpoint=RAW_COLLECTION_SCHEDULE_ENDPOINT,
                 enabled=True,
             ),
             SimpleNamespace(
                 id="evidence-b",
                 name="Evidence B",
-                endpoint=EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
+                endpoint=RAW_COLLECTION_SCHEDULE_ENDPOINT,
                 enabled=True,
             ),
             SimpleNamespace(
@@ -102,7 +101,6 @@ class ScheduleSeedTest(unittest.TestCase):
         manager.list.return_value = []
         manager.create.side_effect = [
             SimpleNamespace(id="raw-id"),
-            SimpleNamespace(id="evidence-id"),
             SimpleNamespace(id="event-id"),
             SimpleNamespace(id="investment-id"),
         ]
@@ -115,16 +113,11 @@ class ScheduleSeedTest(unittest.TestCase):
             {call["endpoint"] for call in calls},
             {
                 RAW_COLLECTION_SCHEDULE_ENDPOINT,
-                EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
                 EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
                 INVESTMENT_REASONING_SCHEDULE_ENDPOINT,
             },
         )
-        evidence = next(call for call in calls if call["endpoint"] == EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT)
-        self.assertEqual(evidence["cron"], "*/10 * * * *")
-        self.assertEqual(evidence["payload"], {"message": EVIDENCE_EXTRACTION_SCHEDULE_PROMPT})
-        self.assertEqual(evidence["timezone"], "Asia/Shanghai")
-        self.assertEqual(evidence["if_exists"], "raise")
+        self.assertNotIn(EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT, {call["endpoint"] for call in calls})
         event = next(call for call in calls if call["endpoint"] == EVENT_EXTRACTION_SCHEDULE_ENDPOINT)
         self.assertEqual(event["cron"], "* * * * *")
         self.assertEqual(event["payload"], {"message": EVENT_EXTRACTION_SCHEDULE_PROMPT})
@@ -152,13 +145,13 @@ class ScheduleInspectionTest(unittest.TestCase):
             SimpleNamespace(
                 id="evidence-a",
                 name="Evidence A",
-                endpoint=EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
+                endpoint=RAW_COLLECTION_SCHEDULE_ENDPOINT,
                 enabled=True,
             ),
             SimpleNamespace(
                 id="evidence-b",
                 name="Evidence B",
-                endpoint=EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
+                endpoint=RAW_COLLECTION_SCHEDULE_ENDPOINT,
                 enabled=False,
             ),
         ]
@@ -167,8 +160,8 @@ class ScheduleInspectionTest(unittest.TestCase):
             states = inspect_schedules(manager=manager)
 
         by_endpoint = {state.endpoint: state for state in states}
-        self.assertEqual(by_endpoint[RAW_COLLECTION_SCHEDULE_ENDPOINT].status, "missing")
-        self.assertEqual(by_endpoint[EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT].status, "duplicate")
+        self.assertEqual(by_endpoint[EVENT_EXTRACTION_SCHEDULE_ENDPOINT].status, "missing")
+        self.assertEqual(by_endpoint[RAW_COLLECTION_SCHEDULE_ENDPOINT].status, "duplicate")
         manager.create.assert_not_called()
         manager.update.assert_not_called()
         manager.enable.assert_not_called()

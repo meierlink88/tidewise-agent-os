@@ -5,21 +5,24 @@ from typing import Any
 from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
-from agno.workflow import Loop, Step, Workflow
+from agno.workflow import Condition, Loop, Step, Workflow
 from agno.workflow.types import HumanReview, OnError
 
 from agents.title_curator import TITLE_CURATOR_AGENT_ID, LoadedTitleCuratorAgent, load_title_curator_agent
 from capabilities.collection.functions import (
-    collect_raw_evidence,
-    prepare_raw_evidence_filter_batch,
-    publish_raw_evidence,
-    raw_evidence_filter_complete,
-    save_raw_evidence_filter_batch,
+    article_has_evidence,
+    article_needs_review,
+    article_processing_complete,
+    collect_articles,
+    prepare_next_article,
+    publish_reviewed_article,
+    save_article_review,
+    validate_article_review,
 )
 from db import get_postgres_db
 
 RAW_COLLECTION_WORKFLOW_ID = "raw-collection"
-RAW_COLLECTION_CONTRACT_VERSION = 18
+RAW_COLLECTION_CONTRACT_VERSION = 19
 RETIRED_COLLECTION_QUERY_PLANNER_AGENT_ID = "raw-collector"
 
 
@@ -65,55 +68,70 @@ def _seed_workflow(curator: Agent, *, dependencies: dict[str, object] | None = N
     return Workflow(
         id=RAW_COLLECTION_WORKFLOW_ID,
         name="Raw Collection",
-        description="Collect, filter and publish the latest Raw Evidence from configured channels.",
+        description="Collect and deduplicate articles; review once and publish Raw Evidence and Evidence per article.",
         db=get_postgres_db(),
         dependencies=dependencies,
         metadata={"raw_collection_contract_version": RAW_COLLECTION_CONTRACT_VERSION},
         steps=[
             Step(
                 name="collect-raw-evidence",
-                executor=collect_raw_evidence,  # type: ignore[arg-type]  # Agno injects RunContext by name.
+                executor=collect_articles,  # type: ignore[arg-type]  # Agno injects RunContext by name.
                 max_retries=0,
                 human_review=_fail_fast_review(),
             ),
             Loop(
-                name="filter-raw-evidence",
-                description="Filter complete documents in bounded batches until every Candidate is decided.",
+                name="process-articles",
+                description="Complete one article before selecting the next; skip excluded and resume frozen work.",
                 max_iterations=1_000,
-                end_condition=raw_evidence_filter_complete,
-                # Each iteration reloads the next batch from the run-scoped file buffer.
-                # Forwarding the prior progress object would replace the Agent's batch input.
+                end_condition=article_processing_complete,
+                # Every iteration claims one article; never feed a prior article's output to its successor.
                 forward_iteration_output=False,
                 human_review=_fail_fast_review(),
                 steps=[
                     Step(
-                        name="prepare-raw-evidence-filter-batch",
-                        executor=prepare_raw_evidence_filter_batch,  # type: ignore[arg-type]  # Agno injects RunContext.
+                        name="prepare-next-article",
+                        executor=prepare_next_article,  # type: ignore[arg-type]  # Agno injects RunContext.
                         max_retries=0,
                         human_review=_fail_fast_review(),
                     ),
+                    Condition(
+                        name="review-required",
+                        evaluator=article_needs_review,
+                        steps=[
+                            Step(
+                                name="review-and-extract",
+                                agent=curator,
+                                max_retries=0,
+                                human_review=_fail_fast_review(),
+                            ),
+                            Step(
+                                name="save-article-review",
+                                executor=save_article_review,  # type: ignore[arg-type]  # Agno injects RunContext.
+                                max_retries=0,
+                                human_review=_fail_fast_review(),
+                            ),
+                        ],
+                    ),
                     Step(
-                        name="filter-raw-evidence-batch",
-                        agent=curator,
+                        name="validate-and-deduplicate",
+                        executor=validate_article_review,  # type: ignore[arg-type]  # Agno injects RunContext.
                         max_retries=0,
                         human_review=_fail_fast_review(),
                         strict_input_validation=True,
                     ),
-                    Step(
-                        name="save-raw-evidence-filter-batch",
-                        executor=save_raw_evidence_filter_batch,  # type: ignore[arg-type]  # Agno injects RunContext.
-                        max_retries=0,
-                        human_review=_fail_fast_review(),
-                        strict_input_validation=True,
+                    Condition(
+                        name="publish-eligible-article",
+                        evaluator=article_has_evidence,
+                        steps=[
+                            Step(
+                                name="publish-article-and-evidence",
+                                executor=publish_reviewed_article,  # type: ignore[arg-type]  # Agno injects RunContext.
+                                max_retries=0,
+                                human_review=_fail_fast_review(),
+                            )
+                        ],
                     ),
                 ],
-            ),
-            Step(
-                name="publish-raw-evidence",
-                executor=publish_raw_evidence,  # type: ignore[arg-type]  # Agno injects RunContext by name.
-                max_retries=0,
-                human_review=_fail_fast_review(),
-                strict_input_validation=True,
             ),
         ],
     )

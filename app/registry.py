@@ -21,11 +21,19 @@ from capabilities.collection import (
     TitleCurationRequest,
 )
 from capabilities.collection.functions import (
+    article_has_evidence,
+    article_needs_review,
+    article_processing_complete,
+    collect_articles,
     collect_raw_evidence,
+    prepare_next_article,
     prepare_raw_evidence_filter_batch,
     publish_raw_evidence,
+    publish_reviewed_article,
     raw_evidence_filter_complete,
+    save_article_review,
     save_raw_evidence_filter_batch,
+    validate_article_review,
 )
 from capabilities.event import (
     EventExtractionBatch,
@@ -57,6 +65,8 @@ from capabilities.event.functions import (
     signal_analysis_complete,
 )
 from capabilities.evidence import (
+    ArticleReviewDraft,
+    ArticleReviewRequest,
     EvidenceAnalysisRequest,
     EvidenceCategoryCatalog,
     EvidenceExtractionDraft,
@@ -144,6 +154,8 @@ registry = TidewiseRegistry(
     models=[default_model(), sol_medium_model(), filter_model("low"), filter_model("none")],
     dbs=[get_postgres_db()],
     schemas=[
+        ArticleReviewDraft,
+        ArticleReviewRequest,
         CollectionRequest,
         TitleCurationRequest,
         TitleCurationDraft,
@@ -188,6 +200,14 @@ registry = TidewiseRegistry(
         InvestmentReportWorkflowOutput,
     ],
     functions=[
+        article_has_evidence,
+        article_needs_review,
+        article_processing_complete,
+        collect_articles,
+        prepare_next_article,
+        publish_reviewed_article,
+        save_article_review,
+        validate_article_review,
         platform_identity,
         collect_raw_evidence,
         prepare_raw_evidence_filter_batch,

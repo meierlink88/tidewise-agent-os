@@ -145,6 +145,11 @@ async def prepare_evidence(step_input: StepInput, run_context: RunContext) -> St
             break
         _record_completed_duplicate(prepared, published)
         advance_checkpoint(prepared)
+    return await prepare_evidence_analysis(prepared, run_context)
+
+
+async def prepare_evidence_analysis(prepared: PreparedRawDocument, run_context: RunContext) -> StepOutput:
+    """Build the existing Evidence input for either manifest or article-queue callers."""
     run_state = _evidence_run_state(run_context)
     snapshot = run_state.get(_CATEGORY_CATALOG_DEPENDENCY)
     if snapshot is None:
@@ -450,22 +455,12 @@ def curate_evidence(step_input: StepInput, run_context: RunContext) -> StepOutpu
         raise ValueError("run-scoped Evidence Category Catalog is invalid") from exc
     try:
         draft = _model_from_content(EvidenceExtractionDraft, candidate_content)
-    except (ValidationError, TypeError, ValueError):
-        return StepOutput(
-            content=SkippedEvidencePublication(
-                prepared_raw=prepared,
-                reason="NONCOMPLIANT_LLM_OUTPUT",
-            )
-        )
+    except (ValidationError, TypeError, ValueError) as exc:
+        raise ValueError("NONCOMPLIANT_LLM_OUTPUT: retry the article") from exc
     categories_by_code = {item.code: item for item in catalog.categories}
     category = categories_by_code.get(draft.raw_evidence.category_code)
     if category is None:
-        return StepOutput(
-            content=SkippedEvidencePublication(
-                prepared_raw=prepared,
-                reason="UNKNOWN_CATEGORY",
-            )
-        )
+        raise ValueError("UNKNOWN_CATEGORY: retry the article")
     evidences = _canonicalize_evidence_drafts(draft)
     if not evidences:
         return StepOutput(
@@ -502,7 +497,9 @@ def curate_evidence(step_input: StepInput, run_context: RunContext) -> StepOutpu
     return StepOutput(content=publication)
 
 
-def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -> EvidencePublicationResult | None:
+def _read_final_manifest(
+    path: Path, publication: PreparedEvidencePublication, *, advance_cursor: bool = True
+) -> EvidencePublicationResult | None:
     artifact = _load_final_artifact(publication.raw_evidence.publication_key)
     if artifact is None:
         return None
@@ -513,7 +510,7 @@ def _read_final_manifest(path: Path, publication: PreparedEvidencePublication) -
     ):
         raise ValueError("published Evidence Artifact source identity conflict")
     _enqueue_for_event(path, artifact.identities.ids)
-    checkpoint = advance_checkpoint(frozen.prepared_raw)
+    checkpoint = advance_checkpoint(frozen.prepared_raw) if advance_cursor else read_checkpoint()
     return EvidencePublicationResult(
         raw_evidence_id=artifact.identities.raw_evidence_id,
         evidence_ids=artifact.identities.ids,
@@ -556,7 +553,7 @@ def _publish_evidence_skip(skip: SkippedEvidencePublication) -> EvidenceSkipResu
     )
 
 
-async def publish_evidence(step_input: StepInput) -> StepOutput:
+async def publish_evidence(step_input: StepInput, *, advance_cursor: bool = True) -> StepOutput:
     """Publish Raw Evidence then the complete Evidence set and advance the file checkpoint."""
     content = _previous_content(step_input)
     try:
@@ -574,7 +571,7 @@ async def publish_evidence(step_input: StepInput) -> StepOutput:
     root = evidence_artifact_root()
     final_root = root / "documents" / artifact_id
     final_manifest = final_root / "manifest.json"
-    existing = _read_final_manifest(final_manifest, publication)
+    existing = _read_final_manifest(final_manifest, publication, advance_cursor=advance_cursor)
     if existing is not None:
         return StepOutput(content=existing)
 
@@ -640,7 +637,7 @@ async def publish_evidence(step_input: StepInput) -> StepOutput:
     write_json(final_manifest, manifest)
     _enqueue_for_event(final_manifest, evidence_response.ids)
     shutil.rmtree(pending, ignore_errors=True)
-    checkpoint = advance_checkpoint(publication.prepared_raw)
+    checkpoint = advance_checkpoint(publication.prepared_raw) if advance_cursor else read_checkpoint()
     result = EvidencePublicationResult(
         raw_evidence_id=raw_id,
         evidence_ids=evidence_response.ids,
@@ -649,3 +646,33 @@ async def publish_evidence(step_input: StepInput) -> StepOutput:
         checkpoint=checkpoint,
     )
     return StepOutput(content=result)
+
+
+def recover_evidence_publication(publication_key: str) -> PreparedEvidencePublication | None:
+    """Reuse already frozen or published content without another LLM call."""
+    artifact = _load_final_artifact(publication_key)
+    if artifact is not None:
+        return artifact.prepared
+    path = evidence_artifact_root() / ".pending" / _publication_artifact_id(publication_key) / "prepared.json"
+    if not path.exists():
+        return None
+    publication = PreparedEvidencePublication.model_validate_json(path.read_text(encoding="utf-8"))
+    if publication.raw_evidence.publication_key != publication_key:
+        raise ValueError("frozen Evidence publication identity conflict")
+    return publication
+
+
+def transfer_legacy_raw_documents(accept: Any) -> int:
+    """Transfer the legacy cursor only after its article has a durable new queue entry.
+
+    Run explicitly with the legacy Evidence schedule disabled and no active consumers.
+    The callback is a Collection-owned durable enqueue operation.
+    """
+    count = 0
+    while True:
+        prepared, _ = read_next_raw_document(read_checkpoint())
+        if prepared is None:
+            return count
+        accept(prepared)
+        advance_checkpoint(prepared)
+        count += 1

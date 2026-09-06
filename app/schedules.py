@@ -100,14 +100,6 @@ def schedule_definitions() -> tuple[ScheduleDefinition, ...]:
                 timezone="Asia/Shanghai",
             ),
             ScheduleDefinition(
-                name=EVIDENCE_EXTRACTION_SCHEDULE_NAME,
-                cron="*/10 * * * *",
-                endpoint=EVIDENCE_EXTRACTION_SCHEDULE_ENDPOINT,
-                payload={"message": EVIDENCE_EXTRACTION_SCHEDULE_PROMPT},
-                description="Every 10 minutes: extract and publish all indexed, unprocessed Evidence.",
-                timezone="Asia/Shanghai",
-            ),
-            ScheduleDefinition(
                 name=EVENT_EXTRACTION_SCHEDULE_NAME,
                 cron="* * * * *",
                 endpoint=EVENT_EXTRACTION_SCHEDULE_ENDPOINT,
