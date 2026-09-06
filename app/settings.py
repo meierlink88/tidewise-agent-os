@@ -31,6 +31,25 @@ def default_model() -> DeepSeek:
     )
 
 
+def event_model() -> DeepSeek:
+    """Event-only profile; SDK retries must not silently multiply request timeouts."""
+    model = default_model()
+    model.timeout = 180
+    model.retries = 0
+    model.max_retries = 0
+    return model
+
+
+def is_event_model(model: object) -> bool:
+    expected = event_model()
+    return (
+        isinstance(model, DeepSeek)
+        and model.id == expected.id
+        and model.base_url == expected.base_url
+        and model.use_thinking == expected.use_thinking
+    )
+
+
 def sol_low_model() -> OpenAIResponses:
     """Return the registered GPT-5.6 Sol model with fixed low reasoning."""
     return OpenAIResponses(

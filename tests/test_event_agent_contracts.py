@@ -6,7 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from agno.agent import Agent
-from agno.models.deepseek import DeepSeek
+from agno.models.openai import OpenAIResponses
 
 from agents.event_extractor import (
     EVENT_EXTRACTOR_CONTRACT_VERSION,
@@ -23,6 +23,7 @@ from agents.event_signal_analyst import (
     build_event_signal_analyst_agent,
     ensure_event_signal_analyst_agent,
 )
+from app.settings import is_event_model
 from capabilities.event import EventExtractionDraft, IdentityClassificationDecision, SignalDecision
 
 
@@ -120,7 +121,7 @@ class EventAgentContractTest(unittest.TestCase):
                 instructions = f"Studio customized prompt for {agent_id}"
                 current = build()
                 current.instructions = instructions
-                current.model = DeepSeek(id="deepseek-v4-flash")
+                current.model = OpenAIResponses(id="gpt-5.6-sol")
                 with (
                     patch(f"{module}.get_postgres_db", return_value=database),
                     patch(f"{module}.Agent.load", return_value=current),
@@ -129,7 +130,7 @@ class EventAgentContractTest(unittest.TestCase):
                     self.assertEqual(ensure(MagicMock()), 42)
 
                 self.assertEqual(current.instructions, instructions)
-                self.assertEqual(current.model.id, "gpt-5.6-sol")
+                self.assertTrue(is_event_model(current.model))
                 save.assert_called_once()
                 self.assertIn("runtime contract repair", save.call_args.kwargs["notes"])
 
