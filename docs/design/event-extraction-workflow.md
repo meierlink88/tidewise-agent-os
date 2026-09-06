@@ -63,6 +63,17 @@ Association and direct-Signal Skills contain methods and examples only. They are
 Agent hydration and before nested Workflow execution because Agno storage omits Skills.
 Skills may read their local guidance, but have no business tools or write responsibilities.
 
+Issue #175 tightens prompt guidance only: association reasons connect a source fact to
+the matched profile; broad-node matches explain the specific business subset. Direct
+Signals retain that subset and material exceptions in existing fact/mechanism prose.
+No new scope field, validation gate or graph property is introduced. The current
+Signal contract still requires a positive duration estimate: the prompt distinguishes
+that estimate from source-stated timing but cannot represent an unknown duration.
+Removing that limitation requires a separately approved contract change. Runtime Skill
+digests refresh published Agent versions through the existing lifecycle while preserving
+Studio instructions; changing seed text alone does not replace customized instructions.
+Audit pending batch pins before rollout. No existing Signal is rewritten by this change.
+
 ## Catalog coverage and entity types
 
 | Primary class | Association catalog |

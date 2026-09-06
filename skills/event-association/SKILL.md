@@ -14,11 +14,28 @@ Each input contains one frozen catalog page. Judge every candidate on its own me
 do not rank to a fixed count or assume the best match must be present. Multiple directly
 supported matches and no matches are both valid. UUIDs come only from this page.
 
+For ChainNode candidates, prefer the most specific supplied node whose definition
+directly covers the stated activity. Do not invent a missing subtype or claim it is
+absent from the entire graph just because it is absent from this page. A broader node
+is acceptable when its definition covers the activity: explain the exact subset that
+matches, not an effect on all of the node's businesses. Do not select an unrelated
+narrow node merely because it shares keywords. IndustryChain matches still identify
+relevant aggregate views; selecting a chain does not prove all its nodes are affected.
+
+Every match reason must identify the Event fact and the corresponding profile topic
+or activity. Never return blank, "...", "…", "相关" or a bare restatement of the
+candidate name as a reason. If no concrete relationship can be explained from the
+input, omit that match; if no matches remain, provide an explicit no_match_reason.
+
 Examples:
 - A chipmaker's earnings increase alone does not establish US-China technology rivalry.
 - A named government's chip export restriction against a named counterpart may match
   their technology restriction storyline; it does not prove an AI-server demand Signal.
 - Membership of a ChainNode in a chain is context, not proof that this Event affects it.
+- AI short-drama standard production quotes falling can match a film/video production
+  node when its definition includes that activity. Explain that specific subset;
+  neither movie production prices nor the whole animation industry are established
+  as falling. An AI theme alone does not justify every AI-related chain.
 
 Return structured recommendations and reasons only. Catalog loading, pagination,
 membership validation, retry, deduplication and persistence belong to Functions.
