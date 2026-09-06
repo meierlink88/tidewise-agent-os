@@ -1,6 +1,8 @@
 """Per-article Workflow functions; the one semantic call remains a visible Agent Step."""
 
 import asyncio
+import re
+from datetime import UTC, datetime
 from typing import Any
 
 from agno.run import RunContext
@@ -17,6 +19,7 @@ from capabilities.collection.internal.article_queue import (
     item_root,
     queue_counts,
     read_prepared,
+    record_article_failure,
     reject_review,
     save_claimed,
     upload_article,
@@ -42,8 +45,13 @@ from capabilities.evidence.functions import (
     prepare_evidence_analysis,
     publish_evidence,
     recover_evidence_publication,
+    reuse_published_evidence,
     transfer_legacy_raw_documents,
 )
+
+
+class ArticleFailureRecordingError(RuntimeError):
+    """The workflow cannot safely continue without a durable error record."""
 
 
 def _state(context: RunContext) -> dict[str, Any]:
@@ -84,12 +92,24 @@ async def evidence_collect(step_input: StepInput, run_context: RunContext) -> St
 async def prepare_evidence_review(step_input: StepInput, run_context: RunContext) -> StepOutput:
     """Select only an unreviewed article; publication failures are not recovery work."""
     del step_input
+    state = _state(run_context)
+    state.pop("skip", None)
+    state.pop("claim", None)
     claim = claim_next(run_context.run_id, fresh_only=True)
     if claim is None:
-        return StepOutput(content={"idle": True, **queue_counts()}, stop=True)
-    _state(run_context)["claim"] = claim
+        return StepOutput(
+            content={"idle": True, **queue_counts(), "run_failed_articles": state.get("failed_count", 0)}, stop=True
+        )
+    state["claim"] = claim
     try:
-        analysis = await prepare_evidence_analysis(read_prepared(claim["article_key"]), run_context)
+        prepared = read_prepared(claim["article_key"])
+        existing = reuse_published_evidence(prepared)
+        if existing is not None:
+            payload = {**existing.model_dump(mode="json"), "reused_publication": True}
+            finish_claim(claim, "completed", payload)
+            state["skip"] = {"article_key": claim["article_key"], "status": "already_published", **payload}
+            return StepOutput(content=state["skip"])
+        analysis = await prepare_evidence_analysis(prepared, run_context)
         request = EvidenceAnalysisRequest.model_validate(analysis.content)
         # Keep machine identity exclusively in run_context; send only semantic source fields.
         document = request.document.model_dump(
@@ -97,13 +117,43 @@ async def prepare_evidence_review(step_input: StepInput, run_context: RunContext
         )
         return StepOutput(content=EvidenceReviewRequest(document=document, categories=request.categories))
     except Exception as exc:
-        fail_claim(claim, type(exc).__name__, terminal=True)
-        raise
+        return fail_current_article(run_context, "Prepare Evidence Review", exc)
+
+
+def article_review_gate(run_context: RunContext) -> StepOutput | None:
+    """Skip downstream work only when this iteration has a recorded terminal disposition."""
+    skip = _state(run_context).get("skip")
+    return StepOutput(content=skip) if skip is not None else None
+
+
+def fail_current_article(run_context: RunContext, step: str, exc: Exception) -> StepOutput:
+    """Record a handled article error. Never convert a failure to persist the record into success."""
+    state = _state(run_context)
+    claim = state["claim"]
+    message = re.sub(r"(?i)(bearer\s+|sk-)[^\s\"'<>]+", "[REDACTED]", str(exc))[:2000]
+    error = {
+        "run_id": run_context.run_id,
+        "step": step,
+        "error_type": type(exc).__name__,
+        "message": message,
+        "at": datetime.now(UTC).isoformat(),
+    }
+    try:
+        record_article_failure(claim, error)
+    except Exception as recording_error:
+        raise ArticleFailureRecordingError("Unable to persist article failure safely") from recording_error
+    state["failed_count"] = state.get("failed_count", 0) + 1
+    state["skip"] = {"article_key": claim["article_key"], "status": "failed", "error": error}
+    return StepOutput(content=state["skip"])
 
 
 async def evidence_publish(step_input: StepInput, run_context: RunContext) -> StepOutput:
     """Own all deterministic result handling; never call an Agent or schedule recovery."""
+    skipped = article_review_gate(run_context)
+    if skipped is not None:
+        return skipped
     claim = _state(run_context)["claim"]
+    stage = "Evidence Reviewer"
     try:
         content = _content(step_input)
         draft = (
@@ -113,14 +163,14 @@ async def evidence_publish(step_input: StepInput, run_context: RunContext) -> St
         )
         # Bind the semantic result to the code-owned claim, never to a generated identifier.
         bound = ArticleReviewDraft(article_key=claim["article_key"], **draft.model_dump())
+        stage = "Evidence Publish"
         save_article_review(StepInput(previous_step_content=bound), run_context)
         validated = validate_article_review(StepInput(), run_context)
         if not article_has_evidence(StepInput(previous_step_content=validated.content)):
             return validated
         return await publish_reviewed_article(StepInput(), run_context)
     except Exception as exc:
-        fail_claim(claim, type(exc).__name__, terminal=True)
-        raise
+        return fail_current_article(run_context, stage, exc)
 
 
 async def prepare_next_article(step_input: StepInput, run_context: RunContext) -> StepOutput:

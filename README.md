@@ -73,7 +73,7 @@ docker compose rm -f agentos neo4j
 `raw-collection` 直接使用 Schedule message 作为采集 query，不再注册或运行 Query Planner Agent。
 Workflow 共四个 Step、一个 `process_articles` Loop：`evidence_collect` → Loop（`prepare_evidence_review` → Evidence Reviewer Agent → `evidence_publish`）。
 只有 Agent Step 调用 LLM。业务条件、结果保存、无关隔离、Evidence 校验去重及发布均由 Function 处理，没有 Condition 节点。
-发布失败记录异常并中止本次运行；失败文章不自动补发，不因重新采集而重试。合同和迁移方法见 [逐篇工作流设计](docs/design/article-review-workflow.md)。
+单篇准备、审阅或发布失败时记录异常并继续下一篇；失败文章不自动补发，不因重新采集而重试。已发布的同一文章复用原结果，不重复审阅或发布。无法建立队列或持久记录错误时仍停止。合同和迁移方法见 [逐篇工作流设计](docs/design/article-review-workflow.md)。
 
 `raw-collection` 首次启动时也会创建一个 Studio 发布版本。Workflow 编排可在 Studio
 中创建新版本并发布；步骤使用的 Agent 和自定义 Function 实现在 Git 中维护。采集

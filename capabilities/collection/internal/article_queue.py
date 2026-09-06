@@ -216,6 +216,20 @@ def reject_review(claim: dict[str, str]) -> None:
             review.replace(archive)
 
 
+def record_article_failure(claim: dict[str, str], error: dict[str, Any]) -> None:
+    """Persist a terminal per-article failure; storage/fencing errors must still propagate."""
+    with queue_lock():
+        key = claim["article_key"]
+        state = read_state(key)
+        if state.get("token") != claim["token"] or state["status"] in {"completed", "excluded"}:
+            raise ValueError("Cannot record failure for an unowned or completed article")
+        state.update(status="failed", expires_at=0, last_error=error["error_type"], error=error)
+        write_json(item_root(key) / "error.json", error)
+        write_json(queue_root() / "failed" / f"{key}.json", {"article_key": key, **error})
+        write_json(item_root(key) / "state.json", state)
+        (queue_root() / "pending" / f"{key}.json").unlink(missing_ok=True)
+
+
 def upload_article(claim: dict[str, str], prepared: PreparedRawDocument | None = None) -> None:
     """Only publication-eligible articles leave the local queue for MinIO."""
     with queue_lock():

@@ -1,6 +1,6 @@
 # Per-article Raw Collection and Evidence Workflow
 
-Contract 22 exposes exactly four Steps and one Loop, with no Condition nodes:
+Contract 23 exposes exactly four Steps and one Loop, with no Condition nodes:
 
 1. Evidence Collect — evidence_collect Function: acquire, retain originals, deduplicate article versions and enqueue.
 2. process_articles Loop:
@@ -8,7 +8,7 @@ Contract 22 exposes exactly four Steps and one Loop, with no Condition nodes:
    - Evidence Reviewer — direct Agent Step (title-curator, contract 13); the only LLM call.
    - Evidence Publish — evidence_publish Function: save the review, isolate exclusions, validate/deduplicate and publish.
 
-The next article starts only after the current one is excluded or published. Business branches live inside Functions.
+The next article starts after the current one is excluded, published, reused or durably marked failed. Branches live in Functions.
 There is no receipt-only Step, recovery Loop, hidden Agent call, or automatic publication retry.
 
 The Agent returns only is_relevant plus extraction. Irrelevant means extraction=null;
@@ -53,7 +53,20 @@ Agent pre-hooks cannot substitute here: this installed version does not serializ
 
 File-lock protected enqueue and claims prevent concurrent claim of an article. Claims expire after 15 minutes and
 carry unique fencing tokens; API model timeout is 120 seconds. A crashed Agent step may hold its claim until expiry.
-Deterministic-step failures mark the article failed and remove its pending marker, then raise to fail the Workflow.
+Per-article failures persist error.json and state.error (run, step, type, redacted message and timestamp), remove the
+pending marker and skip the remaining work for that article. They do not retry or fail the whole run. The final idle
+result includes run_failed_articles; completion means the queue was traversed, not that every article succeeded.
+Failure to claim work or durably record its failure still stops the run, as does explicit cancellation.
+
+Agno 3.0.1 lacks a persisted conditional skip on a direct Agent Step. The existing Raw Collection runtime binding
+therefore wraps only its Reviewer execution boundary in contract 23. It calls Function-owned gates/error recording
+before/after native execution and is restored on Studio load; no Agent call is hidden inside a Function. Both streaming
+and non-streaming paths are tested. Preparing a failed or already-published article never invokes the Reviewer.
+
+Completed Artifact identity compares publication_key, canonical source URL, content hash and raw text. Collection
+timestamps, batch IDs, cursor offsets and rendered Markdown paths/hashes are not article identity. Preparation reuses
+completed bindings before invoking the model; the publish boundary has the same stable comparison. Existing artifacts
+are preserved; a true content/source mismatch is recorded as an article failure. Partial publications are not reused.
 Expired unfinished claims and historical saved attempts are recorded as failed on selection, not resumed or reread.
 Reacquisition skips all terminal articles, including failed and excluded ones. Partial publication is possible:
 Raw may exist without the full Evidence set when an API fails; operators inspect the exception, not an auto-recovery job.

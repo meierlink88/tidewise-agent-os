@@ -83,6 +83,52 @@ class AcceptingRawDocumentStore:
 class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
     CATEGORY_ID = "EVC15bec7e3-998c-5434-aa5d-29712c4c67cf"
 
+    async def test_completed_publication_reuses_stable_identity_not_collection_metadata(self) -> None:
+        from capabilities.evidence.functions.extraction import reuse_published_evidence
+
+        self._publish_raw_fixture()
+        original = self._prepared()
+        publication = self._validated(original)
+        raw_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        evidence_id = "EVD15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        with patch(
+            "capabilities.evidence.functions.extraction.post_publication",
+            side_effect=[
+                {"id": raw_id},
+                {"raw_evidence_id": raw_id, "ids": [evidence_id], "items": [{"input_index": 0, "id": evidence_id}]},
+            ],
+        ):
+            await publish_evidence(StepInput(previous_step_content=publication), advance_cursor=False)
+        repeated = original.model_copy(
+            update={
+                "collection_id": "new-run",
+                "manifest_path": "article-queue/new",
+                "document_index": 0,
+                "document_count": 1,
+                "document_path": "documents/new.md",
+                "document_url_path": "/raw-evidence/new.md",
+                "document_sha256": "f" * 64,
+                "collected_at": original.collected_at + timedelta(days=1),
+            }
+        )
+        with patch("capabilities.evidence.functions.extraction.post_publication") as post:
+            reused = reuse_published_evidence(repeated)
+            self.assertIsNotNone(reused)
+            assert reused is not None
+            self.assertEqual(reused.raw_evidence_id, raw_id)
+            self.assertEqual(reused.evidence_ids, [evidence_id])
+            again = publication.model_copy(update={"prepared_raw": repeated})
+            result = await publish_evidence(StepInput(previous_step_content=again), advance_cursor=False)
+            self.assertEqual(getattr(result.content, "raw_evidence_id"), raw_id)
+            for changes in (
+                {"raw_text": "different body"},
+                {"content_sha256": "b" * 64},
+                {"source_url": "https://other.test"},
+            ):
+                with self.assertRaisesRegex(ValueError, "source identity conflict"):
+                    reuse_published_evidence(repeated.model_copy(update=changes))
+            post.assert_not_called()
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         root = Path(self.temporary.name)
