@@ -1,36 +1,35 @@
 # Event Extraction Workflow
 
-## v14 ownership and topology
+## v15 ownership and topology
 
-Issue #165 replaces hidden per-Event Agent calls with four direct semantic Agent Steps.
+Issue #171 simplifies the #165 four-Agent workflow to one batch per invocation and one Event Loop.
 Agents recommend structured meanings only. Functions own retrieval, IDs, validation,
 state transitions, leases, journals, pagination, retries and all external writes.
 
 ```text
-Batch Loop
-  Claim frozen Evidence batch
-  Condition: extraction required
-    Event Extractor -> validate and freeze Evidence partition
-  Condition: candidates remain
-    Candidate Loop
-      Prepare candidate and frozen historical candidates
-      Condition: identity required
-        Event Identity + Classification -> validate and freeze
-      Condition: NEW_EVENT or RELATED_BUT_DISTINCT
-        Freeze class-specific catalog
-        Condition + Association Page Loop
-          Prepare page -> Event Association -> validate and advance
-        Freeze direct Signal candidates
-        Condition + Signal Page Loop
-          Prepare page -> Event Signal Analyst -> validate and freeze
-        Publish: Data Event ACK -> selected graph Event/MENTIONS -> Signal ACKs
-      Complete candidate
-  Complete batch
+Claim one bounded Evidence batch
+Event Extractor
+Event Loop
+  Prepare candidate and frozen historical candidates
+  Event Identity + Classification
+  Load class-specific catalog
+  Event Association
+  Prepare direct Signal candidates
+  Event Signal Analyst
+  Validate, publish and complete Event
+Complete batch and return
 ```
 
-Loop safety caps and registered Condition predicates remain visible/configurable in Studio.
-Predicates are Functions, never LLM routing. All Steps and containers fail closed on errors.
-Display names are not state keys. No Function invokes a semantic Agent.
+Only the Event Loop is visible/configurable in Studio. There are no Condition nodes,
+outer batch loops or editable pagination loops. The scheduler owns the next invocation.
+Functions decide empty, duplicate, non-publishable and checkpoint skip states. The narrow
+`app/event_step_runtime.py` adapter rebinds ordinary native Agent Steps after hydration,
+applies those gates and invokes only the current Step's exact pinned Agent. It validates
+and freezes each semantic result through Functions before moving on. It supports sync,
+async and both streaming modes; skipping never asks an LLM to decide or sets `stop=True`
+inside the Event Loop. An empty candidate list performs one inert iteration then completes.
+An empty/busy batch terminates at the top-level claim Step without any Agent invocation.
+All Steps fail closed on errors. Display names are not state keys. No Function invokes an Agent.
 The registered v13 Functions remain available only for historical Workflow rehydration;
 the frozen v13 topology fixture tests those legacy contracts separately.
 
@@ -62,7 +61,10 @@ Skills may read their local guidance, but have no business tools or write respon
 | INDUSTRY_CHAIN | All IndustryChain profiles, then all canonical members of selected chains |
 | COMPANY | Exact name/alias candidates from explicit Event actors and objects; model disambiguates |
 
-Large catalogs are fully partitioned into visible pages, not silently cut to Top-K.
+Large catalogs are fully partitioned into internal technical pages, never cut to Top-K.
+The direct Agent Step adapter processes these pages with per-page journal checkpoints;
+pages are not additional configurable workflow steps or independent business loops.
+IndustryChain selection still precedes loading its canonical ChainNode members.
 Each association page contains at most 64 profiles and 48,000 serialized characters;
 an oversized profile or overall safety-cap overflow fails explicitly.
 Only approved matching fields enter profiles. Candidate assets, main transmission,
@@ -134,8 +136,10 @@ required Data-owned `status`.
 Published workflows carry four exact native step-agent links and matching metadata.
 Links are derived using Agno's native `derive_step_links`, so Studio serialization and
 code publication agree. Startup rejects missing/mismatched pins, not editable positions.
-Refreshing Agent versions preserves published Loop/Condition configuration. Contract v13
-to v14 migration seeds the newly approved topology.
+Refreshing Agent versions preserves the published Event Loop configuration. Contract
+v14 to v15 migration seeds the approved linear topology and preserves the four exact pins.
+The v14 journal shape and semantic page boundaries are unchanged, so pending v14 work
+can resume only with the same exact Agent versions; incompatible pins fail closed.
 
 Each batch freezes pins in `storyline_journal.json`. Inputs, catalog pages, decisions,
 compiled proposals and per-write acknowledgements are journaled under the existing lease.
@@ -152,7 +156,7 @@ Function failures release only their own lease for prompt recovery.
 After human PR merge, audit pending batches, update the local runtime, verify published
 Agent contracts and four links, then run authorized REST/MCP and real-data acceptance.
 No provider API migration is needed. Roll back to the previous image/config for old batches;
-do not replay a v14 partial journal through a legacy workflow.
+do not replay a storyline journal through a pre-v14 workflow.
 
 ## Acceptance
 

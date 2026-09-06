@@ -72,6 +72,7 @@ from capabilities.event.functions import (
     resolve_events,
     signal_analysis_complete,
 )
+from capabilities.event.functions.linear import LINEAR_EVENT_FUNCTIONS
 from capabilities.event.functions.storyline import STORYLINE_FUNCTIONS
 from capabilities.evidence import (
     ArticleReviewDraft,
@@ -221,6 +222,7 @@ registry = TidewiseRegistry(
     ],
     functions=[
         *STORYLINE_FUNCTIONS,
+        *LINEAR_EVENT_FUNCTIONS,
         article_has_evidence,
         article_needs_review,
         article_processing_complete,

@@ -5,7 +5,7 @@ from typing import Any
 from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
-from agno.workflow import Condition, Loop, Step, Workflow
+from agno.workflow import Loop, Step, Workflow
 from agno.workflow.types import HumanReview, OnError
 from agno.workflow.workflow import derive_step_links
 
@@ -25,13 +25,12 @@ from capabilities.event import (
 from capabilities.event import (
     StorylineAgentVersions as EventAgentVersions,
 )
-from capabilities.event.functions import event_extraction_complete, event_extraction_required
+from capabilities.event.functions import linear
 from capabilities.event.functions import storyline as operations
 from db import get_postgres_db
 
 EVENT_EXTRACTION_WORKFLOW_ID = "event-extraction"
-EVENT_EXTRACTION_CONTRACT_VERSION = 14
-EVENT_EXTRACTION_BATCH_LIMIT = 50
+EVENT_EXTRACTION_CONTRACT_VERSION = 15
 EVENT_EXTRACTION_PUBLICATION_POLICY = "native_step_exact_agent_links.v2"
 _AGENT_LINK_BINDINGS = (
     ("event-extract", EVENT_EXTRACTOR_AGENT_ID, 0),
@@ -82,9 +81,6 @@ def _seed_workflow(
             strict_input_validation=True,
         )
 
-    def condition(name: str, evaluator: Any, steps: list[Any]) -> Condition:
-        return Condition(name=name, evaluator=evaluator, steps=steps, human_review=_fail_fast_review())
-
     def loop(name: str, end: Any, steps: list[Any], limit: int) -> Loop:
         return Loop(
             name=name,
@@ -95,74 +91,19 @@ def _seed_workflow(
             human_review=_fail_fast_review(),
         )
 
-    associate = condition(
-        "Association pages remain",
-        operations.has_association_pages,
+    candidates = loop(
+        "Process Event candidates",
+        operations.storyline_candidates_complete,
         [
-            loop(
-                "Associate complete catalog pages",
-                operations.association_pages_complete,
-                [
-                    function("Prepare association page", operations.prepare_association_page),
-                    semantic("Event Association", "event-associate", association),
-                    function("Validate association page", operations.freeze_association_page),
-                ],
-                operations.MAX_PAGES,
-            ),
+            function("Prepare candidate and history", linear.prepare_linear_candidate),
+            semantic("Event Identity and Classification", "event-resolve", identity),
+            function("Load matching catalog", linear.prepare_linear_catalog),
+            semantic("Event Association", "event-associate", association),
+            function("Prepare direct Signal candidates", linear.prepare_linear_signals),
+            semantic("Event Signal Analyst", "event-signal-analyze", signal_analyst),
+            function("Validate, publish and complete Event", linear.complete_linear_candidate),
         ],
-    )
-    signals = condition(
-        "Signal pages remain",
-        operations.has_storyline_signal_pages,
-        [
-            loop(
-                "Analyze direct Signal pages",
-                operations.storyline_signal_pages_complete,
-                [
-                    function("Prepare Signal page", operations.prepare_storyline_signal_page),
-                    semantic("Event Signal Analyst", "event-signal-analyze", signal_analyst),
-                    function("Validate Signal proposals", operations.freeze_storyline_signal_page),
-                ],
-                operations.MAX_PAGES,
-            ),
-        ],
-    )
-    candidates = condition(
-        "Candidates remain",
-        operations.has_storyline_candidates,
-        [
-            loop(
-                "Process Event candidates",
-                operations.storyline_candidates_complete,
-                [
-                    function("Prepare candidate and history", operations.prepare_storyline_candidate),
-                    condition(
-                        "Identity decision required",
-                        operations.needs_storyline_identity,
-                        [
-                            semantic("Event Identity and Classification", "event-resolve", identity),
-                            function("Validate identity and classification", operations.freeze_storyline_identity),
-                        ],
-                    ),
-                    condition(
-                        "Publishable new Event",
-                        operations.is_publishable_storyline,
-                        [
-                            function("Freeze matching catalog", operations.prepare_storyline_catalog),
-                            associate,
-                            function("Freeze direct Signal candidates", operations.prepare_storyline_signals),
-                            signals,
-                            function(
-                                "Publish Data Event then selected graph and Signals",
-                                operations.publish_storyline_candidate,
-                            ),
-                        ],
-                    ),
-                    function("Complete candidate", operations.finish_storyline_candidate),
-                ],
-                50,
-            ),
-        ],
+        50,
     )
     return Workflow(
         id=EVENT_EXTRACTION_WORKFLOW_ID,
@@ -179,24 +120,10 @@ def _seed_workflow(
             "event_agent_versions": pins,
         },
         steps=[
-            loop(
-                "Process Event Evidence batches",
-                event_extraction_complete,
-                [
-                    function("Claim frozen Evidence batch", operations.prepare_storyline_batch),
-                    condition(
-                        "Extraction required",
-                        event_extraction_required,
-                        [
-                            semantic("Event Extractor", "event-extract", extractor),
-                            function("Validate Evidence partition", operations.freeze_storyline_draft),
-                        ],
-                    ),
-                    candidates,
-                    function("Complete frozen batch", operations.complete_storyline_batch),
-                ],
-                EVENT_EXTRACTION_BATCH_LIMIT,
-            )
+            function("Claim one Evidence batch", operations.prepare_storyline_batch),
+            semantic("Event Extractor", "event-extract", extractor),
+            candidates,
+            function("Complete frozen batch", operations.complete_storyline_batch),
         ],
     )
 
