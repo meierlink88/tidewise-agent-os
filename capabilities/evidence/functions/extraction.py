@@ -456,11 +456,11 @@ def curate_evidence(step_input: StepInput, run_context: RunContext) -> StepOutpu
     try:
         draft = _model_from_content(EvidenceExtractionDraft, candidate_content)
     except (ValidationError, TypeError, ValueError) as exc:
-        raise ValueError("NONCOMPLIANT_LLM_OUTPUT: retry the article") from exc
+        raise ValueError("NONCOMPLIANT_LLM_OUTPUT: invalid review output") from exc
     categories_by_code = {item.code: item for item in catalog.categories}
     category = categories_by_code.get(draft.raw_evidence.category_code)
     if category is None:
-        raise ValueError("UNKNOWN_CATEGORY: retry the article")
+        raise ValueError("UNKNOWN_CATEGORY: invalid review category")
     evidences = _canonicalize_evidence_drafts(draft)
     if not evidences:
         return StepOutput(

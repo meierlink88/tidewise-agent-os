@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 from agno.agent import Agent
 from agno.run import RunContext
-from agno.workflow import Condition, Loop, Step, StepInput, StepOutput
+from agno.workflow import Loop, Step, StepInput, StepOutput
 from pydantic import ValidationError
 
 from agents.title_curator import (
@@ -779,26 +779,25 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(current.metadata["title_curator_contract_version"], TITLE_CURATOR_CONTRACT_VERSION)
 
     def test_studio_workflow_seed_round_trips_registered_functions(self) -> None:
-        curator = Agent(id="title-curator", name="Raw Evidence Filter")
+        curator = Agent(id="title-curator", name="Evidence Reviewer")
         seeded = _seed_workflow(curator)
         serialized_steps = cast(list[dict[str, object]], seeded.to_dict()["steps"])
         serialized_loop_steps = cast(list[dict[str, object]], serialized_steps[1]["steps"])
-        serialized_review_steps = cast(list[dict[str, object]], serialized_loop_steps[1]["steps"])
         self.assertEqual(
-            [item.get("agent_id") for item in serialized_review_steps if item.get("agent_id") is not None],
+            [item.get("agent_id") for item in serialized_loop_steps if item.get("agent_id") is not None],
             ["title-curator"],
         )
         self.assertIsInstance(seeded.steps, list)
         steps = cast(list[Step | Loop], seeded.steps)
         self.assertIsInstance(steps[0], Step)
         self.assertIsInstance(steps[1], Loop)
-        self.assertEqual([step.name for step in steps], ["collect-raw-evidence", "process-articles"])
+        self.assertEqual([step.name for step in steps], ["Evidence Collect", "process_articles"])
         loop = cast(Loop, steps[1])
-        review_condition = cast(Condition, loop.steps[1])
-        inner_steps = cast(list[Step], review_condition.steps)
+        inner_steps = cast(list[Step], loop.steps)
+        self.assertTrue(all(isinstance(step, Step) for step in inner_steps))
         self.assertEqual(
             [step.agent.name for step in inner_steps if step.agent is not None],
-            ["Raw Evidence Filter"],
+            ["Evidence Reviewer"],
         )
         self.assertEqual(
             [
@@ -806,8 +805,9 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
                 for step in inner_steps
             ],
             [
+                "prepare_evidence_review",
                 "title-curator",
-                "save_article_review",
+                "evidence_publish",
             ],
         )
         from capabilities.collection.functions import article_processing_complete
@@ -859,8 +859,7 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(migrated.db, db)
         steps = cast(list[Step | Loop], migrated.steps)
         loop = cast(Loop, steps[1])
-        condition = cast(Condition, loop.steps[1])
-        agent_steps = [step.agent for step in cast(list[Step], condition.steps) if step.agent is not None]
+        agent_steps = [step.agent for step in cast(list[Step], loop.steps) if step.agent is not None]
         self.assertEqual([agent.id for agent in agent_steps], ["title-curator"])
         self.assertTrue(all(agent.db is None for agent in agent_steps))
         self.assertEqual(migrated.metadata["raw_collection_contract_version"], RAW_COLLECTION_CONTRACT_VERSION)
@@ -968,9 +967,9 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         result = payload[0] if isinstance(payload, list) else payload
         self.assertEqual(result["status"], "COMPLETED")
         steps = {item["step_name"]: item for item in result["step_results"]}
-        self.assertEqual(steps["collect-raw-evidence"]["executor_type"], "function")
-        self.assertEqual(steps["process-articles"]["step_type"], "Loop")
-        self.assertIsNone(steps["process-articles"]["executor_type"])
+        self.assertEqual(steps["Evidence Collect"]["executor_type"], "function")
+        self.assertEqual(steps["process_articles"]["step_type"], "Loop")
+        self.assertIsNone(steps["process_articles"]["executor_type"])
         self.assertNotIn("publish-raw-evidence", steps)
 
 

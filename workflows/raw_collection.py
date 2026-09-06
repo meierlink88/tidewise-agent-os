@@ -5,24 +5,20 @@ from typing import Any
 from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
-from agno.workflow import Condition, Loop, Step, Workflow
+from agno.workflow import Loop, Step, Workflow
 from agno.workflow.types import HumanReview, OnError
 
 from agents.title_curator import TITLE_CURATOR_AGENT_ID, LoadedTitleCuratorAgent, load_title_curator_agent
 from capabilities.collection.functions import (
-    article_has_evidence,
-    article_needs_review,
     article_processing_complete,
-    collect_articles,
-    prepare_next_article,
-    publish_reviewed_article,
-    save_article_review,
-    validate_article_review,
+    evidence_collect,
+    evidence_publish,
+    prepare_evidence_review,
 )
 from db import get_postgres_db
 
 RAW_COLLECTION_WORKFLOW_ID = "raw-collection"
-RAW_COLLECTION_CONTRACT_VERSION = 20
+RAW_COLLECTION_CONTRACT_VERSION = 21
 RETIRED_COLLECTION_QUERY_PLANNER_AGENT_ID = "raw-collector"
 
 
@@ -74,14 +70,14 @@ def _seed_workflow(curator: Agent, *, dependencies: dict[str, object] | None = N
         metadata={"raw_collection_contract_version": RAW_COLLECTION_CONTRACT_VERSION},
         steps=[
             Step(
-                name="collect-raw-evidence",
-                executor=collect_articles,  # type: ignore[arg-type]  # Agno injects RunContext by name.
+                name="Evidence Collect",
+                executor=evidence_collect,  # type: ignore[arg-type]  # Agno injects RunContext by name.
                 max_retries=0,
                 human_review=_fail_fast_review(),
             ),
             Loop(
-                name="process-articles",
-                description="Complete one article before selecting the next; skip excluded and resume frozen work.",
+                name="process_articles",
+                description="Review and publish one article at a time; failures stop the run.",
                 max_iterations=1_000,
                 end_condition=article_processing_complete,
                 # Every iteration claims one article; never feed a prior article's output to its successor.
@@ -89,49 +85,22 @@ def _seed_workflow(curator: Agent, *, dependencies: dict[str, object] | None = N
                 human_review=_fail_fast_review(),
                 steps=[
                     Step(
-                        name="prepare-next-article",
-                        executor=prepare_next_article,  # type: ignore[arg-type]  # Agno injects RunContext.
+                        name="Prepare Evidence Review",
+                        executor=prepare_evidence_review,  # type: ignore[arg-type]  # Agno injects RunContext.
                         max_retries=0,
                         human_review=_fail_fast_review(),
-                    ),
-                    Condition(
-                        name="review-required",
-                        evaluator=article_needs_review,
-                        human_review=_fail_fast_review(),
-                        steps=[
-                            Step(
-                                name="review-and-extract",
-                                agent=curator,
-                                max_retries=0,
-                                human_review=_fail_fast_review(),
-                            ),
-                            Step(
-                                name="save-article-review",
-                                executor=save_article_review,  # type: ignore[arg-type]  # Agno injects RunContext.
-                                max_retries=0,
-                                human_review=_fail_fast_review(),
-                            ),
-                        ],
                     ),
                     Step(
-                        name="validate-and-deduplicate",
-                        executor=validate_article_review,  # type: ignore[arg-type]  # Agno injects RunContext.
+                        name="Evidence Reviewer",
+                        agent=curator,
                         max_retries=0,
                         human_review=_fail_fast_review(),
-                        strict_input_validation=True,
                     ),
-                    Condition(
-                        name="publish-eligible-article",
-                        evaluator=article_has_evidence,
+                    Step(
+                        name="Evidence Publish",
+                        executor=evidence_publish,  # type: ignore[arg-type]  # Agno injects RunContext.
+                        max_retries=0,
                         human_review=_fail_fast_review(),
-                        steps=[
-                            Step(
-                                name="publish-article-and-evidence",
-                                executor=publish_reviewed_article,  # type: ignore[arg-type]  # Agno injects RunContext.
-                                max_retries=0,
-                                human_review=_fail_fast_review(),
-                            )
-                        ],
                     ),
                 ],
             ),

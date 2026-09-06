@@ -350,7 +350,7 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
         assert session is not None and not isinstance(session, dict)
         self.assertEqual(session.workflow_id, "raw-collection")
 
-    async def test_publication_condition_fails_workflow_instead_of_silently_continuing(self) -> None:
+    async def test_publication_failure_stops_workflow_and_is_not_automatically_retried(self) -> None:
         key, _ = queue.enqueue_candidate(self.candidate(), "failure-test")
         agent = build_title_curator_agent()
         agent.db = None
@@ -369,7 +369,47 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
         ):
             await workflow.arun(input="fail closed", run_id="failure-test", session_id="failure-test")
         self.assertEqual(analyze.call_count, 1)
-        self.assertEqual(queue.read_state(key)["status"], "pending")
+        self.assertEqual(queue.read_state(key)["status"], "failed")
+        self.assertTrue((queue.item_root(key) / "publication.json").exists())
+        queue.enqueue_candidate(self.candidate(), "recollected")
+        output = await review.prepare_evidence_review(StepInput(), self.context)
+        self.assertTrue(output.stop)
+        self.assertIsNone(queue.claim_next("again"))
+
+    async def test_publish_function_handles_exclusion_without_any_external_publication(self) -> None:
+        for index, relevant in enumerate((False, True)):
+            key, _ = queue.enqueue_candidate(self.candidate(f"https://example.test/exclude-{index}"), "exclusions")
+            await review.prepare_evidence_review(StepInput(), self.context)
+            draft = fixtures.EvidenceExtractionTest._draft() if relevant else None
+            if draft is not None:
+                draft.evidences = []
+            with patch.object(review, "upload_article") as upload, patch.object(review, "publish_evidence") as publish:
+                result = await review.evidence_publish(
+                    StepInput(
+                        previous_step_content=ArticleReviewDraft(
+                            article_key=key,
+                            is_relevant=relevant,
+                            extraction=draft,
+                        )
+                    ),
+                    self.context,
+                )
+            upload.assert_not_called()
+            publish.assert_not_called()
+            assert isinstance(result.content, dict)
+            self.assertFalse(result.content["publish"])
+            self.assertEqual(queue.read_state(key)["status"], "excluded")
+
+    async def test_new_preparation_does_not_recover_historical_saved_review_or_publication(self) -> None:
+        key = await self.prepare()
+        review.validate_article_review(StepInput(), self.context)
+        assert self.context.session_state is not None
+        queue.fail_claim(self.context.session_state["article_review"]["claim"], "old-publication-failure")
+        with patch.object(review, "recover_evidence_publication") as recover:
+            result = await review.prepare_evidence_review(StepInput(), self.context)
+        recover.assert_not_called()
+        self.assertTrue(result.stop)
+        self.assertEqual(queue.read_state(key)["status"], "failed")
         self.assertTrue((queue.item_root(key) / "publication.json").exists())
 
 
