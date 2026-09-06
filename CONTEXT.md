@@ -2,6 +2,17 @@
 
 ## Ubiquitous language
 
+### MacroEconomic
+
+A Data-owned macroeconomic storyline with one core proposition and one primary macroeconomic domain.
+The proposition describes how this topic transmits to China's economy and markets; it is not a current
+investment prediction. The graph combines the MEC storyline with domain code/name/description and all
+ordered reference tactics. Candidate assets are research references, not Event matching evidence.
+Tactics are JSON-array text in Neo4j; assets are native string arrays. The domain FK stays in the
+operator-exported joined snapshot, not on the graph node. AgentOS has no Data PostgreSQL runtime
+dependency. Policy actions such as rate cuts are tactics, not standalone MacroEconomic nodes;
+CountryImplementsMacroEconomic is retired. See docs/design/macroeconomic-graph-projection.md.
+
 ### GeopoliticRivalry
 
 A Data-owned geopolitical storyline with one core proposition and one primary GeopoliticDomain.

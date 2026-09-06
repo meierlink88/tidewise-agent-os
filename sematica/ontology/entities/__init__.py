@@ -16,7 +16,6 @@ from sematica.ontology.entities.company import (
 from sematica.ontology.entities.concept import Concept
 from sematica.ontology.entities.country import (
     Country,
-    CountryImplementsMacroEconomic,
     CountryInRegion,
     CountryMemberOfOrganization,
 )
@@ -45,7 +44,6 @@ __all__ = [
     "Concept",
     "Country",
     "CountryInRegion",
-    "CountryImplementsMacroEconomic",
     "CountryMemberOfOrganization",
     "GeopoliticRivalry",
     "Industry",

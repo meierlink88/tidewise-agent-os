@@ -1,71 +1,54 @@
-"""图谱专用宏观经济政策目录初始化 CLI。"""
-
-from __future__ import annotations
+"""Explicit projection of an operator-exported macroeconomic snapshot."""
 
 import argparse
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
+from pydantic import ValidationError
+
+from app.settings import default_model
+from sematica.graphiti.runtime import create_agentos_graphiti
 from sematica.initialization.macroeconomic.projection import (
     build_plan,
     execute_plan,
-    inspect_graph_state,
-    load_catalog,
-    resolve_country_nodes,
-    verify_state,
+    inspect_state,
+    load_snapshot,
+    verify,
 )
-from sematica.projection.runtime import ProjectionError, create_graphiti, load_graphiti_config
+from sematica.projection.runtime import ProjectionError
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="初始化宏观经济政策动作目录")
-    parser.add_argument("--env-file", type=Path, help="Graphiti 私有运行时环境文件")
-    commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("plan", help="不访问图，仅校验打包的目录")
-    commands.add_parser("run", help="幂等写入政策节点与国家关系")
-    commands.add_parser("verify", help="校验图中政策节点与国家关系")
-    return parser
-
-
-async def _main(args: argparse.Namespace) -> dict[str, object]:
-    base_plan = build_plan(load_catalog())
+async def run(args):
+    nodes = build_plan(load_snapshot(args.snapshot))
     if args.command == "plan":
-        return {**base_plan.summary(), "preflight_validated": True}
-
-    graphiti = create_graphiti(load_graphiti_config(args.env_file))
+        return {"validated": True, "storylines": len(nodes)}
+    dimension = int(os.environ["GRAPHITI_EMBEDDING_DIM"])
+    graphiti = create_agentos_graphiti(default_model())
     try:
-        plan = await resolve_country_nodes(graphiti, base_plan)
         if args.command == "run":
-            nodes_written, relations_written, removed = await execute_plan(
-                graphiti,
-                plan,
-                progress=lambda completed, total: print(f"embedded {completed}/{total}", file=sys.stderr, flush=True),
-            )
-            return {
-                **verify_state(plan, await inspect_graph_state(graphiti, plan)),
-                "nodes_written": nodes_written,
-                "relations_written": relations_written,
-                "removed_before_write": removed,
-                "write_mode": "graphiti-demo-bulk-no-llm-no-delete",
-            }
-        return verify_state(plan, await inspect_graph_state(graphiti, plan))
+            return await execute_plan(graphiti, nodes, dimension)
+        return verify(nodes, await inspect_state(graphiti, nodes), dimension)
     finally:
         await graphiti.close()
 
 
-def main() -> int:
-    args = _parser().parse_args()
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--snapshot", type=Path, required=True)
+    parser.add_argument("command", choices=["plan", "run", "verify"])
+    args = parser.parse_args()
     try:
-        result = asyncio.run(_main(args))
+        result = asyncio.run(run(args))
     except ProjectionError as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        print(str(exc), file=sys.stderr)
         return 1
-    except KeyboardInterrupt:
-        print(json.dumps({"ok": False, "error": "已中断"}, ensure_ascii=False), file=sys.stderr)
-        return 130
-    print(json.dumps({"ok": True, **result}, ensure_ascii=False, indent=2))
+    except (ValidationError, ValueError, OSError, KeyError):
+        print("Invalid snapshot, runtime configuration, or projection state; no fallback catalog used", file=sys.stderr)
+        return 1
+    print(json.dumps(result, ensure_ascii=False))
     return 0
 
 
