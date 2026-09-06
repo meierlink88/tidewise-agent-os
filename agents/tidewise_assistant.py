@@ -2,7 +2,7 @@
 
 from agno.agent import Agent
 
-from app.settings import sol_medium_model
+from app.settings import sol_low_model
 from db import get_postgres_db
 
 INSTRUCTIONS = """\
@@ -14,7 +14,7 @@ INSTRUCTIONS = """\
 tidewise_assistant = Agent(
     id="tidewise-assistant",
     name="Tidewise Assistant",
-    model=sol_medium_model(),
+    model=sol_low_model(),
     db=get_postgres_db(),
     instructions=INSTRUCTIONS,
     add_datetime_to_context=True,

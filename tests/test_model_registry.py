@@ -18,7 +18,7 @@ from agents.investment_reviewer import build_investment_reviewer_agent
 from agents.tidewise_assistant import tidewise_assistant
 from agents.title_curator import build_title_curator_agent, ensure_title_curator_agent, load_title_curator_agent
 from app.registry import registry
-from app.settings import SOL_MEDIUM_DEFAULT_BASE_URL, SOL_MEDIUM_MODEL_ID, is_sol_medium_model, sol_medium_model
+from app.settings import SOL_LOW_DEFAULT_BASE_URL, SOL_LOW_MODEL_ID, is_sol_low_model, sol_low_model
 
 
 class ModelRegistryTest(unittest.TestCase):
@@ -43,15 +43,45 @@ class ModelRegistryTest(unittest.TestCase):
             self.assertTrue(loaded.model.strict_output)
             self.assertTrue(loaded.structured_outputs)
             self.assertFalse(loaded.use_json_mode)
-            self.assertTrue(is_sol_medium_model(build_evidence_extractor_agent().model))
-            self.assertTrue(is_sol_medium_model(registry.get_model(SOL_MEDIUM_MODEL_ID)))
+            self.assertTrue(is_sol_low_model(build_evidence_extractor_agent().model))
+            self.assertTrue(is_sol_low_model(registry.get_model(SOL_LOW_MODEL_ID)))
 
-    def test_filter_rejects_unknown_reasoning_level(self) -> None:
-        with patch.dict(os.environ, {"RAW_EVIDENCE_FILTER_REASONING_EFFORT": "light"}):
-            with self.assertRaisesRegex(ValueError, "must be none, low, or medium"):
-                build_title_curator_agent()
+    def test_legacy_filter_override_cannot_restore_other_efforts(self) -> None:
+        for effort in ("none", "medium", "light"):
+            with patch.dict(os.environ, {"RAW_EVIDENCE_FILTER_REASONING_EFFORT": effort}):
+                model = build_title_curator_agent().model
+                assert isinstance(model, OpenAIResponses)
+                self.assertEqual(model.reasoning_effort, "low")
 
-    def test_sol_medium_model_uses_agno_openai_responses_configuration(self) -> None:
+    def test_registry_exposes_one_gpt_but_restores_legacy_names(self) -> None:
+        self.assertEqual(len([m for m in registry.models if m.id == SOL_LOW_MODEL_ID]), 1)
+        for name in ("OpenAIResponses", "RawEvidenceFilter-low", "RawEvidenceFilter-none"):
+            original = Agent(model=OpenAIResponses(id=SOL_LOW_MODEL_ID, name=name))
+            restored = Agent.from_dict(original.to_dict(), registry=registry)
+            assert isinstance(restored.model, OpenAIResponses)
+            self.assertEqual(restored.model.reasoning_effort, "low")
+            canonical = registry.get_model(SOL_LOW_MODEL_ID)
+            assert isinstance(canonical, OpenAIResponses)
+            self.assertEqual(restored.model.base_url, canonical.base_url)
+
+    def test_reviewer_effort_migration_preserves_studio_prompt(self) -> None:
+        current = build_title_curator_agent()
+        current.instructions = "Studio custom instructions"
+        assert current.metadata is not None
+        current.metadata["raw_evidence_filter_reasoning_effort"] = "medium"
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 29}
+        with (
+            patch("agents.title_curator.get_postgres_db", return_value=db),
+            patch("agents.title_curator.Agent.load", return_value=current),
+            patch.object(current, "save", return_value=30),
+        ):
+            self.assertEqual(ensure_title_curator_agent(registry), 30)
+        self.assertEqual(current.instructions, "Studio custom instructions")
+        assert isinstance(current.model, OpenAIResponses)
+        self.assertEqual(current.model.reasoning_effort, "low")
+
+    def test_sol_low_model_uses_agno_openai_responses_configuration(self) -> None:
         with patch.dict(
             os.environ,
             {
@@ -59,33 +89,33 @@ class ModelRegistryTest(unittest.TestCase):
                 "OPENAI_BASE_URL": "https://proxy.example/v1",
             },
         ):
-            model = sol_medium_model()
+            model = sol_low_model()
 
         self.assertIsInstance(model, OpenAIResponses)
-        self.assertEqual(model.id, SOL_MEDIUM_MODEL_ID)
+        self.assertEqual(model.id, SOL_LOW_MODEL_ID)
         self.assertEqual(model.api_key, "test-openai-key")
         self.assertEqual(str(model.base_url), "https://proxy.example/v1")
-        self.assertEqual(model.reasoning_effort, "medium")
+        self.assertEqual(model.reasoning_effort, "low")
         self.assertIs(model.store, False)
 
-    def test_sol_medium_model_defaults_to_verified_proxy(self) -> None:
+    def test_sol_low_model_defaults_to_verified_proxy(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
-            model = sol_medium_model()
+            model = sol_low_model()
 
         self.assertIsNone(model.api_key)
-        self.assertEqual(str(model.base_url), SOL_MEDIUM_DEFAULT_BASE_URL)
+        self.assertEqual(str(model.base_url), SOL_LOW_DEFAULT_BASE_URL)
 
-    def test_registry_keeps_deepseek_and_adds_sol_medium(self) -> None:
+    def test_registry_keeps_deepseek_and_adds_sol_low(self) -> None:
         deepseek = registry.get_model("deepseek-v4-flash")
-        sol = registry.get_model(SOL_MEDIUM_MODEL_ID)
+        sol = registry.get_model(SOL_LOW_MODEL_ID)
 
         self.assertIsInstance(deepseek, DeepSeek)
         self.assertIsInstance(sol, OpenAIResponses)
         assert isinstance(sol, OpenAIResponses)
-        self.assertEqual(sol.reasoning_effort, "medium")
+        self.assertEqual(sol.reasoning_effort, "low")
 
     @patch.dict(os.environ, {"RAW_EVIDENCE_FILTER_REASONING_EFFORT": "medium"})
-    def test_all_agents_use_sol_medium(self) -> None:
+    def test_all_agents_use_sol_low(self) -> None:
         agents = (
             tidewise_assistant,
             build_title_curator_agent(),
@@ -99,7 +129,7 @@ class ModelRegistryTest(unittest.TestCase):
         )
 
         self.assertEqual(len(agents), 9)
-        self.assertTrue(all(is_sol_medium_model(agent.model) for agent in agents))
+        self.assertTrue(all(is_sol_low_model(agent.model) for agent in agents))
 
 
 if __name__ == "__main__":

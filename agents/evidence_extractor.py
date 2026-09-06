@@ -7,7 +7,7 @@ from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
 
-from app.settings import is_sol_medium_model, sol_medium_model
+from app.settings import is_sol_low_model, sol_low_model
 from capabilities.evidence import EvidenceExtractionDraft
 from db import get_postgres_db
 
@@ -61,7 +61,7 @@ def build_evidence_extractor_agent() -> Agent:
         id=EVIDENCE_EXTRACTOR_AGENT_ID,
         name="Evidence Extractor",
         description=EVIDENCE_EXTRACTOR_DESCRIPTION,
-        model=sol_medium_model(),
+        model=sol_low_model(),
         db=get_postgres_db(),
         tools=[],
         instructions=instructions,
@@ -95,11 +95,11 @@ def ensure_evidence_extractor_agent(registry: Registry) -> int:
         if (
             metadata.get("evidence_extractor_contract_version") == EVIDENCE_EXTRACTOR_CONTRACT_VERSION
             and metadata.get(EVIDENCE_EXTRACTOR_SEED_SHA256_KEY) == expected_seed_sha256
-            and is_sol_medium_model(current.model)
+            and is_sol_low_model(current.model)
         ):
             return version
         current.db = db
-        current.model = sol_medium_model()
+        current.model = sol_low_model()
         current.description = EVIDENCE_EXTRACTOR_DESCRIPTION
         current.tools = []
         current.tool_call_limit = None

@@ -6,7 +6,7 @@ from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
 
-from app.settings import is_sol_medium_model, sol_medium_model
+from app.settings import is_sol_low_model, sol_low_model
 from db import get_postgres_db
 
 INVESTMENT_REPORT_WRITER_AGENT_ID = "investment-report-writer"
@@ -16,7 +16,7 @@ _PROMPT = Path(__file__).with_name("investment_report_writer.seed.md")
 
 def _configure(agent: Agent) -> Agent:
     agent.db = get_postgres_db()
-    agent.model = sol_medium_model()
+    agent.model = sol_low_model()
     agent.name = "Investment Report Writer"
     agent.description = (
         "Writes reviewed investment conclusions as reader-facing Chinese without changing frozen results."
@@ -38,7 +38,7 @@ def _configure(agent: Agent) -> Agent:
 
 
 def build_investment_report_writer_agent() -> Agent:
-    return _configure(Agent(id=INVESTMENT_REPORT_WRITER_AGENT_ID, model=sol_medium_model()))
+    return _configure(Agent(id=INVESTMENT_REPORT_WRITER_AGENT_ID, model=sol_low_model()))
 
 
 def ensure_investment_report_writer_agent(registry: Registry) -> int:
@@ -53,7 +53,7 @@ def ensure_investment_report_writer_agent(registry: Registry) -> int:
             raise ValueError("Investment Report Writer could not be rehydrated")
         if dict(current.metadata or {}).get(
             "investment_report_writer_contract_version"
-        ) == INVESTMENT_REPORT_WRITER_CONTRACT_VERSION and is_sol_medium_model(current.model):
+        ) == INVESTMENT_REPORT_WRITER_CONTRACT_VERSION and is_sol_low_model(current.model):
             return version
         saved = _configure(current).save(
             db=db,

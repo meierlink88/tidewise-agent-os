@@ -6,7 +6,7 @@ from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
 
-from app.settings import is_sol_medium_model, sol_medium_model
+from app.settings import is_sol_low_model, sol_low_model
 from capabilities.investment import ReviewResult
 from db import get_postgres_db
 
@@ -17,7 +17,7 @@ _PROMPT = Path(__file__).with_name("investment_reviewer.seed.md")
 
 def _configure(agent: Agent) -> Agent:
     agent.db = get_postgres_db()
-    agent.model = sol_medium_model()
+    agent.model = sol_low_model()
     agent.name = "Investment Reviewer"
     agent.description = "Audits required retrieval actions, output references, and direct-versus-inferred boundaries."
     agent.tools = []
@@ -37,7 +37,7 @@ def _configure(agent: Agent) -> Agent:
 
 
 def build_investment_reviewer_agent() -> Agent:
-    return _configure(Agent(id=INVESTMENT_REVIEWER_AGENT_ID, model=sol_medium_model()))
+    return _configure(Agent(id=INVESTMENT_REVIEWER_AGENT_ID, model=sol_low_model()))
 
 
 def ensure_investment_reviewer_agent(registry: Registry) -> int:
@@ -52,7 +52,7 @@ def ensure_investment_reviewer_agent(registry: Registry) -> int:
             raise ValueError("Investment Reviewer could not be rehydrated")
         if dict(current.metadata or {}).get(
             "investment_reviewer_contract_version"
-        ) == INVESTMENT_REVIEWER_CONTRACT_VERSION and is_sol_medium_model(current.model):
+        ) == INVESTMENT_REVIEWER_CONTRACT_VERSION and is_sol_low_model(current.model):
             return version
         saved = _configure(current).save(
             db=db,

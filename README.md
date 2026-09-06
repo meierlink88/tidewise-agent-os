@@ -4,7 +4,8 @@
 
 ## 当前组件
 
-- Agent Model：所有 Agent 使用 Agno `OpenAIResponses` 的 `gpt-5.6-sol`，默认 medium；文章 Reviewer 可通过 `RAW_EVIDENCE_FILTER_REASONING_EFFORT` 独立配置。
+- Agent Model：GPT Agent 统一使用 Agno `OpenAIResponses` 的 `gpt-5.6-sol`，固定 low；不再支持文章 Reviewer 的独立推理强度覆盖。模型列表仅保留一个 GPT 选项；现有 DeepSeek Agent 配置不变。
+  旧 `RawEvidenceFilter-low/none` 模型名称仅作加载兼容，不显示为额外选项。Agno 持久化模型身份而非完整推理参数，因此旧版本恢复后也使用当前 low 策略；这不保证旧 medium/none 运行可按原参数复现。部署前检查未完成批次及版本引用，不自动重跑或清理历史数据。
 - Graphiti Model：独立的图运行时仍使用 DeepSeek V4 Flash，不属于 Agent 模型切换范围。
 - Agent：`title-curator`（Evidence Reviewer），一次阅读全文完成相关性判断及 Evidence 提取；保留内部 ID 以兼容历史引用。
 - Agent：`evidence-extractor`，从 Raw Evidence 提取 Atomic Evidence，由 Studio/PostgreSQL 管理。

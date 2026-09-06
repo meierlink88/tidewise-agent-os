@@ -2,7 +2,6 @@
 
 import hashlib
 from dataclasses import dataclass
-from os import getenv
 from pathlib import Path
 
 from agno.agent import Agent
@@ -10,7 +9,7 @@ from agno.db.base import ComponentType
 from agno.models.openai import OpenAIResponses
 from agno.registry import Registry
 
-from app.settings import SOL_MEDIUM_MODEL_ID, sol_medium_model
+from app.settings import SOL_LOW_MODEL_ID, sol_low_model
 from capabilities.evidence import EvidenceReviewDraft
 from db import get_postgres_db
 
@@ -21,18 +20,10 @@ TITLE_CURATOR_SEED_SHA256_KEY = "article_review_seed_sha256"
 _SEED_PROMPT = Path(__file__).with_name("title_curator.seed.md")
 
 
-def filter_model(effort: str | None = None) -> OpenAIResponses:
-    model = sol_medium_model()
+def filter_model() -> OpenAIResponses:
+    model = sol_low_model()
     model.timeout = 120
     model.strict_output = True
-    effort = (
-        (effort if effort is not None else getenv("RAW_EVIDENCE_FILTER_REASONING_EFFORT", "medium")).strip().lower()
-    )
-    if effort not in {"none", "low", "medium"}:
-        raise ValueError("RAW_EVIDENCE_FILTER_REASONING_EFFORT must be none, low, or medium")
-    model.reasoning_effort = effort
-    if effort != "medium":
-        model.name = f"RawEvidenceFilter-{effort}"
     return model
 
 
@@ -110,14 +101,25 @@ def ensure_title_curator_agent(registry: Registry) -> int:
             and dict(current.metadata or {}).get(TITLE_CURATOR_SEED_SHA256_KEY)
             == hashlib.sha256(_seed_instructions().encode()).hexdigest()
             and isinstance(current.model, OpenAIResponses)
-            and current.model.id == SOL_MEDIUM_MODEL_ID
+            and current.model.id == SOL_LOW_MODEL_ID
             and current.model.name == expected_model.name
+            and current.model.reasoning_effort == "low"
             and dict(current.metadata or {}).get("raw_evidence_filter_reasoning_effort", "medium")
             == expected_model.reasoning_effort
             and current.model.store is False
         ):
             return version
-        migrated = _configure(current).save(
+        # An effort-only migration must not replace a Studio-maintained prompt.
+        instructions = current.instructions
+        same_contract = (
+            dict(current.metadata or {}).get("title_curator_contract_version") == TITLE_CURATOR_CONTRACT_VERSION
+            and dict(current.metadata or {}).get(TITLE_CURATOR_SEED_SHA256_KEY)
+            == hashlib.sha256(_seed_instructions().encode()).hexdigest()
+        )
+        configured = _configure(current)
+        if same_contract:
+            configured.instructions = instructions
+        migrated = configured.save(
             db=db,
             stage="published",
             notes=f"Title Curator runtime contract migration {TITLE_CURATOR_CONTRACT_VERSION}",
@@ -147,10 +149,8 @@ def load_title_curator_agent(registry: Registry) -> LoadedTitleCuratorAgent:
         raise ValueError("Title Curator published version could not be rehydrated")
     if not isinstance(agent.instructions, str) or not agent.instructions.strip():
         raise ValueError("Title Curator published instructions are empty")
-    # Agno serializes only model identity; restore the published Agent-specific profile
-    # on a fresh instance, never mutate the shared registry model.
-    effort = dict(agent.metadata or {}).get("raw_evidence_filter_reasoning_effort", "medium")
-    agent.model = filter_model(effort)
+    # Keep Reviewer-specific transport settings on a fresh canonical low model.
+    agent.model = filter_model()
     agent.db = None
     return LoadedTitleCuratorAgent(
         agent=agent,

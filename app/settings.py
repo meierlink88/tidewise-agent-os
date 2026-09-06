@@ -10,8 +10,8 @@ from os import getenv
 from agno.models.deepseek import DeepSeek
 from agno.models.openai import OpenAIResponses
 
-SOL_MEDIUM_MODEL_ID = "gpt-5.6-sol"
-SOL_MEDIUM_DEFAULT_BASE_URL = "https://model-proxy.ceekeecloud.com/v1"
+SOL_LOW_MODEL_ID = "gpt-5.6-sol"
+SOL_LOW_DEFAULT_BASE_URL = "https://model-proxy.ceekeecloud.com/v1"
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -31,22 +31,22 @@ def default_model() -> DeepSeek:
     )
 
 
-def sol_medium_model() -> OpenAIResponses:
-    """Return the registered GPT-5.6 Sol model with fixed medium reasoning."""
+def sol_low_model() -> OpenAIResponses:
+    """Return the registered GPT-5.6 Sol model with fixed low reasoning."""
     return OpenAIResponses(
-        id=SOL_MEDIUM_MODEL_ID,
+        id=SOL_LOW_MODEL_ID,
         api_key=getenv("OPENAI_API_KEY"),
-        base_url=getenv("OPENAI_BASE_URL", SOL_MEDIUM_DEFAULT_BASE_URL),
-        reasoning_effort="medium",
+        base_url=getenv("OPENAI_BASE_URL", SOL_LOW_DEFAULT_BASE_URL),
+        reasoning_effort="low",
         store=False,
     )
 
 
-def is_sol_medium_model(model: object) -> bool:
-    """Return whether an Agent is bound to the code-owned Sol medium profile."""
+def is_sol_low_model(model: object) -> bool:
+    """Return whether an Agent is bound to the code-owned Sol low profile."""
     return (
         isinstance(model, OpenAIResponses)
-        and model.id == SOL_MEDIUM_MODEL_ID
-        and model.reasoning_effort == "medium"
+        and model.id == SOL_LOW_MODEL_ID
+        and model.reasoning_effort == "low"
         and model.store is False
     )
