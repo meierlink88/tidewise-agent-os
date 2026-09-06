@@ -1,5 +1,17 @@
 # Event Extraction Workflow
 
+## Empty batch association explanations (#191)
+
+An explicit `matches: []` with an omitted, null or blank `no_match_reason` is
+normalized by the batch response model to `Model returned no matches without an
+explanation`. This records missing model explanation, not a guessed business cause.
+Existing no-match handling skips unmatched Events without Signal/publication and
+allows other Events to continue. A chain match with no node still follows the
+existing chain-only publication rule. Explicit reasons are retained; missing or
+malformed match lists, candidate coverage and entity authorization remain strict.
+No additional model call, schema field, retry or automatic failed-batch replay.
+Rollback removes the normalization and restores strict explanation validation.
+
 ## Event model profile (#189)
 
 Extractor, Identity, Association and Signal Analyst use the existing configured

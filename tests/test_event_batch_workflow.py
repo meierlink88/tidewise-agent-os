@@ -83,6 +83,11 @@ class BatchWorkflowTest(unittest.IsolatedAsyncioTestCase):
                     for e in payload["events"]
                 ]
             )
+            if self.empty_first_match:
+                response = content.model_dump(mode="json")
+                response["events"][0]["matches"] = []
+                response["events"][0].pop("no_match_reason")
+                content = schema.model_validate_json(json.dumps(response))
         elif schema is BatchSignalDecision:
             content = schema(
                 events=[
@@ -107,6 +112,7 @@ class BatchWorkflowTest(unittest.IsolatedAsyncioTestCase):
         self.calls = []
         self.fail_association = False
         self.no_match = False
+        self.empty_first_match = False
         self.match_limit = None
         self.draft_override = None
         self.evidence_input = self.fixture.evidences()
@@ -163,6 +169,29 @@ class BatchWorkflowTest(unittest.IsolatedAsyncioTestCase):
         result = await self.run_flow()
         self.assertEqual(result.status, RunStatus.completed, result.content)
         self.assertEqual(self.runtime.data_publications, 0)
+
+    async def test_empty_match_without_reason_does_not_block_valid_event(self):
+        self.empty_first_match = True
+        self.evidence_input = []
+        self.draft_override = {"candidates": [], "no_event": []}
+        for label in ("first", "second"):
+            evidence = self.fixture.evidences()[0].model_copy(deep=True)
+            evidence.id = "EVD" + str(uuid4())
+            evidence.semantic.objects = [label]
+            self.evidence_input.append(evidence)
+            candidate = deepcopy(self.fixture.extraction_draft().model_dump(mode="json")["candidates"][0])
+            candidate["evidence_ids"] = [evidence.id]
+            candidate["event"]["semantic"]["objects"] = [label]
+            candidate["classification"] = {
+                **self.fixture.classification().model_dump(mode="json"),
+                "event_class": "INDUSTRY_CHAIN",
+            }
+            self.draft_override["candidates"].append(candidate)
+        self.enqueue()
+        result = await self.run_flow()
+        self.assertEqual(result.status, RunStatus.completed, result.content)
+        self.assertEqual(self.runtime.data_publications, 1)
+        self.assertEqual(self.runtime.signal_projections, 0)
 
     async def test_failed_match_has_no_publication_and_resume_reuses_extraction(self):
         self.fail_association = True
