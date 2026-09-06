@@ -23,12 +23,19 @@ from agents.investment_reviewer import build_investment_reviewer_agent
 from agents.tidewise_assistant import tidewise_assistant
 from agents.title_curator import build_title_curator_agent, ensure_title_curator_agent, load_title_curator_agent
 from app.registry import registry
-from app.settings import SOL_LOW_DEFAULT_BASE_URL, SOL_LOW_MODEL_ID, is_sol_low_model, sol_low_model
+from app.settings import (
+    SOL_LOW_DEFAULT_BASE_URL,
+    SOL_LOW_MODEL_ID,
+    event_model,
+    is_event_model,
+    is_sol_low_model,
+    sol_low_model,
+)
 
 
 class ModelRegistryTest(unittest.TestCase):
     def test_association_model_migration_preserves_prompt_and_is_idempotent(self) -> None:
-        for old_model, expected_version in ((DeepSeek(id="deepseek-v4-flash"), 42), (sol_low_model(), 41)):
+        for old_model, expected_version in ((sol_low_model(), 42), (event_model(), 41)):
             with self.subTest(model=old_model.id):
                 agent = build_event_association_agent()
                 agent.model = old_model
@@ -42,7 +49,7 @@ class ModelRegistryTest(unittest.TestCase):
                     self.assertEqual(ensure_event_association_agent(registry), expected_version)
                 if expected_version == 42:
                     repaired = save.call_args.args[0]
-                    self.assertTrue(is_sol_low_model(repaired.model))
+                    self.assertTrue(is_event_model(repaired.model))
                     self.assertEqual(repaired.instructions, agent.instructions)
                     self.assertIsNotNone(repaired.skills)
                 else:
@@ -141,22 +148,28 @@ class ModelRegistryTest(unittest.TestCase):
         self.assertEqual(sol.reasoning_effort, "low")
 
     @patch.dict(os.environ, {"RAW_EVIDENCE_FILTER_REASONING_EFFORT": "medium"})
-    def test_all_agents_use_sol_low(self) -> None:
-        agents = (
+    def test_only_event_agents_switch_to_deepseek(self) -> None:
+        other_agents = (
             tidewise_assistant,
-            build_event_association_agent(),
             build_title_curator_agent(),
             build_evidence_extractor_agent(),
-            build_event_extractor_agent(),
-            build_event_identity_agent(),
-            build_event_signal_analyst_agent(),
             build_investment_reasoner_agent(),
             build_investment_report_writer_agent(),
             build_investment_reviewer_agent(),
         )
 
-        self.assertEqual(len(agents), 10)
-        self.assertTrue(all(is_sol_low_model(agent.model) for agent in agents))
+        event_agents = (
+            build_event_association_agent(),
+            build_event_extractor_agent(),
+            build_event_identity_agent(),
+            build_event_signal_analyst_agent(),
+        )
+        for agent in other_agents:
+            with self.subTest(agent=agent.name):
+                self.assertTrue(is_sol_low_model(agent.model))
+        for agent in event_agents:
+            with self.subTest(agent=agent.name):
+                self.assertTrue(is_event_model(agent.model))
 
 
 if __name__ == "__main__":
