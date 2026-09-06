@@ -24,12 +24,13 @@ class EmptyAssociationTest(unittest.TestCase):
         self.assertEqual(item.no_match_reason, "No direct subject")
 
     def test_other_invalid_responses_still_fail(self):
-        for item in (
+        cases: tuple[dict[str, object], ...] = (
             {"candidate_key": "event-1"},
             {"candidate_key": "event-1", "matches": None},
             {"matches": []},
             {"candidate_key": "event-1", "matches": [{"uuid": "", "reason": "explicit"}]},
             {"candidate_key": "event-1", "matches": [], "no_match_reason": 123},
-        ):
+        )
+        for item in cases:
             with self.subTest(item=item), self.assertRaises(ValidationError):
                 self.parse(item)
