@@ -28,6 +28,8 @@ class ModelRegistryTest(unittest.TestCase):
             restored = Agent.from_dict(agent.to_dict(), registry=registry)
             assert isinstance(restored.model, OpenAIResponses)
             self.assertEqual(restored.model.reasoning_effort, "low")
+            self.assertTrue(restored.structured_outputs)
+            self.assertFalse(restored.use_json_mode)
             db = MagicMock()
             db.get_component.return_value = {"current_version": 29}
             with (
@@ -38,6 +40,9 @@ class ModelRegistryTest(unittest.TestCase):
                 loaded = load_title_curator_agent(registry).agent
             assert isinstance(loaded.model, OpenAIResponses)
             self.assertEqual(loaded.model.reasoning_effort, "low")
+            self.assertTrue(loaded.model.strict_output)
+            self.assertTrue(loaded.structured_outputs)
+            self.assertFalse(loaded.use_json_mode)
             self.assertTrue(is_sol_medium_model(build_evidence_extractor_agent().model))
             self.assertTrue(is_sol_medium_model(registry.get_model(SOL_MEDIUM_MODEL_ID)))
 

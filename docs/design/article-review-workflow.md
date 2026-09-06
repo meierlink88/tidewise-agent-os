@@ -5,7 +5,7 @@ Contract 21 exposes exactly four Steps and one Loop, with no Condition nodes:
 1. Evidence Collect — evidence_collect Function: acquire, retain originals, deduplicate article versions and enqueue.
 2. process_articles Loop:
    - Prepare Evidence Review — prepare_evidence_review Function: select one unreviewed article and its category catalog.
-   - Evidence Reviewer — direct Agent Step (title-curator, contract 11); the only LLM call.
+   - Evidence Reviewer — direct Agent Step (title-curator, contract 12); the only LLM call.
    - Evidence Publish — evidence_publish Function: save the review, isolate exclusions, validate/deduplicate and publish.
 
 The next article starts only after the current one is excluded or published. Business branches live inside Functions.
@@ -13,6 +13,13 @@ There is no receipt-only Step, recovery Loop, hidden Agent call, or automatic pu
 
 The Agent echoes article_key and returns is_relevant plus extraction. Irrelevant means extraction=null;
 relevant means the unchanged EvidenceExtractionDraft. The Evidence prompt is reused from the existing seed file.
+Reviewer contract 12 sends ArticleReviewDraft as native Responses text.format=json_schema with strict=true,
+not JSON-object mode. The prompt documents one output envelope and nullable-field rules. Pydantic and existing
+deterministic curation remain the final gate; refusal, truncation or invalid output is not repaired or published.
+Proxy support must be tested with the actual nested schema, not inferred from an HTTP 200 alone.
+Keep descriptions for referenced objects on the model definition: the verified proxy rejects description siblings
+beside a $ref. Agno's REST RunOutput serializer omits null values; inspect the typed/raw model response when checking
+nullable fields, rather than treating their omission in the REST display as a model-schema violation.
 Canonicalization, fact-time conversion and within-document identity deduplication remain in the Evidence capability.
 Actors/action/objects must be source-grounded; plans and speculation remain valid with appropriate modality/stage.
 Zero canonical Evidence is excluded. Transport, JSON/envelope and category errors are recorded as failures, not exclusions.
