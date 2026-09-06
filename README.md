@@ -6,7 +6,7 @@
 
 - Agent Model：所有 Agent 使用 Agno `OpenAIResponses` 的 `gpt-5.6-sol`，默认 medium；文章 Reviewer 可通过 `RAW_EVIDENCE_FILTER_REASONING_EFFORT` 独立配置。
 - Graphiti Model：独立的图运行时仍使用 DeepSeek V4 Flash，不属于 Agent 模型切换范围。
-- Agent：`title-curator`（Raw Evidence Reviewer），一次阅读全文完成相关性判断及 Evidence 提取。
+- Agent：`title-curator`（Evidence Reviewer），一次阅读全文完成相关性判断及 Evidence 提取；保留内部 ID 以兼容历史引用。
 - Agent：`evidence-extractor`，从 Raw Evidence 提取 Atomic Evidence，由 Studio/PostgreSQL 管理。
 - Agent：`event-extractor`，按主体、动作、对象、阶段与时间身份语义把同批 Evidence 提炼为 Event Candidate。
 - Agent：`investment-reasoner`、`investment-report-writer`、`investment-reviewer`，分别负责分层影响与 Signal 传导、报告中文撰写和推理/报告审核。
@@ -71,9 +71,9 @@ docker compose rm -f agentos neo4j
 ## 采集提示词与数据
 
 `raw-collection` 直接使用 Schedule message 作为采集 query，不再注册或运行 Query Planner Agent。
-Workflow 先执行 `collect-raw-evidence`，再循环逐篇执行准备、审阅并提取、保存审阅、校验去重、条件发布。
-`Raw Evidence Reviewer` 由 `agents/title_curator.py` 维护，读取完整原文，无关或无有效 Evidence 时仅本地归档。
-发布失败重用冻结结果；没有独立发布回执步骤。合同和迁移方法见 [逐篇工作流设计](docs/design/article-review-workflow.md)。
+Workflow 共四个 Step、一个 `process_articles` Loop：`evidence_collect` → Loop（`prepare_evidence_review` → Evidence Reviewer Agent → `evidence_publish`）。
+只有 Agent Step 调用 LLM。业务条件、结果保存、无关隔离、Evidence 校验去重及发布均由 Function 处理，没有 Condition 节点。
+发布失败记录异常并中止本次运行；失败文章不自动补发，不因重新采集而重试。合同和迁移方法见 [逐篇工作流设计](docs/design/article-review-workflow.md)。
 
 `raw-collection` 首次启动时也会创建一个 Studio 发布版本。Workflow 编排可在 Studio
 中创建新版本并发布；步骤使用的 Agent 和自定义 Function 实现在 Git 中维护。采集

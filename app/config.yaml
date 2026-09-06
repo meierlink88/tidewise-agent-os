@@ -7,7 +7,7 @@ manifest:
       - "给我一个新增采集 Workflow 的实施顺序"
 
   title-curator:
-    description: "逐篇阅读全文，一次完成相关性判断和 Evidence 提取；日常处理运行 Raw Collection。"
+    description: "Evidence Reviewer：逐篇阅读全文，一次完成相关性判断和 Evidence 提取；日常处理运行 Raw Collection。"
     quick_prompts:
       - "审阅给定完整文章：相关则按给定分类目录提取 Evidence，无关则跳过"
 
@@ -60,7 +60,7 @@ manifest:
       - "Ping"
 
   raw-collection:
-    description: "采集后逐篇去重、一次审阅并提取 Evidence；排除无关材料，逐篇发布 Raw Evidence 与 Evidence。"
+    description: "四个 Step、一个 Loop：Evidence Collect → Prepare Evidence Review → Evidence Reviewer → Evidence Publish；发布失败记录异常，不自动补发。"
     quick_prompts:
       - "采集全球范围最新发布、可能影响中国A股板块和产业链行情的政经事实资讯。"
 

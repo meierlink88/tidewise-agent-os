@@ -74,6 +74,41 @@ async def collect_articles(step_input: StepInput, run_context: RunContext) -> St
     return StepOutput(content={"enqueued": new, "known_article_versions": duplicates, **queue_counts()})
 
 
+async def evidence_collect(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Collect sources and perform deterministic article-version deduplication."""
+    return await collect_articles(step_input, run_context)
+
+
+async def prepare_evidence_review(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Select only an unreviewed article; publication failures are not recovery work."""
+    del step_input
+    claim = claim_next(run_context.run_id, fresh_only=True)
+    if claim is None:
+        return StepOutput(content={"idle": True, **queue_counts()}, stop=True)
+    _state(run_context)["claim"] = claim
+    try:
+        analysis = await prepare_evidence_analysis(read_prepared(claim["article_key"]), run_context)
+        request = EvidenceAnalysisRequest.model_validate(analysis.content)
+        return StepOutput(content=ArticleReviewRequest(article_key=claim["article_key"], **request.model_dump()))
+    except Exception as exc:
+        fail_claim(claim, type(exc).__name__, terminal=True)
+        raise
+
+
+async def evidence_publish(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    """Own all deterministic result handling; never call an Agent or schedule recovery."""
+    claim = _state(run_context)["claim"]
+    try:
+        save_article_review(step_input, run_context)
+        validated = validate_article_review(StepInput(), run_context)
+        if not article_has_evidence(StepInput(previous_step_content=validated.content)):
+            return validated
+        return await publish_reviewed_article(StepInput(), run_context)
+    except Exception as exc:
+        fail_claim(claim, type(exc).__name__, terminal=True)
+        raise
+
+
 async def prepare_next_article(step_input: StepInput, run_context: RunContext) -> StepOutput:
     del step_input
     state = _state(run_context)

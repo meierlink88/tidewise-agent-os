@@ -59,7 +59,7 @@ def _enqueue(prepared: PreparedRawDocument, markdown: str, exclusion_reason: str
             if existing.source_url != prepared.source_url or existing.content_sha256 != prepared.content_sha256:
                 raise ValueError("Article identity conflict")
             # A crash between state creation and marker creation must not lose work.
-            if read_state(key)["status"] not in {"completed", "excluded"}:
+            if read_state(key)["status"] not in {"completed", "excluded", "failed"}:
                 write_json(queue_root() / "pending" / f"{key}.json", {"article_key": key})
             return key, False
         write_json(path / "article.json", prepared.model_dump(mode="json"))
@@ -121,16 +121,29 @@ def enqueue_legacy_document(prepared: PreparedRawDocument) -> tuple[str, bool]:
     return _enqueue(prepared, payload.decode())
 
 
-def claim_next(owner: str) -> dict[str, str] | None:
+def claim_next(owner: str, *, fresh_only: bool = False) -> dict[str, str] | None:
     """Expired claims can be retried; tokens fence writes from superseded workers."""
     with queue_lock():
         for marker in sorted((queue_root() / "pending").glob("*.json"), key=lambda p: (p.stat().st_mtime_ns, p.name)):
             key = marker.stem
             state = read_state(key)
-            if state["status"] in {"completed", "excluded"}:
+            if state["status"] in {"completed", "excluded", "failed"}:
                 marker.unlink(missing_ok=True)
                 continue
             if state.get("expires_at", 0) > time.time():
+                continue
+            if fresh_only and (
+                state.get("attempts", 0) > 0
+                or state.get("last_error")
+                or (item_root(key) / "review.json").exists()
+                or (item_root(key) / "publication.json").exists()
+            ):
+                # Historical/incomplete attempts remain visible, never auto-republish them.
+                error_code = state.get("last_error") or "UNFINISHED_PRIOR_ATTEMPT"
+                state.update(status="failed", expires_at=0, last_error=error_code)
+                write_json(queue_root() / "failed" / f"{key}.json", {"article_key": key, "error_code": error_code})
+                write_json(item_root(key) / "state.json", state)
+                marker.unlink(missing_ok=True)
                 continue
             token = str(uuid4())
             state.update(
@@ -174,15 +187,19 @@ def finish_claim(claim: dict[str, str], status: str, result: dict[str, Any]) -> 
         (queue_root() / "pending" / f"{key}.json").unlink(missing_ok=True)
 
 
-def fail_claim(claim: dict[str, str], error_code: str) -> None:
+def fail_claim(claim: dict[str, str], error_code: str, *, terminal: bool = False) -> None:
     with queue_lock():
         key = claim["article_key"]
         state = read_state(key)
         if state.get("token") != claim["token"] or state["status"] in {"completed", "excluded"}:
             return
         state.update(expires_at=0, last_error=error_code)
+        if terminal:
+            state["status"] = "failed"
         write_json(queue_root() / "failed" / f"{key}.json", {"article_key": key, "error_code": error_code})
         write_json(item_root(key) / "state.json", state)
+        if terminal:
+            (queue_root() / "pending" / f"{key}.json").unlink(missing_ok=True)
 
 
 def reject_review(claim: dict[str, str]) -> None:
