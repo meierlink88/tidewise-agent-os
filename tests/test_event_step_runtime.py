@@ -10,6 +10,12 @@ from agno.workflow import Step, StepInput, StepOutput
 
 from app import event_step_runtime as runtime
 
+PAYLOAD = {
+    "event": {"title": "test"},
+    "classification": {"event_class": "COMPANY"},
+    "candidates": [{"uuid": "test-candidate"}],
+}
+
 
 class EventStepRuntimeTest(unittest.TestCase):
     def setUp(self):
@@ -34,7 +40,7 @@ class EventStepRuntimeTest(unittest.TestCase):
 
         async def prepare(*args):
             order.append("prepare")
-            return StepOutput(content={"candidates": [len(order)]})
+            return StepOutput(content=PAYLOAD)
 
         def execute(step, supplied, **kwargs):
             order.append("agent")
@@ -77,7 +83,9 @@ class AsyncEventStepRuntimeTest(unittest.IsolatedAsyncioTestCase):
             yield RunCancelledEvent(reason="cancelled")
 
         with (
-            patch.object(runtime, "prepare_event_semantic_call", new=AsyncMock(return_value=StepOutput(content={}))),
+            patch.object(
+                runtime, "prepare_event_semantic_call", new=AsyncMock(return_value=StepOutput(content=PAYLOAD))
+            ),
             patch.object(runtime, "settle_event_semantic_call", new=AsyncMock()) as settle,
             patch.object(runtime, "_aexecute_stream", new=stream),
         ):

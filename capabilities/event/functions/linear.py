@@ -1,10 +1,48 @@
 """Single-batch Event operations and deterministic direct-Step execution gates."""
 
+import json
+from typing import Any
+
 from agno.run import RunContext
 from agno.workflow import StepInput, StepOutput
+from pydantic import BaseModel
 
 from capabilities.event.functions import storyline as operations
 from capabilities.event.functions.extraction import _batch, _event_run_state
+
+
+def event_semantic_input_text(content: Any) -> str:
+    """Encode business data as user content, never an Agno Message dictionary."""
+    if isinstance(content, BaseModel):
+        payload = content.model_dump(mode="json")
+    elif isinstance(content, dict):
+        if not isinstance(content.get("event"), dict) or not content["event"]:
+            raise ValueError("Event Agent input requires an Event object")
+        if not isinstance(content.get("classification"), dict) or not content["classification"]:
+            raise ValueError("Event Agent input requires frozen classification")
+        candidates = content.get("candidates")
+        if isinstance(candidates, list):
+            valid = bool(candidates) and all(isinstance(row, dict) and row.get("uuid") for row in candidates)
+        elif isinstance(candidates, dict):
+            valid = all(
+                isinstance(candidates.get(key), list)
+                and candidates[key]
+                and all(isinstance(row, dict) and row.get("uuid") for row in candidates[key])
+                for key in ("anchors", "variables")
+            )
+        else:
+            valid = False
+        if not valid:
+            raise ValueError("Event Agent input requires nonempty identified candidates")
+        payload = content
+    else:
+        raise ValueError("Event Agent input must be a structured business object")
+    if not payload:
+        raise ValueError("Event Agent input cannot be empty")
+    try:
+        return json.dumps(payload, ensure_ascii=False, allow_nan=False)
+    except (ValueError, TypeError):
+        raise ValueError("Event Agent input is not valid JSON data") from None
 
 
 async def prepare_linear_candidate(step_input: StepInput, run_context: RunContext) -> StepOutput:
