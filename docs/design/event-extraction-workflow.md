@@ -1,5 +1,19 @@
 # Event Extraction Workflow
 
+## Extraction guidance correction (#185)
+
+Batch extraction retains the pinned Agent business context before appending the batch
+output contract. Extractor contract v8 preserves Studio instructions while refreshing
+the code-owned rules: missing business time is not a rejection reason; leave uncertain
+business times null and let the existing compiler supply observation time. Count
+independent actions rather than verbs or supporting details. Truly independent actions
+remain no-event under the existing one-Evidence/one-candidate contract. Classification
+uses the directly described action/object, not merely a country's presence as actor.
+
+No workflow topology, schema, matching/retrieval or publication change is introduced.
+Existing cached results are not replayed. Audit pending batches before deployment;
+the existing Agent-version migration preserves custom Studio instructions.
+
 ## v17 current: compact native canvas
 
 Issue #183 keeps the v16 matching and publication contracts, while reducing visible
