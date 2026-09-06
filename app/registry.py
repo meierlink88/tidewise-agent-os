@@ -144,6 +144,14 @@ class TidewiseRegistry(Registry):
     """Resolve Studio Agents as sessionless runtime copies when composing Workflows."""
 
     def get_model(self, model_id: str, provider: str | None = None, name: str | None = None) -> Model | None:
+        # Preserve pinned historical profiles; only newly migrated versions disable thinking.
+        if name == "EventDeepSeek-low" and provider in (None, "DeepSeek"):
+            model = event_model()
+            if model_id == model.id:
+                model.name = name
+                model.use_thinking = True
+                model.reasoning_effort = "low"
+                return model
         if name == EVENT_DEEPSEEK_PROFILE and provider in (None, "DeepSeek"):
             model = event_model()
             if model_id == model.id:

@@ -55,12 +55,23 @@ class BatchAssociationItem(AssociationDecision):
     @model_validator(mode="before")
     @classmethod
     def explain_explicit_empty_match(cls, value):
-        # Only tolerate an omitted explanation, never a missing/malformed match list.
-        # This is a technical disposition, not an invented semantic rationale.
-        if isinstance(value, dict) and value.get("matches") == []:
+        # Deduplicate endpoint identity and normalize optional explanations, never
+        # invent a match or turn a missing/malformed match list into a valid result.
+        if isinstance(value, dict) and isinstance(value.get("matches"), list):
+            value = dict(value)
+            seen = set()
+            matches = []
+            for match in value["matches"]:
+                uuid = match.get("uuid") if isinstance(match, dict) else None
+                if isinstance(uuid, str) and uuid in seen:
+                    continue
+                if isinstance(uuid, str):
+                    seen.add(uuid)
+                matches.append(match)
+            value["matches"] = matches
             reason = value.get("no_match_reason")
             if reason is None or (isinstance(reason, str) and not reason.strip()):
-                return {**value, "no_match_reason": "Model returned no matches without an explanation"}
+                value["no_match_reason"] = None if matches else "Model returned no matches without an explanation"
         return value
 
 
@@ -71,6 +82,20 @@ class BatchAssociationDecision(EventLLMResponse):
 
 class BatchSignalItem(SignalDecision):
     candidate_key: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def explain_explicit_empty_signals(cls, value):
+        if isinstance(value, dict) and isinstance(value.get("proposals"), list):
+            reason = value.get("no_signal_reason")
+            if reason is None or (isinstance(reason, str) and not reason.strip()):
+                return {
+                    **value,
+                    "no_signal_reason": None
+                    if value["proposals"]
+                    else "Model returned no signals without an explanation",
+                }
+        return value
 
 
 class BatchSignalDecision(EventLLMResponse):

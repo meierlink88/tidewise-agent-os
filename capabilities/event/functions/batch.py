@@ -7,6 +7,7 @@ from typing import Any
 
 from agno.run import RunContext
 from agno.workflow import StepInput, StepOutput
+from pydantic import ValidationError
 
 from capabilities.event.functions import storyline as legacy
 from capabilities.event.functions.extraction import (
@@ -32,6 +33,7 @@ from capabilities.event.internal.models import (
     EventIdentityRequest,
     EventResolutionRecord,
 )
+from capabilities.event.internal.review import ControlledSignalReviewer
 from capabilities.event.internal.runtime import event_workflow_runtime
 from capabilities.event.internal.storage import (
     claim_event_batch,
@@ -53,6 +55,7 @@ from capabilities.event.internal.storyline_models import (
     StorylineJournal,
 )
 from sematica.analysis.event.contracts import AnchorCandidate, CandidateSet, VariableCandidate
+from sematica.ingestion.episcode.event.contracts import event_time_anchor
 
 GROUPS = {"geo": "GEOPOLITICAL", "macro": "MACRO_ECONOMIC", "chain": "INDUSTRY_CHAIN", "company": "COMPANY"}
 MAX_INPUT_CHARACTERS = 1_000_000
@@ -200,23 +203,27 @@ def freeze_batch_identity(step_input: StepInput, run_context: RunContext) -> Ste
         key = entry["candidate_key"]
         item = by_key[key]
         identity = EventIdentityRequest.model_validate({k: v for k, v in entry.items() if k != "classification"})
-        if not set(item.decision.matched_event_ids) <= {h.id for h in identity.historical_candidates}:
-            raise ValueError("identity outside supplied historical candidates")
         if item.duplicate_of is not None:
-            if item.duplicate_of not in ordered[: ordered.index(key)] or by_key[item.duplicate_of].duplicate_of:
-                raise ValueError("batch duplicate must reference an earlier canonical Event")
-            if by_key[item.duplicate_of].decision.decision == "IGNORED":
-                raise ValueError("batch duplicate cannot reference an ignored Event")
-            target_class = journal.candidates[item.duplicate_of].classification
-            if target_class is None or target_class.event_class != entry["classification"]["event_class"]:
-                raise ValueError("batch duplicate has conflicting primary classes")
+            target = journal.candidates.get(item.duplicate_of)
+            valid_duplicate = (
+                item.duplicate_of in ordered[: ordered.index(key)]
+                and by_key[item.duplicate_of].duplicate_of is None
+                and target is not None
+                and target.resolution is not None
+                and target.resolution.decision != "IGNORED"
+                and target.classification is not None
+                and target.classification.event_class == entry["classification"]["event_class"]
+                and set(item.decision.matched_event_ids) <= {h.id for h in identity.historical_candidates}
+            )
             resolution = EventResolutionRecord(
                 candidate_key=key,
                 decision="IGNORED",
                 atomic=True,
                 matched_event_ids=[],
-                reason_codes=["BATCH_DUPLICATE"],
-                summary=f"Same batch Event: {item.duplicate_of}",
+                reason_codes=["BATCH_DUPLICATE" if valid_duplicate else "NONCOMPLIANT_IDENTITY_OUTPUT"],
+                summary=f"Same batch Event: {item.duplicate_of}"
+                if valid_duplicate
+                else "Invalid batch duplicate reference; candidate skipped.",
             )
         else:
             resolution = _validated_resolution(identity, item.decision.model_dump())
@@ -226,7 +233,8 @@ def freeze_batch_identity(step_input: StepInput, run_context: RunContext) -> Ste
             classification=StorylineEventClassification.model_validate(entry["classification"]),
         )
     for item in response.events:
-        if item.duplicate_of:
+        saved_resolution = journal.candidates[item.candidate_key].resolution
+        if item.duplicate_of and saved_resolution and saved_resolution.reason_codes == ["BATCH_DUPLICATE"]:
             target = journal.candidates[item.duplicate_of]
             source = journal.candidates[item.candidate_key]
             target.identity_request = target.identity_request.model_copy(
@@ -295,10 +303,27 @@ def _freeze_match(step_input: StepInput, ctx: RunContext, key: str) -> StepOutpu
     response = _response(step_input, ctx, key, BatchAssociationDecision)
     by_key = _coverage(response.events, [e["candidate_key"] for e in request["events"]])
     ids = {p["uuid"] for p in request["candidates"]}
+    rejected: list[dict[str, str]] = []
     for e in request["events"]:
         allowed = set(e.get("allowed_uuids", ids))
-        if not {m.uuid for m in by_key[e["candidate_key"]].matches} <= allowed & ids:
-            raise ValueError("match outside this Event's candidates")
+        item = by_key[e["candidate_key"]]
+        rejected.extend(
+            {"candidate_key": item.candidate_key, "uuid": m.uuid, "reason": "MATCH_OUTSIDE_EVENT_CANDIDATES"}
+            for m in item.matches
+            if m.uuid not in allowed & ids
+        )
+        matches = [m for m in item.matches if m.uuid in allowed & ids]
+        by_key[item.candidate_key] = item.model_copy(
+            update={
+                "matches": matches,
+                "no_match_reason": None
+                if matches
+                else item.no_match_reason or "No valid matches after removing out-of-scope references",
+            }
+        )
+    response = BatchAssociationDecision(events=list(by_key.values()))
+    if _read(ctx, key + "-result") is None:
+        _freeze(ctx, key + "-rejections", {"items": rejected})
     _freeze(ctx, key + "-result", response.model_dump(mode="json"))
     return StepOutput(content={"matched": key})
 
@@ -457,9 +482,67 @@ def freeze_batch_signals(step_input: StepInput, run_context: RunContext) -> Step
     request = _required(ctx, key + "-input")
     response = _response(step_input, ctx, key, BatchSignalDecision)
     by_key = _coverage(response.events, [e["candidate_key"] for e in request["events"]])
+    anchors = {a["uuid"]: AnchorCandidate.model_validate(a) for a in request["anchors"]}
+    variables = {v["uuid"]: VariableCandidate.model_validate(v) for v in request["variables"]}
+    journal = legacy._journal(ctx)
+    rejected = []
     for e in request["events"]:
-        if not {p.anchor_uuid for p in by_key[e["candidate_key"]].proposals} <= set(e["allowed_uuids"]):
-            raise ValueError("Signal anchor belongs to a different Event")
+        item = by_key[e["candidate_key"]]
+        event = journal.candidates[e["candidate_key"]].identity_request.candidate.event
+        accepted, pairs = [], set()
+        for draft in item.proposals:
+            pair = draft.anchor_uuid, draft.variable_uuid
+            reason = None
+            if (
+                draft.anchor_uuid not in set(e["allowed_uuids"])
+                or draft.anchor_uuid not in anchors
+                or draft.variable_uuid not in variables
+            ):
+                reason = "SIGNAL_OUTSIDE_EVENT_CANDIDATES"
+            elif pair in pairs:
+                reason = "DUPLICATE_SIGNAL_PAIR"
+            else:
+                try:
+                    proposal = draft.proposal(
+                        event_time=event_time_anchor(event.semantic.time),
+                        reference_time=_batch(ctx).created_at,
+                        assertion_modality={"FACT": "ACTUAL", "PLAN": "ANTICIPATED", "SPEC": "ASSUMED"}[
+                            event.semantic.modality
+                        ],
+                    )
+                    if not ControlledSignalReviewer().review_candidate(
+                        event,
+                        _batch(ctx).created_at,
+                        proposal,
+                        variables[draft.variable_uuid],
+                        anchors[draft.anchor_uuid],
+                    ):
+                        reason = "SIGNAL_CONSTRAINT_REJECTED"
+                except ValidationError:
+                    reason = "SIGNAL_CONSTRAINT_REJECTED"
+            if reason:
+                rejected.append(
+                    {
+                        "candidate_key": item.candidate_key,
+                        "anchor_uuid": draft.anchor_uuid,
+                        "variable_uuid": draft.variable_uuid,
+                        "reason": reason,
+                    }
+                )
+            else:
+                pairs.add(pair)
+                accepted.append(draft)
+        by_key[item.candidate_key] = item.model_copy(
+            update={
+                "proposals": accepted,
+                "no_signal_reason": None
+                if accepted
+                else item.no_signal_reason or "No valid signals after deterministic review",
+            }
+        )
+    response = BatchSignalDecision(events=list(by_key.values()))
+    if _read(ctx, key + "-result") is None:
+        _freeze(ctx, key + "-rejections", {"items": rejected})
     _freeze(ctx, key + "-result", response.model_dump(mode="json"))
     # Sequential stage: reuse proven pair/type/time checks and compilation, not publication.
     for e in request["events"]:

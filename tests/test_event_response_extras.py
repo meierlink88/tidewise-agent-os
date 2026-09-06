@@ -107,7 +107,7 @@ class EventResponseExtrasTest(unittest.TestCase):
             BatchSignalDecision.model_validate({"events": [{"candidate_key": "one", "proposals": [signal]}]})
         with self.assertRaises(ValidationError):
             BatchSignalDecision.model_validate(
-                {"events": [{"candidate_key": "one", "proposals": [], "reason_codes": ["NO_EVIDENCE"]}]}
+                {"events": [{"candidate_key": "one", "proposals": None, "reason_codes": ["NO_EVIDENCE"]}]}
             )
 
     def test_shared_contract_remains_strict(self):

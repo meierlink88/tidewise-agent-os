@@ -12,7 +12,7 @@ from agno.models.openai import OpenAIResponses
 
 SOL_LOW_MODEL_ID = "gpt-5.6-sol"
 SOL_LOW_DEFAULT_BASE_URL = "https://model-proxy.ceekeecloud.com/v1"
-EVENT_DEEPSEEK_PROFILE = "EventDeepSeek-low"
+EVENT_DEEPSEEK_PROFILE = "EventDeepSeek-none"
 
 
 def _env_flag(name: str, default: bool) -> bool:
@@ -36,8 +36,8 @@ def event_model() -> DeepSeek:
     """Event-only profile; SDK retries must not silently multiply request timeouts."""
     model = default_model()
     model.name = EVENT_DEEPSEEK_PROFILE
-    model.use_thinking = True
-    model.reasoning_effort = "low"
+    model.use_thinking = False
+    model.reasoning_effort = None
     model.timeout = 180
     model.retries = 0
     model.max_retries = 0
@@ -52,7 +52,7 @@ def is_event_model(model: object) -> bool:
         and model.id == expected.id
         and model.base_url == expected.base_url
         and model.use_thinking == expected.use_thinking
-        and model.reasoning_effort == "low"
+        and model.reasoning_effort is None
     )
 
 
