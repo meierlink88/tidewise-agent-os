@@ -47,7 +47,14 @@ class EventWorkflowRuntime(Protocol):
         *,
         existing: EventPublicationRecord | None,
         checkpoint: PublicationCheckpoint,
+        associations: list[dict[str, str]] | None = None,
     ) -> EventPublicationRecord: ...
+
+    async def storyline_profiles(
+        self, labels: list[str], *, terms: list[str] | None = None, chain_uuids: list[str] | None = None
+    ) -> list[dict[str, Any]]: ...
+
+    async def storyline_variables(self) -> list[VariableCandidate]: ...
 
     async def retrieve_signal_candidates(
         self,

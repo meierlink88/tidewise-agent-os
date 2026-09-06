@@ -46,6 +46,15 @@ The Event-owned temporal meaning that distinguishes when something occurred, was
 together with the precision of that knowledge. At least one of those temporal perspectives must be known, even when
 its precision is explicitly unknown.
 
+### Event Association
+
+A semantic judgment linking an Event's own actors, action and object to supplied authoritative
+GeopoliticRivalry, MacroEconomic, IndustryChain/ChainNode or Company identities. Its primary class
+selects the catalog, not its inferred downstream impact. Association is not a Signal and does not
+prove a Variable changed. Functions validate selected IDs and write only existing-entity MENTIONS;
+the new Event path never invokes free Graphiti entity extraction. Candidate assets are excluded
+from matching inputs. See docs/design/event-extraction-workflow.md for the four-Agent v14 workflow.
+
 ### Event Identity
 
 The rule for deciding whether two Event descriptions denote the same real-world Event. It compares exactly five

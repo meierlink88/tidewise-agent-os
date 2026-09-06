@@ -69,6 +69,9 @@ async def run_check(headers: dict | None, auth_note: str) -> None:
             workflow_ids = {item["id"] for item in config["workflows"]}
             required_agents = {
                 "event-extractor",
+                "event-identity",
+                "event-association",
+                "event-signal-analyst",
                 "evidence-extractor",
                 "investment-reasoner",
                 "investment-reviewer",

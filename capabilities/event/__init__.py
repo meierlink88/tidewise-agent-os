@@ -28,8 +28,22 @@ from capabilities.event.internal.models import (
     FrozenEventExtractionBatch,
 )
 from capabilities.event.internal.runtime import configure_event_workflow_runtime
+from capabilities.event.internal.storyline_models import (
+    EVENT_ASSOCIATION_AGENT_ID,
+    STORYLINE_AGENT_IDS,
+    AssociationDecision,
+    IdentityClassificationDecision,
+    SignalDecision,
+    StorylineAgentVersions,
+)
 
 __all__ = [
+    "EVENT_ASSOCIATION_AGENT_ID",
+    "STORYLINE_AGENT_IDS",
+    "AssociationDecision",
+    "IdentityClassificationDecision",
+    "SignalDecision",
+    "StorylineAgentVersions",
     "EVENT_AGENT_IDS",
     "EVENT_EXTRACTOR_AGENT_ID",
     "EVENT_IDENTITY_AGENT_ID",

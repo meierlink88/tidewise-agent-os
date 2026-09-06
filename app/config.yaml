@@ -26,15 +26,23 @@ manifest:
       - "标记不能安全提炼 Event 的 Evidence"
 
   event-identity:
-    description: "在冻结的历史 Event 候选集内判断原子性及 SAME、NEW、RELATED 或 IGNORED 身份。"
+    description: "根据冻结候选判断事件身份，并识别地缘政治、宏观经济、产业链或公司大类。"
     quick_prompts:
       - "判断这个 Event Candidate 是否为单一现实动作"
       - "根据给定历史 Event 判断是否为同一事件"
+      - "根据事件本身的动作判断大类，不按下游影响归类"
+
+  event-association:
+    description: "只做语义匹配：从代码提供的权威候选目录页选择直接关联的故事线或主体。"
+    quick_prompts:
+      - "判断给定 Event 直接关联本页哪些故事线"
+      - "检查这条公司经营事件是否真的涉及地缘政治故事线"
+      - "没有直接匹配时返回明确的无匹配原因"
 
   event-signal-analyst:
-    description: "分类已投影的新 Event，并仅基于给定 Anchor 与 Variable 身份提出直接 Signal。"
+    description: "基于未发布 Event 和已冻结分类，从给定锚点与变量提出直接 Signal；不执行写入。"
     quick_prompts:
-      - "分类这个 Event 并给出检索提示"
+      - "判断给定 Event 是否直接支持候选变量变化"
       - "基于给定候选身份提出直接 Signal"
 
   investment-reasoner:
@@ -70,7 +78,7 @@ manifest:
       - "处理所有尚未提取的 Raw Document"
 
   event-extraction:
-    description: "五阶段增量处理 Evidence：提炼、身份解析、发布 Event、分析 Signal、发布 Signal。"
+    description: "四个语义 Agent：提炼、身份与分类、故事线关联、直接信号；Loop 和 Condition 可见，代码校验后统一发布。"
     quick_prompts:
       - "处理所有已发布且尚未提炼 Event 的 Evidence"
 
