@@ -630,6 +630,53 @@ class ControlledSignalReviewerTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(accepted)
 
+    async def test_unknown_observation_passes_but_invalid_endpoints_do_not(self) -> None:
+        event = GraphitiCandidateRetrieverTest._event()
+        anchor = AnchorCandidate(uuid="company", name="Example", entity_type="Company", business_id="COM-example")
+        variable = VariableCandidate(
+            uuid="share",
+            variable_id="market_share",
+            name="市场份额",
+            variable_group="COMPETITION_SECURITY",
+            allowed_anchor_types=["Company"],
+            definition="指定市场口径下的份额。",
+        )
+        proposal = DirectSignalDraft(
+            anchor_uuid=anchor.uuid,
+            variable_uuid=variable.uuid,
+            fact="该公司当月市场份额为3.59%，没有可比期间数据。",
+            direction="UNKNOWN",
+            magnitude="UNKNOWN",
+            impact_onset_days=0,
+            impact_peak_days=0,
+            expected_duration_days=31,
+            mechanism="直接观测份额，无法判断变化方向。",
+            duration_basis="31天为估计观察窗口，不是已证实持续期。",
+            assumptions=[],
+            invalidation_conditions=["来源更正"],
+            provenance_confidence="HIGH",
+            mechanism_confidence="HIGH",
+            temporal_confidence="LOW",
+        ).proposal(
+            event_time=GraphitiCandidateRetrieverTest.EVENT_TIME,
+            reference_time=event.reference_time,
+            assertion_modality="ACTUAL",
+        )
+        reviewer = ControlledSignalReviewer()
+        args = (event.event.event, event.reference_time)
+        self.assertTrue(reviewer.review_candidate(*args, proposal, variable, anchor))
+        self.assertEqual(proposal.model_dump(mode="json")["direction"], "UNKNOWN")
+        for changes in (
+            {"anchor_uuid": "wrong"},
+            {"variable_uuid": "wrong"},
+            {"assertion_modality": "ANTICIPATED"},
+            {"valid_at": None},
+        ):
+            with self.subTest(changes=changes):
+                self.assertFalse(
+                    reviewer.review_candidate(*args, proposal.model_copy(update=changes), variable, anchor)
+                )
+
 
 class DirectSignalTemporalSemanticsTest(unittest.TestCase):
     def test_signal_is_usable_at_analysis_time_while_impact_window_tracks_event_time(self) -> None:

@@ -1,5 +1,16 @@
 # Event Extraction Workflow
 
+## Unknown-direction observations (#187)
+
+A directly grounded Signal may retain `direction=UNKNOWN` when the source provides
+an observation (for example a month's market share) without a supported comparison.
+UNKNOWN is not STABLE, bullish or bearish, and cannot replace missing source evidence.
+The existing enum and wire/graph fields already support it; the deterministic reviewer
+no longer rejects this direction alone. Endpoint, anchor-type, modality and temporal
+checks are unchanged. No prompt version or batch pin is changed, and no failed batch
+is automatically replayed. Subsequent reasoning must not manufacture a direction from
+this observation. Rollback restores the reviewer restriction without deleting Signals.
+
 ## Extraction guidance correction (#185)
 
 Batch extraction retains the pinned Agent business context before appending the batch
