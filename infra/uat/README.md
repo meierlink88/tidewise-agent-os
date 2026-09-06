@@ -72,16 +72,19 @@ Variables:
 - `MINIO_LAN_PORT`, `MINIO_CONSOLE_PORT` — currently `9000`, `9001`
 - `RAW_EVIDENCE_BUCKET`, `RAW_EVIDENCE_PUBLIC_BASE_URL` — currently `raw-evidence`, `http://192.168.0.53:9000`
 - `GRAPHITI_EMBEDDING_BASE_URL`, `GRAPHITI_EMBEDDING_MODEL`, `GRAPHITI_EMBEDDING_DIM`
+- `OPENAI_BASE_URL` — OpenAI-compatible Responses API base, currently `https://model-proxy.ceekeecloud.com/v1`
 - `EVENT_EXTRACTION_BATCH_SIZE` and `CONTROL_PLANE_JWT_VERIFICATION_KEY`
 
 Secrets:
 
-- `AGENTOS_DB_PASSWORD`, `NEO4J_PASSWORD`, `DEEPSEEK_API_KEY`, `DATA_SERVICE_TOKEN`
+- `AGENTOS_DB_PASSWORD`, `NEO4J_PASSWORD`, `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, `DATA_SERVICE_TOKEN`
 - `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` — AgentOS-owned object-storage credentials
 - `GRAPHITI_EMBEDDING_API_KEY`, `JWT_JWKS_BASE64`
 - optional `MCP_CONNECT_SECRET`, `AGENTOS_MCP_SIGNING_KEY`
 
 No Data Service database or Data Service-owned object-storage variable/secret belongs in this environment.
+The published Agents use the registered `gpt-5.6-sol` Responses model with medium reasoning. DeepSeek remains configured
+for Graphiti's separate LLM adapter and is not the runtime model for those Agents.
 
 ## Fresh initialization and cutover
 

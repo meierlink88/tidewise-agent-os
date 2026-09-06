@@ -52,9 +52,11 @@ class UatIngressContractTest(TestCase):
     def test_deployment_probe_has_its_required_scopes(self) -> None:
         required_scopes = [
             "agents:read",
+            "agents:run",
             "workflows:read",
             "workflows:run",
             "config:read",
+            "registry:read",
         ]
 
         self.assertTrue(
@@ -106,6 +108,10 @@ class UatIngressContractTest(TestCase):
             example_env,
         )
         self.assertIn("DATA_SERVICE_BASE_URL=https://tideai.tripwise.cn", example_env)
+        self.assertIn("OPENAI_BASE_URL=https://model-proxy.ceekeecloud.com/v1", example_env)
+        self.assertIn("OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}", compose)
+        self.assertIn("OPENAI_BASE_URL: ${OPENAI_BASE_URL:?OPENAI_BASE_URL is required}", compose)
+        self.assertIn("openai-base-url", preflight)
         self.assertIn("public Data Service Source Snapshot", preflight)
         self.assertIn("is_private", preflight)
         self.assertNotIn("--insecure", preflight)
@@ -120,6 +126,9 @@ class UatIngressContractTest(TestCase):
         self.assertIn("RAW_EVIDENCE_PUBLIC_BASE_URL: ${{ vars.RAW_EVIDENCE_PUBLIC_BASE_URL }}", workflow)
         self.assertNotIn("RDS_HOST", workflow)
         self.assertIn("DATA_SERVICE_BASE_URL: ${{ vars.DATA_SERVICE_BASE_URL }}", workflow)
+        self.assertIn("OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}", workflow)
+        self.assertIn("OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}", workflow)
+        self.assertIn('"DEEPSEEK_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL",', workflow)
         self.assertIn("UAT_LAN_BIND_ADDRESS: ${{ vars.UAT_LAN_BIND_ADDRESS }}", workflow)
         self.assertIn("POSTGRES_LAN_PORT: ${{ vars.POSTGRES_LAN_PORT }}", workflow)
         self.assertIn("NEO4J_HTTP_LAN_PORT: ${{ vars.NEO4J_HTTP_LAN_PORT }}", workflow)
@@ -222,6 +231,12 @@ class UatIngressContractTest(TestCase):
         self.assertIn(
             'session.call_tool("get_agentos_config", {})', (REPOSITORY_ROOT / "scripts/smoke_uat.py").read_text()
         )
+        smoke = (REPOSITORY_ROOT / "scripts/smoke_uat.py").read_text()
+        self.assertIn('"run_agent"', smoke)
+        self.assertIn('EXPECTED_AGENT_MODEL_ID = "gpt-5.6-sol"', smoke)
+        self.assertIn('RETIRED_AGENT_ID = "investment-planner"', smoke)
+        self.assertIn('"investment-report-writer"', smoke)
+        self.assertIn('"event-signal-analyst"', smoke)
 
     def test_mcp_oauth_accepts_https_path_issuer(self) -> None:
         auth = AgentOSBuiltinAuth(

@@ -56,6 +56,9 @@ for image_var in POSTGRES_IMAGE NEO4J_IMAGE MINIO_IMAGE; do
 done
 pass immutable-local-agentos-and-arm64-dependencies
 
+: "${OPENAI_API_KEY:?OPENAI_API_KEY is required}"
+: "${OPENAI_BASE_URL:?OPENAI_BASE_URL is required}"
+
 python3 - <<'PY'
 import ipaddress
 import os
@@ -79,6 +82,16 @@ for _family, _type, _proto, _canon, sockaddr in socket.getaddrinfo(data.hostname
     address = ipaddress.ip_address(sockaddr[0])
     if address.is_private or address.is_loopback or address.is_link_local:
         raise SystemExit(f"FAIL data-service-url: {data.hostname} resolved to non-public address")
+
+openai = urlparse(os.environ["OPENAI_BASE_URL"])
+if openai.scheme != "https" or not openai.hostname or openai.port not in {None, 443}:
+    raise SystemExit("FAIL openai-base-url: public HTTPS endpoint on port 443 is required")
+if openai.username or openai.password or openai.query or openai.fragment:
+    raise SystemExit("FAIL openai-base-url: credentials, query and fragment are not allowed")
+for _family, _type, _proto, _canon, sockaddr in socket.getaddrinfo(openai.hostname, 443):
+    address = ipaddress.ip_address(sockaddr[0])
+    if address.is_private or address.is_loopback or address.is_link_local:
+        raise SystemExit(f"FAIL openai-base-url: {openai.hostname} resolved to non-public address")
 
 lan_address = ipaddress.ip_address(os.environ["UAT_LAN_BIND_ADDRESS"])
 if (
