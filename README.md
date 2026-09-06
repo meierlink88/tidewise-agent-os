@@ -2,6 +2,13 @@
 
 观潮家自托管 AgentOS 运行时，基于 Agno。Agent、Team、Workflow 都是本仓库的核心交付物；`app/main.py` 只负责装配，不承载业务实现。
 
+## 当前验证范围
+
+按维护者要求，现有自动化测试用例、专用夹具及 Agent eval 用例已全部移除（#205）。
+CI 保留格式、lint、类型、镜像构建和部署配置检查，不再运行单元测试或创建测试专用 PostgreSQL。
+`evals` 执行框架保留，但当前 CASES 为空。业务运行时校验与数据库中的历史执行记录不受影响。
+这不表示原有用例都已失效，也不代表行为回归已被验证；删除内容可通过 Git 历史恢复。
+
 ## 当前组件
 
 - Agent Model：GPT Agent 统一使用 Agno `OpenAIResponses` 的 `gpt-5.6-sol`，固定 low；不再支持文章 Reviewer 的独立推理强度覆盖。模型列表仅保留一个 GPT 选项；现有 DeepSeek Agent 配置不变。
