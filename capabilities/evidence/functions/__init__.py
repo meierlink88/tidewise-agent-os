@@ -8,6 +8,7 @@ from capabilities.evidence.functions.extraction import (
     prepare_evidence_analysis,
     publish_evidence,
     recover_evidence_publication,
+    reuse_published_evidence,
     transfer_legacy_raw_documents,
 )
 
@@ -17,6 +18,7 @@ __all__ = [
     "prepare_evidence",
     "prepare_evidence_analysis",
     "recover_evidence_publication",
+    "reuse_published_evidence",
     "transfer_legacy_raw_documents",
     "publish_evidence",
     "read_resolved_evidences",

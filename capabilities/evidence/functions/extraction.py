@@ -505,7 +505,7 @@ def _read_final_manifest(
         return None
     frozen = artifact.prepared
     if (
-        frozen.prepared_raw != publication.prepared_raw
+        not _same_article_source(frozen.prepared_raw, publication.prepared_raw)
         or frozen.raw_evidence.publication_key != publication.raw_evidence.publication_key
     ):
         raise ValueError("published Evidence Artifact source identity conflict")
@@ -517,6 +517,35 @@ def _read_final_manifest(
         evidence_count=len(frozen.evidences),
         artifact_manifest_path=str(path),
         checkpoint=checkpoint,
+    )
+
+
+def _same_article_source(left: PreparedRawDocument, right: PreparedRawDocument) -> bool:
+    """Transport/collection metadata is not an article's content identity."""
+    return all(
+        getattr(left, field) == getattr(right, field)
+        for field in ("publication_key", "source_url", "content_sha256", "raw_text")
+    )
+
+
+def reuse_published_evidence(prepared: PreparedRawDocument) -> EvidencePublicationResult | None:
+    """Reuse completed publication only; never resume a partial publication or call a model/API."""
+    artifact = _load_final_artifact(prepared.publication_key)
+    if artifact is None:
+        return None
+    if not _same_article_source(artifact.prepared.prepared_raw, prepared):
+        raise ValueError("published Evidence Artifact source identity conflict")
+    return EvidencePublicationResult(
+        raw_evidence_id=artifact.identities.raw_evidence_id,
+        evidence_ids=artifact.identities.ids,
+        evidence_count=len(artifact.prepared.evidences),
+        artifact_manifest_path=str(
+            evidence_artifact_root()
+            / "documents"
+            / _publication_artifact_id(prepared.publication_key)
+            / "manifest.json"
+        ),
+        checkpoint=read_checkpoint(),
     )
 
 

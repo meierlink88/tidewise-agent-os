@@ -1,5 +1,6 @@
 """Per-article routing, durable recovery and a real Agno orchestration regression."""
 
+import json
 import os
 import tempfile
 import unittest
@@ -321,6 +322,40 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(uploaded["sha256"], prepared.document_sha256)
         self.assertEqual(queue.read_state(key)["status"], "completed")
 
+    async def test_completed_article_bypasses_agent_and_publication_in_current_workflow(self) -> None:
+        helper = fixtures.EvidenceExtractionTest()
+        helper._publish_raw_fixture()
+        prepared = helper._prepared()
+        publication = helper._validated(prepared)
+        raw_id = "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"
+        evidence_id = "EVD5cb71bef-5b1d-5995-add0-7408eaa2be15"
+        with patch(
+            "capabilities.evidence.functions.extraction.post_publication",
+            side_effect=[
+                {"id": raw_id},
+                {"raw_evidence_id": raw_id, "ids": [evidence_id], "items": [{"input_index": 0, "id": evidence_id}]},
+            ],
+        ):
+            await publish_evidence(StepInput(previous_step_content=publication))
+        key, _ = queue.enqueue_candidate(self.candidate(prepared.source_url), "reacquired")
+        agent = build_title_curator_agent()
+        agent.db = None
+        workflow = _seed_workflow(agent)
+        workflow.db = None
+        assert isinstance(workflow.steps, list)
+        workflow.steps[0] = Step(name="existing-queue", executor=lambda step_input: StepOutput(content={}))
+        with (
+            patch.object(agent, "arun", new=AsyncMock()) as model,
+            patch.object(review, "upload_article") as upload,
+            patch("capabilities.evidence.functions.extraction.post_publication") as post,
+        ):
+            result = await workflow.arun(input="duplicate", run_id="duplicate", session_id="duplicate")
+        self.assertEqual(result.status, RunStatus.completed)
+        model.assert_not_called()
+        upload.assert_not_called()
+        post.assert_not_called()
+        self.assertTrue(queue.read_state(key)["result"]["reused_publication"])
+
     async def test_workflow_owns_session_even_when_pinned_agent_restores_db(self) -> None:
         key, _ = queue.enqueue_candidate(self.candidate(), "session-test")
         db = SqliteDb(db_file=str(queue.queue_root() / "session-test.db"))
@@ -350,7 +385,7 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
         assert session is not None and not isinstance(session, dict)
         self.assertEqual(session.workflow_id, "raw-collection")
 
-    async def test_publication_failure_stops_workflow_and_is_not_automatically_retried(self) -> None:
+    async def test_publication_failure_is_recorded_and_is_not_automatically_retried(self) -> None:
         key, _ = queue.enqueue_candidate(self.candidate(), "failure-test")
         agent = build_title_curator_agent()
         agent.db = None
@@ -363,9 +398,9 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
             patch.object(agent, "arun", new=AsyncMock(return_value=RunOutput(content=draft))) as analyze,
             patch.object(review, "upload_article"),
             patch("capabilities.evidence.functions.extraction.post_publication", side_effect=RuntimeError("offline")),
-            self.assertRaisesRegex(RuntimeError, "offline"),
         ):
-            await workflow.arun(input="fail closed", run_id="failure-test", session_id="failure-test")
+            result = await workflow.arun(input="fail closed", run_id="failure-test", session_id="failure-test")
+        self.assertEqual(result.status, RunStatus.completed)
         self.assertEqual(analyze.call_count, 1)
         self.assertEqual(queue.read_state(key)["status"], "failed")
         self.assertTrue((queue.item_root(key) / "publication.json").exists())
@@ -434,7 +469,7 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
         assert self.context.session_state is not None
         self.context.session_state["article_review"]["claim"]["token"] = "stale-token"
         with patch.object(review, "upload_article") as upload, patch.object(review, "publish_evidence") as publish:
-            with self.assertRaises(ValueError):
+            with self.assertRaises(review.ArticleFailureRecordingError):
                 await review.evidence_publish(
                     StepInput(previous_step_content=EvidenceReviewDraft(is_relevant=False, extraction=None)),
                     self.context,
@@ -443,6 +478,90 @@ class ArticleReviewTest(unittest.IsolatedAsyncioTestCase):
         publish.assert_not_called()
         self.assertFalse((queue.item_root(key) / "review.json").exists())
         self.assertEqual(queue.read_state(key)["status"], "pending")
+
+    async def test_each_article_step_failure_continues_to_next_in_both_execution_modes(self) -> None:
+        for streaming in (False, True):
+            for stage in ("prepare", "review", "invalid", "publish", "partial"):
+                with self.subTest(streaming=streaming, stage=stage):
+                    suffix = f"{stage}-{streaming}"
+                    first, _ = queue.enqueue_candidate(self.candidate(f"https://example.test/{suffix}/first"), suffix)
+                    second, _ = queue.enqueue_candidate(self.candidate(f"https://example.test/{suffix}/second"), suffix)
+                    agent = build_title_curator_agent()
+                    agent.db = None
+                    workflow = _seed_workflow(agent)
+                    workflow.db = None
+                    assert isinstance(workflow.steps, list)
+                    workflow.steps[0] = Step(name="existing", executor=lambda step_input: StepOutput(content={}))
+                    calls = []
+                    original_prepare = review.prepare_evidence_analysis
+
+                    async def prepare(document, context):
+                        if stage == "prepare" and document.source_url.endswith("/first"):
+                            raise ValueError("bad article preparation")
+                        return await original_prepare(document, context)
+
+                    def answer():
+                        calls.append(True)
+                        if stage == "review" and len(calls) == 1:
+                            raise RuntimeError("model unavailable")
+                        if stage == "invalid" and len(calls) == 1:
+                            return ModelResponse(content='{"broken":true}')
+                        relevant = stage in ("publish", "partial") and len(calls) == 1
+                        return ModelResponse(
+                            content=EvidenceReviewDraft(
+                                is_relevant=relevant,
+                                extraction=fixtures.EvidenceExtractionTest._draft() if relevant else None,
+                            ).model_dump_json()
+                        )
+
+                    async def stream_answer(**kwargs):
+                        yield answer()
+
+                    with (
+                        patch.object(review, "prepare_evidence_analysis", side_effect=prepare),
+                        patch.object(agent.model, "aresponse", new=AsyncMock(side_effect=lambda **kwargs: answer())),
+                        patch.object(agent.model, "aresponse_stream", new=stream_answer),
+                        patch.object(review, "upload_article") as upload,
+                        patch(
+                            "capabilities.evidence.functions.extraction.post_publication",
+                            side_effect=[
+                                {"id": "RAW15bec7e3-998c-5434-aa5d-29712c4c67cf"},
+                                RuntimeError("publish offline"),
+                            ]
+                            if stage == "partial"
+                            else RuntimeError("publish offline"),
+                        ) as post,
+                    ):
+                        if streaming:
+                            async for _ in workflow.arun(
+                                input="isolation", run_id=suffix, session_id=suffix, stream=True
+                            ):
+                                pass
+                        else:
+                            result = await workflow.arun(input="isolation", run_id=suffix, session_id=suffix)
+                            self.assertEqual(result.status, RunStatus.completed)
+                    self.assertEqual(queue.read_state(first)["status"], "failed")
+                    self.assertEqual(queue.read_state(second)["status"], "excluded")
+                    error = json.loads((queue.item_root(first) / "error.json").read_text())
+                    self.assertEqual(
+                        error["step"],
+                        {
+                            "prepare": "Prepare Evidence Review",
+                            "review": "Evidence Reviewer",
+                            "invalid": "Evidence Reviewer",
+                            "publish": "Evidence Publish",
+                            "partial": "Evidence Publish",
+                        }[stage],
+                    )
+                    self.assertEqual(len(calls), 1 if stage == "prepare" else 2)
+                    if stage == "review":
+                        self.assertIn("model unavailable", error["message"])
+                    if stage == "partial":
+                        self.assertEqual(post.call_count, 2)
+                        self.assertTrue((queue.item_root(first) / "publication.json").exists())
+                    if stage not in ("publish", "partial"):
+                        upload.assert_not_called()
+                        post.assert_not_called()
 
 
 if __name__ == "__main__":

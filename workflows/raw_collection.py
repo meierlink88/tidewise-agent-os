@@ -18,7 +18,7 @@ from capabilities.collection.functions import (
 from db import get_postgres_db
 
 RAW_COLLECTION_WORKFLOW_ID = "raw-collection"
-RAW_COLLECTION_CONTRACT_VERSION = 22
+RAW_COLLECTION_CONTRACT_VERSION = 23
 RETIRED_COLLECTION_QUERY_PLANNER_AGENT_ID = "raw-collector"
 
 
@@ -77,7 +77,7 @@ def _seed_workflow(curator: Agent, *, dependencies: dict[str, object] | None = N
             ),
             Loop(
                 name="process_articles",
-                description="Review and publish one article at a time; failures stop the run.",
+                description="Review and publish per article; record failures and continue without retry.",
                 max_iterations=1_000,
                 end_condition=article_processing_complete,
                 # Every iteration claims one article; never feed a prior article's output to its successor.
