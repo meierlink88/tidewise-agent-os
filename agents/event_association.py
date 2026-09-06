@@ -9,7 +9,7 @@ from agno.db.base import ComponentType
 from agno.registry import Registry
 from agno.skills import LocalSkills, Skills
 
-from app.settings import default_model
+from app.settings import is_sol_low_model, sol_low_model
 from capabilities.event import EVENT_ASSOCIATION_AGENT_ID, AssociationDecision
 from db import get_postgres_db
 
@@ -53,7 +53,7 @@ def build_event_association_agent() -> Agent:
         Agent(
             id=EVENT_ASSOCIATION_AGENT_ID,
             name="Event Association",
-            model=default_model(),
+            model=sol_low_model(),
             db=get_postgres_db(),
             instructions=INSTRUCTIONS,
             output_schema=AssociationDecision,
@@ -93,6 +93,7 @@ def ensure_event_association_agent(registry: Registry) -> int:
         loaded = load_event_association_agent(registry)
         if (
             loaded.agent.output_schema is not AssociationDecision
+            or not is_sol_low_model(loaded.agent.model)
             or loaded.agent.tools
             or loaded.agent.knowledge is not None
             or loaded.agent.memory_manager is not None
