@@ -129,6 +129,9 @@ class UatIngressContractTest(TestCase):
         self.assertIn("OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}", compose)
         self.assertIn("OPENAI_BASE_URL: ${OPENAI_BASE_URL:?OPENAI_BASE_URL is required}", compose)
         self.assertIn("openai-base-url", preflight)
+        self.assertIn("responses.create(", preflight)
+        self.assertIn('model="gpt-5.6-sol"', preflight)
+        self.assertIn("pass openai-gpt-5.6-sol", preflight)
         self.assertIn("public Data Service Source Snapshot", preflight)
         self.assertIn("is_private", preflight)
         self.assertNotIn("--insecure", preflight)
@@ -165,6 +168,11 @@ class UatIngressContractTest(TestCase):
         self.assertIn("openssl pkey -pubin -noout", workflow)
         self.assertIn('lines.append(f"JWT_VERIFICATION_KEY={json.dumps(verification_key)}")', workflow)
         self.assertIn('if [ ! -s "$current_sha" ]; then', deploy)
+        self.assertIn("while IFS='=' read -r variable_name _", deploy)
+        self.assertIn('unset "$variable_name"', deploy)
+        self.assertIn("FAIL internal-release", deploy)
+        self.assertIn("up -d --force-recreate", deploy)
+        self.assertIn('|| return 1\n    echo "PASS rollback-previous-agentos-release"', deploy)
         self.assertIn("python -m scripts.seed_schedules", deploy)
         first_release = deploy.split(
             'migrate_candidate_database "$runtime_env" "$candidate_images" "$candidate_compose"',

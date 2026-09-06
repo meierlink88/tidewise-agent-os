@@ -136,6 +136,33 @@ if (
 PY
 pass public-https-and-lan-contracts
 
+docker run --rm \
+  -e OPENAI_API_KEY -e OPENAI_BASE_URL \
+  --entrypoint python "$AGENTOS_IMAGE" -c '
+import os
+
+from openai import APIStatusError, OpenAI
+
+try:
+    response = OpenAI(
+        api_key=os.environ["OPENAI_API_KEY"],
+        base_url=os.environ["OPENAI_BASE_URL"],
+        timeout=30,
+    ).responses.create(
+        model="gpt-5.6-sol",
+        input="Reply with exactly UAT_GPT_PREFLIGHT_OK and nothing else.",
+        reasoning={"effort": "medium"},
+        store=False,
+    )
+except APIStatusError as exc:
+    raise SystemExit(f"GPT credential probe failed with HTTP {exc.status_code}") from None
+except Exception as exc:
+    raise SystemExit(f"GPT credential probe failed with {type(exc).__name__}") from None
+if response.output_text.strip() != "UAT_GPT_PREFLIGHT_OK":
+    raise SystemExit("GPT credential probe returned an unexpected response")
+' >/dev/null || fail openai-model "gpt-5.6-sol credential probe failed"
+pass openai-gpt-5.6-sol
+
 ip -o -4 addr show | awk '{split($4, address, "/"); print address[1]}' \
   | grep -Fqx "$UAT_LAN_BIND_ADDRESS" \
   || fail uat-lan-bind "$UAT_LAN_BIND_ADDRESS is not assigned to this DGX host"

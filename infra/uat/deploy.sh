@@ -25,13 +25,26 @@ mkdir -p "$state_dir"
 exec 9>"${deployment_root}/deploy.lock"
 flock -n 9 || { echo "FAIL agentos-deploy-lock: another AgentOS deployment is running" >&2; exit 1; }
 
-compose_for() {
+compose_for() (
   local runtime="$1"
   local images="$2"
   local compose_file="$3"
+  local env_file
+  local variable_name
   shift 3
+
+  # GitHub job variables describe the candidate and take precedence over
+  # --env-file during Compose interpolation. Remove variables owned by the
+  # selected release files inside this subshell so rollback can actually use
+  # the saved previous image and runtime configuration.
+  for env_file in "$runtime" "$images"; do
+    while IFS='=' read -r variable_name _; do
+      [[ "$variable_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+      unset "$variable_name"
+    done < "$env_file"
+  done
   docker compose --env-file "$runtime" --env-file "$images" -f "$compose_file" "$@"
-}
+)
 
 verify_release() {
   local runtime="$1"
@@ -39,27 +52,40 @@ verify_release() {
   local compose_file="$3"
   local expected_sha="$4"
   local verify_storage="${5:-true}"
-  compose_for "$runtime" "$images" "$compose_file" exec -T agentos \
-    curl -fsS http://127.0.0.1:9081/health >/dev/null
-  compose_for "$runtime" "$images" "$compose_file" exec -T agentos python /app/scripts/smoke_uat.py
+  local auth_status
+  local external_headers
+  local external_release
+  local external_status
+  local internal_headers
+  local internal_release
+  internal_headers="$(compose_for "$runtime" "$images" "$compose_file" exec -T agentos \
+    curl --silent --show-error --fail --dump-header - --output /dev/null http://127.0.0.1:9081/health)" \
+    || return 1
+  internal_release="$(awk -F': *' 'tolower($1) == "x-tidewise-release" {gsub("\r", "", $2); value=$2} END {print value}' <<< "$internal_headers")"
+  [ "$internal_release" = "$expected_sha" ] \
+    || { echo "FAIL internal-release: expected ${expected_sha}, got ${internal_release:-missing}" >&2; return 1; }
+  compose_for "$runtime" "$images" "$compose_file" exec -T agentos python /app/scripts/smoke_uat.py \
+    || return 1
   if [ "$verify_storage" = true ]; then
     compose_for "$runtime" "$images" "$compose_file" exec -T agentos \
-      python -m scripts.verify_raw_evidence_storage smoke --identity "$expected_sha"
+      python -m scripts.verify_raw_evidence_storage smoke --identity "$expected_sha" \
+      || return 1
   fi
-  compose_for "$runtime" "$images" "$compose_file" exec -T agentos python -m sematica.graphiti.readiness
+  compose_for "$runtime" "$images" "$compose_file" exec -T agentos python -m sematica.graphiti.readiness \
+    || return 1
   if [ "$stage_only" = true ]; then
     echo "PASS staged-agentos-health-auth-components-schedules-mcp"
     return 0
   fi
   external_headers="$(curl --silent --show-error --connect-timeout 5 --max-time 20 \
-    --dump-header - --output /dev/null "${external_url%/}/health")"
+    --dump-header - --output /dev/null "${external_url%/}/health")" || return 1
   external_status="$(awk 'toupper($1) ~ /^HTTP\// {code=$2} END {print code}' <<< "$external_headers")"
   [ "$external_status" = 200 ] || { echo "FAIL external-health: HTTP ${external_status}" >&2; return 1; }
   external_release="$(awk -F': *' 'tolower($1) == "x-tidewise-release" {gsub("\r", "", $2); value=$2} END {print value}' <<< "$external_headers")"
   [ "$external_release" = "$expected_sha" ] \
     || { echo "FAIL external-release: expected ${expected_sha}, got ${external_release:-missing}" >&2; return 1; }
   auth_status="$(curl --silent --show-error --connect-timeout 5 --max-time 20 \
-    --output /dev/null --write-out '%{http_code}' "${external_url%/}/agents")"
+    --output /dev/null --write-out '%{http_code}' "${external_url%/}/agents")" || return 1
   case "$auth_status" in
     401|403) ;;
     *) echo "FAIL external-auth-gate: expected 401/403, got HTTP ${auth_status}" >&2; return 1 ;;
@@ -97,8 +123,10 @@ rollback() {
   rollback_in_progress=true
   echo "Candidate verification failed; restoring the previous AgentOS release" >&2
   if [ -s "$current_runtime" ] && [ -s "$current_images" ] && [ -s "$current_compose" ]; then
-    compose_for "$current_runtime" "$current_images" "$current_compose" up -d --wait --wait-timeout 180 agentos
-    verify_release "$current_runtime" "$current_images" "$current_compose" "$(cat "$current_sha")" false
+    compose_for "$current_runtime" "$current_images" "$current_compose" up -d --force-recreate \
+      --wait --wait-timeout 180 agentos || return 1
+    verify_release "$current_runtime" "$current_images" "$current_compose" "$(cat "$current_sha")" false \
+      || return 1
     echo "PASS rollback-previous-agentos-release" >&2
   else
     compose_for "$runtime_env" "$candidate_images" "$candidate_compose" stop --timeout 30 agentos || true
