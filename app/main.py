@@ -34,7 +34,7 @@ from db import get_postgres_db
 from workflows.deployment_check import deployment_check
 from workflows.event_extraction import ensure_event_extraction_workflow
 from workflows.evidence_extraction import ensure_evidence_extraction_workflow
-from workflows.investment_reasoning import ensure_investment_reasoning_workflow
+from workflows.investment_reasoning import ensure_investment_reasoning_workflow, retire_investment_planner_agent
 from workflows.local_ping import local_ping
 from workflows.raw_collection import ensure_raw_collection_workflow, retire_collection_query_planner_agent
 
@@ -109,6 +109,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     ensure_evidence_extraction_workflow(registry)
     ensure_event_extraction_workflow(registry)
     ensure_investment_reasoning_workflow(registry)
+    retire_investment_planner_agent()
     model_id = getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
     model = registry.get_model(model_id)
     if model is None:

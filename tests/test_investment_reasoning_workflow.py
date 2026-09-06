@@ -91,6 +91,7 @@ from workflows.investment_reasoning import (
     INVESTMENT_REASONING_CONTRACT_VERSION,
     _seed_workflow,
     ensure_investment_reasoning_workflow,
+    retire_investment_planner_agent,
 )
 
 
@@ -1188,6 +1189,31 @@ class InvestmentComponentLifecycleTest(unittest.TestCase):
             self.assertIs(registry.get_agent("investment-report-writer"), report_writer)
             self.assertIs(registry.get_agent("investment-reviewer"), reviewer)
             self.assertIsNone(registry.get_agent("investment-planner"))
+
+    def test_retire_investment_planner_soft_archives_the_legacy_component(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = {"current_version": 2}
+        db.delete_component.return_value = True
+
+        with patch("workflows.investment_reasoning.get_postgres_db", return_value=db):
+            retired = retire_investment_planner_agent()
+
+        self.assertTrue(retired)
+        db.delete_component.assert_called_once_with(
+            "investment-planner",
+            expected_current_version=2,
+            require_no_dependents=False,
+        )
+
+    def test_retire_investment_planner_is_idempotent(self) -> None:
+        db = MagicMock()
+        db.get_component.return_value = None
+
+        with patch("workflows.investment_reasoning.get_postgres_db", return_value=db):
+            retired = retire_investment_planner_agent()
+
+        self.assertFalse(retired)
+        db.delete_component.assert_not_called()
 
     def test_workflow_migration_preserves_reasoner_and_reviewer_bindings(self) -> None:
         db = MagicMock()
@@ -2290,6 +2316,7 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             "ensure_evidence_extraction_workflow",
             "ensure_event_extraction_workflow",
             "ensure_investment_reasoning_workflow",
+            "retire_investment_planner_agent",
         ]
         with ExitStack() as stack:
             settings = {
@@ -2352,6 +2379,7 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             "ensure_evidence_extraction_workflow",
             "ensure_event_extraction_workflow",
             "ensure_investment_reasoning_workflow",
+            "retire_investment_planner_agent",
         ]
         with ExitStack() as stack:
             for name in ensure_names:
@@ -2397,6 +2425,7 @@ class InvestmentLifespanTest(unittest.IsolatedAsyncioTestCase):
             "ensure_evidence_extraction_workflow",
             "ensure_event_extraction_workflow",
             "ensure_investment_reasoning_workflow",
+            "retire_investment_planner_agent",
         ]
         with ExitStack() as stack:
             for name in ensure_names:
