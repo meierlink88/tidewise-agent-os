@@ -5,36 +5,38 @@ from typing import Any
 from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
-from agno.workflow import Loop, Step, Workflow
+from agno.workflow import Condition, Loop, Step, Workflow
 from agno.workflow.types import HumanReview, OnError
+from agno.workflow.workflow import derive_step_links
 
+from agents.event_association import load_event_association_agent
 from agents.event_extractor import load_event_extractor_agent
 from agents.event_identity import load_event_identity_agent
 from agents.event_signal_analyst import load_event_signal_analyst_agent
 from capabilities.event import (
-    EVENT_AGENT_IDS,
+    EVENT_ASSOCIATION_AGENT_ID,
     EVENT_EXTRACTOR_AGENT_ID,
     EVENT_IDENTITY_AGENT_ID,
     EVENT_SIGNAL_ANALYST_AGENT_ID,
-    EventAgentVersions,
 )
-from capabilities.event.functions import (
-    analyze_signals,
-    event_extraction_complete,
-    extract_events,
-    publish_events,
-    publish_signals,
-    resolve_events,
+from capabilities.event import (
+    STORYLINE_AGENT_IDS as EVENT_AGENT_IDS,
 )
+from capabilities.event import (
+    StorylineAgentVersions as EventAgentVersions,
+)
+from capabilities.event.functions import event_extraction_complete, event_extraction_required
+from capabilities.event.functions import storyline as operations
 from db import get_postgres_db
 
 EVENT_EXTRACTION_WORKFLOW_ID = "event-extraction"
-EVENT_EXTRACTION_CONTRACT_VERSION = 13
+EVENT_EXTRACTION_CONTRACT_VERSION = 14
 EVENT_EXTRACTION_BATCH_LIMIT = 50
-EVENT_EXTRACTION_PUBLICATION_POLICY = "code_managed_exact_agent_links.v1"
+EVENT_EXTRACTION_PUBLICATION_POLICY = "native_step_exact_agent_links.v2"
 _AGENT_LINK_BINDINGS = (
     ("event-extract", EVENT_EXTRACTOR_AGENT_ID, 0),
     ("event-resolve", EVENT_IDENTITY_AGENT_ID, 1),
+    ("event-associate", EVENT_ASSOCIATION_AGENT_ID, 2),
     ("event-signal-analyze", EVENT_SIGNAL_ANALYST_AGENT_ID, 3),
 )
 
@@ -57,47 +59,143 @@ def _function_step(name: str, step_id: str, executor: Any) -> Step:
 def _seed_workflow(
     extractor: Agent,
     identity: Agent,
+    association: Agent,
     signal_analyst: Agent,
     *,
     agent_versions: dict[str, int],
 ) -> Workflow:
-    """Build one visible batch Loop containing five direct business Function Steps."""
+    """Four direct semantic Agents; code owns all routing and side effects."""
+    if {str(a.id) for a in (extractor, identity, association, signal_analyst)} != EVENT_AGENT_IDS:
+        raise ValueError("Event Extraction requires its four semantic Agents")
+    pins = EventAgentVersions.model_validate(agent_versions).as_mapping()
 
-    if {str(agent.id) for agent in (extractor, identity, signal_analyst)} != EVENT_AGENT_IDS:
-        raise ValueError("Event Extraction requires exactly its three Studio Agents")
-    try:
-        pinned_versions = EventAgentVersions.model_validate(agent_versions).as_mapping()
-    except ValueError as exc:
-        raise ValueError("Event Extraction requires complete positive exact Agent versions") from exc
+    def function(name: str, executor: Any) -> Step:
+        return _function_step(name, executor.__name__, executor)
 
+    def semantic(name: str, step_id: str, agent: Agent) -> Step:
+        return Step(
+            name=name,
+            step_id=step_id,
+            agent=agent,
+            max_retries=0,
+            human_review=_fail_fast_review(),
+            strict_input_validation=True,
+        )
+
+    def condition(name: str, evaluator: Any, steps: list[Any]) -> Condition:
+        return Condition(name=name, evaluator=evaluator, steps=steps, human_review=_fail_fast_review())
+
+    def loop(name: str, end: Any, steps: list[Any], limit: int) -> Loop:
+        return Loop(
+            name=name,
+            end_condition=end,
+            steps=steps,
+            max_iterations=limit,
+            forward_iteration_output=False,
+            human_review=_fail_fast_review(),
+        )
+
+    associate = condition(
+        "Association pages remain",
+        operations.has_association_pages,
+        [
+            loop(
+                "Associate complete catalog pages",
+                operations.association_pages_complete,
+                [
+                    function("Prepare association page", operations.prepare_association_page),
+                    semantic("Event Association", "event-associate", association),
+                    function("Validate association page", operations.freeze_association_page),
+                ],
+                operations.MAX_PAGES,
+            ),
+        ],
+    )
+    signals = condition(
+        "Signal pages remain",
+        operations.has_storyline_signal_pages,
+        [
+            loop(
+                "Analyze direct Signal pages",
+                operations.storyline_signal_pages_complete,
+                [
+                    function("Prepare Signal page", operations.prepare_storyline_signal_page),
+                    semantic("Event Signal Analyst", "event-signal-analyze", signal_analyst),
+                    function("Validate Signal proposals", operations.freeze_storyline_signal_page),
+                ],
+                operations.MAX_PAGES,
+            ),
+        ],
+    )
+    candidates = condition(
+        "Candidates remain",
+        operations.has_storyline_candidates,
+        [
+            loop(
+                "Process Event candidates",
+                operations.storyline_candidates_complete,
+                [
+                    function("Prepare candidate and history", operations.prepare_storyline_candidate),
+                    condition(
+                        "Identity decision required",
+                        operations.needs_storyline_identity,
+                        [
+                            semantic("Event Identity and Classification", "event-resolve", identity),
+                            function("Validate identity and classification", operations.freeze_storyline_identity),
+                        ],
+                    ),
+                    condition(
+                        "Publishable new Event",
+                        operations.is_publishable_storyline,
+                        [
+                            function("Freeze matching catalog", operations.prepare_storyline_catalog),
+                            associate,
+                            function("Freeze direct Signal candidates", operations.prepare_storyline_signals),
+                            signals,
+                            function(
+                                "Publish Data Event then selected graph and Signals",
+                                operations.publish_storyline_candidate,
+                            ),
+                        ],
+                    ),
+                    function("Complete candidate", operations.finish_storyline_candidate),
+                ],
+                50,
+            ),
+        ],
+    )
     return Workflow(
         id=EVENT_EXTRACTION_WORKFLOW_ID,
         name="Event Extraction",
         description=(
-            "Extracts frozen Evidence, resolves formal Event identity, publishes Data Events and native "
-            "Graphiti Episodes, then validates and projects direct Signal Facts."
+            "Extract Evidence; judge identity and class; associate existing subjects; "
+            "validate direct Signals; publish deterministically."
         ),
         db=get_postgres_db(),
         dependencies={},
         metadata={
             "event_extraction_contract_version": EVENT_EXTRACTION_CONTRACT_VERSION,
             "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
-            "event_agent_versions": pinned_versions,
+            "event_agent_versions": pins,
         },
         steps=[
-            Loop(
-                name="Process Event Evidence batches",
-                description="Process frozen Evidence batches until the queue is drained or the safety cap is reached.",
-                max_iterations=EVENT_EXTRACTION_BATCH_LIMIT,
-                end_condition=event_extraction_complete,
-                human_review=_fail_fast_review(),
-                steps=[
-                    _function_step("Extract Events", "event-extract", extract_events),
-                    _function_step("Resolve Events", "event-resolve", resolve_events),
-                    _function_step("Publish Events", "event-publish", publish_events),
-                    _function_step("Analyze Signals", "event-signal-analyze", analyze_signals),
-                    _function_step("Publish Signals", "event-signal-publish", publish_signals),
+            loop(
+                "Process Event Evidence batches",
+                event_extraction_complete,
+                [
+                    function("Claim frozen Evidence batch", operations.prepare_storyline_batch),
+                    condition(
+                        "Extraction required",
+                        event_extraction_required,
+                        [
+                            semantic("Event Extractor", "event-extract", extractor),
+                            function("Validate Evidence partition", operations.freeze_storyline_draft),
+                        ],
+                    ),
+                    candidates,
+                    function("Complete frozen batch", operations.complete_storyline_batch),
                 ],
+                EVENT_EXTRACTION_BATCH_LIMIT,
             )
         ],
     )
@@ -118,19 +216,17 @@ def _publish_pinned_workflow(
         pinned_versions = EventAgentVersions.model_validate(agent_versions).as_mapping()
     except ValueError as exc:
         raise ValueError("Event Extraction requires complete positive exact Agent versions") from exc
-    links = [
-        {
-            "link_kind": "step_agent",
-            "link_key": step_id,
-            "child_component_id": agent_id,
-            "child_version": pinned_versions[agent_id],
-            "position": position,
-        }
-        for step_id, agent_id, position in _AGENT_LINK_BINDINGS
-    ]
+    links = derive_step_links(
+        workflow.steps,
+        pin_child=lambda link: {
+            **link,
+            "child_version": pinned_versions[link["child_component_id"]],
+        },
+        workflow_id=workflow.id,
+    )
     pinned_ids = {str(link.get("child_component_id")) for link in links if link.get("link_kind") == "step_agent"}
-    if pinned_ids != EVENT_AGENT_IDS:
-        raise ValueError("Event Extraction must pin exactly its three Studio Agents")
+    if pinned_ids != EVENT_AGENT_IDS or len(links) != 4:
+        raise ValueError("Event Extraction must pin exactly its four Studio Agents")
     db = get_postgres_db()
     db.upsert_component(
         component_id=workflow.id,
@@ -168,29 +264,30 @@ def _validate_published_agent_pins(db: Any, version: int, metadata: dict[str, An
             str(link.get("link_key")),
             str(link.get("child_component_id")),
             link.get("child_version"),
-            link.get("position"),
         )
         for link in links
         if link.get("link_kind") == "step_agent"
     )
     expected_bindings = sorted(
-        (step_id, agent_id, pinned_versions[agent_id], position) for step_id, agent_id, position in _AGENT_LINK_BINDINGS
+        (step_id, agent_id, pinned_versions[agent_id]) for step_id, agent_id, _ in _AGENT_LINK_BINDINGS
     )
     if len(links) != len(_AGENT_LINK_BINDINGS) or linked_bindings != expected_bindings:
         raise ValueError("Event Extraction published Workflow does not pin all exact Agent versions")
     return pinned_versions
 
 
-def _loaded_agents(registry: Registry) -> tuple[Agent, Agent, Agent, dict[str, int]]:
+def _loaded_agents(registry: Registry) -> tuple[Agent, Agent, Agent, Agent, dict[str, int]]:
     extractor = load_event_extractor_agent(registry)
     identity = load_event_identity_agent(registry)
     analyst = load_event_signal_analyst_agent(registry)
+    association = load_event_association_agent(registry)
     versions = {
         str(extractor.agent.id): extractor.version,
         str(identity.agent.id): identity.version,
         str(analyst.agent.id): analyst.version,
+        str(association.agent.id): association.version,
     }
-    return extractor.agent, identity.agent, analyst.agent, versions
+    return extractor.agent, identity.agent, association.agent, analyst.agent, versions
 
 
 def ensure_event_extraction_workflow(registry: Registry) -> int:
@@ -209,7 +306,7 @@ def ensure_event_extraction_workflow(registry: Registry) -> int:
         metadata = dict(config.get("metadata") or {})
         if metadata.get("event_extraction_contract_version") == EVENT_EXTRACTION_CONTRACT_VERSION:
             pinned_versions = _validate_published_agent_pins(db, version, metadata)
-            extractor, identity, analyst, versions = _loaded_agents(registry)
+            extractor, identity, association, analyst, versions = _loaded_agents(registry)
             if pinned_versions == versions:
                 current = Workflow.load(
                     EVENT_EXTRACTION_WORKFLOW_ID,
@@ -223,10 +320,28 @@ def ensure_event_extraction_workflow(registry: Registry) -> int:
                     raise ValueError("Event Extraction published Studio version could not be rehydrated")
                 return version
 
-            refreshed = _seed_workflow(extractor, identity, analyst, agent_versions=versions)
-            refreshed.id = str(config.get("id") or EVENT_EXTRACTION_WORKFLOW_ID)
-            refreshed.name = str(config.get("name") or "Event Extraction")
-            refreshed.description = str(config.get("description") or refreshed.description)
+            refreshed = Workflow.load(
+                EVENT_EXTRACTION_WORKFLOW_ID,
+                db=db,
+                registry=registry,
+                version=version,
+                strict=True,
+                published_only=True,
+            )
+            if refreshed is None or not isinstance(refreshed.steps, list):
+                raise ValueError("cannot preserve the published configurable Event topology")
+            replacements = {a.id: a for a in (extractor, identity, association, analyst)}
+
+            def replace_agents(nodes):
+                for node in nodes:
+                    if isinstance(node, Step) and node.agent is not None:
+                        node.agent = replacements[node.agent.id]
+                    for attribute in ("steps", "else_steps", "choices"):
+                        children = getattr(node, attribute, None)
+                        if isinstance(children, list):
+                            replace_agents(children)
+
+            replace_agents(refreshed.steps)
             refreshed.metadata = {
                 **metadata,
                 "event_extraction_publication_policy": EVENT_EXTRACTION_PUBLICATION_POLICY,
@@ -238,8 +353,8 @@ def ensure_event_extraction_workflow(registry: Registry) -> int:
                 notes="Refresh Event Extraction exact Agent version pins",
             )
 
-        extractor, identity, analyst, versions = _loaded_agents(registry)
-        migrated = _seed_workflow(extractor, identity, analyst, agent_versions=versions)
+        extractor, identity, association, analyst, versions = _loaded_agents(registry)
+        migrated = _seed_workflow(extractor, identity, association, analyst, agent_versions=versions)
         migrated.id = str(config.get("id") or EVENT_EXTRACTION_WORKFLOW_ID)
         migrated.name = str(config.get("name") or "Event Extraction")
         migrated.description = str(config.get("description") or migrated.description)
@@ -255,9 +370,9 @@ def ensure_event_extraction_workflow(registry: Registry) -> int:
             notes=f"Event Extraction runtime contract migration {EVENT_EXTRACTION_CONTRACT_VERSION}",
         )
 
-    extractor, identity, analyst, versions = _loaded_agents(registry)
+    extractor, identity, association, analyst, versions = _loaded_agents(registry)
     return _publish_pinned_workflow(
-        _seed_workflow(extractor, identity, analyst, agent_versions=versions),
+        _seed_workflow(extractor, identity, association, analyst, agent_versions=versions),
         agent_versions=versions,
         notes="Initial code-reviewed Event Extraction Workflow seed",
     )
