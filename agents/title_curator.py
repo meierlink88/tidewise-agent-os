@@ -15,7 +15,7 @@ from capabilities.evidence import ArticleReviewDraft
 from db import get_postgres_db
 
 TITLE_CURATOR_AGENT_ID = "title-curator"
-TITLE_CURATOR_CONTRACT_VERSION = 11
+TITLE_CURATOR_CONTRACT_VERSION = 12
 TITLE_CURATOR_AGENT_NAME = "Evidence Reviewer"
 TITLE_CURATOR_SEED_SHA256_KEY = "article_review_seed_sha256"
 _SEED_PROMPT = Path(__file__).with_name("title_curator.seed.md")
@@ -24,6 +24,7 @@ _SEED_PROMPT = Path(__file__).with_name("title_curator.seed.md")
 def filter_model(effort: str | None = None) -> OpenAIResponses:
     model = sol_medium_model()
     model.timeout = 120
+    model.strict_output = True
     effort = (
         (effort if effort is not None else getenv("RAW_EVIDENCE_FILTER_REASONING_EFFORT", "medium")).strip().lower()
     )
@@ -62,9 +63,9 @@ def _configure(agent: Agent) -> Agent:
     agent.tools = []
     agent.retries = 0
     agent.output_schema = ArticleReviewDraft
-    # Match the existing tolerant Evidence draft contract; validate the JSON envelope locally.
-    agent.structured_outputs = False
-    agent.use_json_mode = True
+    # Constrain generation with the existing draft schema; keep local business validation.
+    agent.structured_outputs = True
+    agent.use_json_mode = False
     agent.parse_response = True
     agent.add_datetime_to_context = False
     agent.add_history_to_context = False

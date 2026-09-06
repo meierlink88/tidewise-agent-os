@@ -103,7 +103,7 @@ class EvidenceAnalysisRequest(BaseModel):
 
 
 class RawEvidenceEnrichment(BaseModel):
-    """Semantic fields required to publish the prepared Raw Evidence."""
+    """整篇原文的分类、原创性和引用来源，不是 Evidence 列表。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -357,7 +357,7 @@ class EvidenceExtractionDraft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     raw_evidence: RawEvidenceEnrichment
-    evidences: list[AtomicEvidenceDraft]
+    evidences: list[AtomicEvidenceDraft] = Field(description="从当前原文提取的最小完整业务命题；没有有效命题时为 []。")
 
     @field_validator("evidences", mode="before")
     @classmethod
@@ -384,9 +384,11 @@ class ArticleReviewDraft(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    article_key: str
-    is_relevant: bool = Field(strict=True)
-    extraction: EvidenceExtractionDraft | None
+    article_key: str = Field(description="逐字回传输入文章的 article_key，不生成或修改。")
+    is_relevant: bool = Field(strict=True, description="当前文章是否满足相关性规则；只能为布尔值。")
+    extraction: EvidenceExtractionDraft | None = Field(
+        description="无关时为 null；相关时必须包含 raw_evidence 对象和 evidences 数组。"
+    )
 
     @model_validator(mode="after")
     def validate_branch(self) -> "ArticleReviewDraft":

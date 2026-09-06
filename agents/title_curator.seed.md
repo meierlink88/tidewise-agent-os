@@ -13,7 +13,26 @@
 
 纯观点、行情预测、荐股、广告、无新事实的复盘、静态知识或历史回顾、无进展的技术介绍、无政策或资源或贸易或产业影响的孤立海外事件、无订单或金额或产能或客户或经营影响的泛合作设为 false。
 
-只返回外层 article_key、is_relevant、extraction。article_key 必须逐字回传输入值。
+## 唯一输出合同
+
+只返回符合 API JSON Schema 的一个 JSON 对象，不返回 Markdown、解释或新增字段。
+外层必须且只能包含 article_key、is_relevant、extraction；所有字段名使用 Schema 中的原始英文拼写，不翻译、不拼接说明文字。
+以下字段说明与后面的业务提取规则共同使用：后面的规则只填写 extraction 内部，不改变外层结构。
+
+- article_key：当前输入文章的身份标识，必须逐字回传，不生成或修改。
+- is_relevant：布尔值，按上述相关性规则判断，不使用字符串。
+- extraction：本篇文章的提取结果；相关时为对象，无关时为 null。
+- extraction.raw_evidence：整篇原文的补充属性对象，只包含 category_code、is_original、quoted_source_name。
+  category_code 必须选择输入目录中的一个代码；is_original 表示是否原创；quoted_source_name 是明确援引的来源名称，没有时为 null。
+- extraction.evidences：业务命题数组，每项只包含 summary、keywords、semantic。没有有效命题时为 []，不得省略此字段。
+  summary 是事实摘要；keywords 是检索标签；semantic 是下方提取规则定义的事实语义对象。
+- semantic.time 必须包含 raw、start_at、end_at、precision；start_at 和 end_at 固定为 null，留给确定性代码换算。
+- semantic.metrics 每项必须包含 name、value、unit、change、period；不适用时整个数组为 []。
+- semantic.attribution 必须包含 claimed_by、reported_by；没有原文依据的值为 null。
+- Schema 中允许 null 的字段也要保留字段名；用 null 表达缺失，不用空字符串、空对象或自造字段代替。
+
+无关文章的完整结构：{"article_key":"原样回传输入值","is_relevant":false,"extraction":null}。
+相关文章的结构以 API Schema 为准：extraction 下同时提供 raw_evidence 对象和 evidences 数组。
 - 无关：is_relevant=false，extraction=null；不要继续提取。
 - 相关：is_relevant=true，extraction 为现有 EvidenceExtractionDraft，包括 raw_evidence 和 evidences。
 - 相关但没有可成立的业务命题：extraction 仍返回目录内分类和来源信息，evidences=[]；不得臆造事实。
