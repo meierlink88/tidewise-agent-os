@@ -40,3 +40,13 @@ def sol_medium_model() -> OpenAIResponses:
         reasoning_effort="medium",
         store=False,
     )
+
+
+def is_sol_medium_model(model: object) -> bool:
+    """Return whether an Agent is bound to the code-owned Sol medium profile."""
+    return (
+        isinstance(model, OpenAIResponses)
+        and model.id == SOL_MEDIUM_MODEL_ID
+        and model.reasoning_effort == "medium"
+        and model.store is False
+    )

@@ -7,18 +7,18 @@ from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
 
-from app.settings import default_model
+from app.settings import is_sol_medium_model, sol_medium_model
 from capabilities.evidence import EvidenceExtractionDraft
 from db import get_postgres_db
 
 EVIDENCE_EXTRACTOR_AGENT_ID = "evidence-extractor"
-EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 9
+EVIDENCE_EXTRACTOR_CONTRACT_VERSION = 10
 EVIDENCE_EXTRACTOR_SEED_SHA256_KEY = "evidence_extractor_seed_sha256"
 EVIDENCE_EXTRACTOR_DESCRIPTION = (
     "投研事实分析师：从一篇原始资讯中提炼可供事件识别和变量信号构建使用的最小完整业务命题。"
 )
 _SEED_PROMPT = Path(__file__).with_name("evidence_extractor.seed.md")
-_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 9:
+_RUNTIME_CONTRACT = """Evidence Extractor runtime contract version 10:
 - Read the supplied EvidenceAnalysisRequest exactly once.
 - It contains one document and the complete allowed Category vocabulary.
 - Choose exactly one category and return its code as raw_evidence.category_code.
@@ -61,7 +61,7 @@ def build_evidence_extractor_agent() -> Agent:
         id=EVIDENCE_EXTRACTOR_AGENT_ID,
         name="Evidence Extractor",
         description=EVIDENCE_EXTRACTOR_DESCRIPTION,
-        model=default_model(),
+        model=sol_medium_model(),
         db=get_postgres_db(),
         tools=[],
         instructions=instructions,
@@ -95,9 +95,11 @@ def ensure_evidence_extractor_agent(registry: Registry) -> int:
         if (
             metadata.get("evidence_extractor_contract_version") == EVIDENCE_EXTRACTOR_CONTRACT_VERSION
             and metadata.get(EVIDENCE_EXTRACTOR_SEED_SHA256_KEY) == expected_seed_sha256
+            and is_sol_medium_model(current.model)
         ):
             return version
         current.db = db
+        current.model = sol_medium_model()
         current.description = EVIDENCE_EXTRACTOR_DESCRIPTION
         current.tools = []
         current.tool_call_limit = None

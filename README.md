@@ -4,8 +4,8 @@
 
 ## 当前组件
 
-- Agent：`tidewise-assistant`，默认使用 DeepSeek V4 Flash。
-- Model：Agno Registry 额外注册 `gpt-5.6-sol` medium reasoning，仅在组件明确选择时使用。
+- Agent Model：所有 Agent 统一使用 Agno `OpenAIResponses` 的 `gpt-5.6-sol`，固定 medium reasoning。
+- Graphiti Model：独立的图运行时仍使用 DeepSeek V4 Flash，不属于 Agent 模型切换范围。
 - Agent：`title-curator`（Raw Evidence Filter），对采集素材做投研相关性判断，由 Raw Collection Workflow 调用。
 - Agent：`evidence-extractor`，从 Raw Evidence 提取 Atomic Evidence，由 Studio/PostgreSQL 管理。
 - Agent：`event-extractor`，按主体、动作、对象、阶段与时间身份语义把同批 Evidence 提炼为 Event Candidate。
@@ -38,7 +38,7 @@ tidewise-infra
 
 ```bash
 cp example.env .env
-# 填写 DeepSeek、可选 OpenAI-compatible GPT、Neo4j、Graphiti、DB、Data Service 和 MinIO 凭据；
+# 填写 Agent 必需的 OpenAI-compatible GPT、Graphiti 使用的 DeepSeek、Neo4j、DB、Data Service 和 MinIO 凭据；
 # 首次初始化还需创建 agent_os 数据库/角色。
 
 docker compose up -d --build agentos neo4j

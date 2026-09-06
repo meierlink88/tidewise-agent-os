@@ -8,12 +8,12 @@ from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
 
-from app.settings import default_model
+from app.settings import is_sol_medium_model, sol_medium_model
 from capabilities.collection import TitleCurationDraft
 from db import get_postgres_db
 
 TITLE_CURATOR_AGENT_ID = "title-curator"
-TITLE_CURATOR_CONTRACT_VERSION = 7
+TITLE_CURATOR_CONTRACT_VERSION = 8
 TITLE_CURATOR_AGENT_NAME = "Raw Evidence Filter"
 _SEED_PROMPT = Path(__file__).with_name("title_curator.seed.md")
 
@@ -36,6 +36,7 @@ def _seed_instructions() -> str:
 
 def _configure(agent: Agent) -> Agent:
     agent.db = get_postgres_db()
+    agent.model = sol_medium_model()
     agent.name = TITLE_CURATOR_AGENT_NAME
     agent.description = "Filters collected material for political-economic and equity-research relevance."
     agent.instructions = _seed_instructions()
@@ -61,7 +62,7 @@ def build_title_curator_agent() -> Agent:
             id=TITLE_CURATOR_AGENT_ID,
             name=TITLE_CURATOR_AGENT_NAME,
             description="Filters collected material for political-economic and equity-research relevance.",
-            model=default_model(),
+            model=sol_medium_model(),
             instructions=_seed_instructions(),
         )
     )
@@ -78,7 +79,9 @@ def ensure_title_curator_agent(registry: Registry) -> int:
         current = Agent.load(TITLE_CURATOR_AGENT_ID, db=db, registry=registry, version=version)
         if current is None:
             raise ValueError("Title Curator published version could not be rehydrated")
-        if dict(current.metadata or {}).get("title_curator_contract_version") == TITLE_CURATOR_CONTRACT_VERSION:
+        if dict(current.metadata or {}).get(
+            "title_curator_contract_version"
+        ) == TITLE_CURATOR_CONTRACT_VERSION and is_sol_medium_model(current.model):
             return version
         migrated = _configure(current).save(
             db=db,

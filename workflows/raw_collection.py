@@ -1,12 +1,14 @@
 """Lifecycle and orchestration for the Studio-managed Raw Collection Workflow."""
 
+from typing import Any
+
 from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
 from agno.workflow import Loop, Step, Workflow
 from agno.workflow.types import HumanReview, OnError
 
-from agents.title_curator import LoadedTitleCuratorAgent, load_title_curator_agent
+from agents.title_curator import TITLE_CURATOR_AGENT_ID, LoadedTitleCuratorAgent, load_title_curator_agent
 from capabilities.collection.functions import (
     collect_raw_evidence,
     prepare_raw_evidence_filter_batch,
@@ -35,6 +37,27 @@ def _workflow_dependencies(
         "title_curator_agent_config_version": curator.version,
         "title_curator_instructions_sha256": curator.instructions_sha256,
     }
+
+
+def _repin_title_curator_links(links: list[dict[str, Any]], version: int) -> list[dict[str, Any]]:
+    """Preserve Workflow links while moving its one curator Step to a reviewed version."""
+    repinned: list[dict[str, Any]] = []
+    matches = 0
+    for link in links:
+        normalized: dict[str, Any] = {}
+        for key in ("link_kind", "link_key", "child_component_id", "child_version", "position", "meta"):
+            if key in link:
+                normalized[key] = link.get(key)
+        if (
+            normalized.get("link_kind") == "step_agent"
+            and normalized.get("child_component_id") == TITLE_CURATOR_AGENT_ID
+        ):
+            normalized["child_version"] = version
+            matches += 1
+        repinned.append(normalized)
+    if matches != 1:
+        raise ValueError("Raw Collection must contain exactly one Title Curator Agent link")
+    return repinned
 
 
 def _seed_workflow(curator: Agent, *, dependencies: dict[str, object] | None = None) -> Workflow:
@@ -113,7 +136,35 @@ def ensure_raw_collection_workflow(registry: Registry) -> int:
             current = Workflow.load(RAW_COLLECTION_WORKFLOW_ID, db=db, registry=registry, version=version)
             if current is None or not isinstance(current.steps, list) or not current.steps:
                 raise ValueError("Raw Collection published Studio version could not be rehydrated")
-            return version
+            curator = load_title_curator_agent(registry)
+            expected_dependencies = _workflow_dependencies(curator)
+            links = db.get_links(component_id=RAW_COLLECTION_WORKFLOW_ID, version=version)
+            curator_pins = [
+                link.get("child_version")
+                for link in links
+                if link.get("link_kind") == "step_agent" and link.get("child_component_id") == TITLE_CURATOR_AGENT_ID
+            ]
+            if curator_pins == [curator.version] and current.dependencies == expected_dependencies:
+                return version
+            current.dependencies = expected_dependencies
+            db.upsert_component(
+                component_id=RAW_COLLECTION_WORKFLOW_ID,
+                component_type=ComponentType.WORKFLOW,
+                name=current.name,
+                description=current.description,
+                metadata=current.metadata,
+            )
+            refreshed = db.upsert_config(
+                component_id=RAW_COLLECTION_WORKFLOW_ID,
+                config=current.to_dict(),
+                links=_repin_title_curator_links(links, curator.version),
+                stage="published",
+                notes="Refresh Raw Collection Title Curator version pin",
+            )
+            refreshed_version = refreshed.get("version") if isinstance(refreshed, dict) else None
+            if not isinstance(refreshed_version, int):
+                raise ValueError("Raw Collection Agent version refresh failed")
+            return refreshed_version
         curator = load_title_curator_agent(registry)
         migrated = _seed_workflow(
             curator.agent,

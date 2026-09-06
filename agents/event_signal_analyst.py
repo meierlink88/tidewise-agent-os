@@ -8,17 +8,17 @@ from agno.agent import Agent
 from agno.db.base import ComponentType
 from agno.registry import Registry
 
-from app.settings import default_model
+from app.settings import is_sol_medium_model, sol_medium_model
 from capabilities.event import EVENT_SIGNAL_ANALYST_AGENT_ID, EventSignalAnalysisDraft
 from db import get_postgres_db
 
-EVENT_SIGNAL_ANALYST_CONTRACT_VERSION = 7
+EVENT_SIGNAL_ANALYST_CONTRACT_VERSION = 8
 EVENT_SIGNAL_ANALYST_SEED_SHA256_KEY = "event_signal_analyst_seed_sha256"
 EVENT_SIGNAL_ANALYST_DESCRIPTION = (
     "Classifies one published Event and proposes bounded direct Signals against supplied graph identities."
 )
 _SEED_PROMPT = Path(__file__).with_name("event_signal_analyst.seed.md")
-_RUNTIME_CONTRACT = """Event Signal Analyst runtime contract version 7:
+_RUNTIME_CONTRACT = """Event Signal Analyst runtime contract version 8:
 - Consume exactly one successfully projected new Event and its bounded, deterministically retrieved candidates.
 - For task CLASSIFY, return the Event classification and no Signal proposals.
 - For task PROPOSE_SIGNALS, preserve the supplied frozen classification and propose only from supplied candidates.
@@ -78,6 +78,7 @@ def _seed_metadata(instructions: str) -> dict[str, int | str]:
 
 def _configure(agent: Agent, instructions: str) -> Agent:
     agent.db = get_postgres_db()
+    agent.model = sol_medium_model()
     agent.name = "Event Signal Analyst"
     agent.description = EVENT_SIGNAL_ANALYST_DESCRIPTION
     agent.tools = []
@@ -118,10 +119,11 @@ def _configure(agent: Agent, instructions: str) -> Agent:
 
 
 def _has_runtime_contract(agent: Agent) -> bool:
-    """Reject Studio drift outside the prompt/model fields this Agent may own."""
+    """Reject Studio drift outside the prompt field this Agent may own."""
 
     return all(
         (
+            is_sol_medium_model(agent.model),
             not agent.tools,
             agent.tool_call_limit is None,
             agent.tool_choice is None,
@@ -163,7 +165,7 @@ def build_event_signal_analyst_agent() -> Agent:
             id=EVENT_SIGNAL_ANALYST_AGENT_ID,
             name="Event Signal Analyst",
             description=EVENT_SIGNAL_ANALYST_DESCRIPTION,
-            model=default_model(),
+            model=sol_medium_model(),
             instructions=instructions,
         ),
         instructions,

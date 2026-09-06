@@ -1675,6 +1675,43 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
             EVIDENCE_EXTRACTION_CONTRACT_VERSION,
         )
 
+    def test_current_workflow_republishes_only_the_new_extractor_version_pin(self) -> None:
+        db = MagicMock()
+
+        def component(component_id: str, **_: object) -> dict[str, int]:
+            return {"current_version": 15 if component_id == "evidence-extraction" else 27}
+
+        db.get_component.side_effect = component
+        db.get_config.return_value = {
+            "config": {
+                "metadata": {"evidence_extraction_contract_version": EVIDENCE_EXTRACTION_CONTRACT_VERSION},
+            }
+        }
+        db.get_links.return_value = [
+            {
+                "link_kind": "step_agent",
+                "link_key": "studio-extractor-step",
+                "child_component_id": "evidence-extractor",
+                "child_version": 26,
+                "position": 1,
+            }
+        ]
+        db.upsert_config.return_value = {"version": 16}
+        current = _seed_workflow(Agent(id="evidence-extractor", instructions="old published prompt"))
+        current.name = "Studio Customized Evidence Extraction"
+
+        with (
+            patch("workflows.evidence_extraction.get_postgres_db", return_value=db),
+            patch("workflows.evidence_extraction.Workflow.load", return_value=current),
+        ):
+            version = ensure_evidence_extraction_workflow(MagicMock())
+
+        self.assertEqual(version, 16)
+        self.assertEqual(current.name, "Studio Customized Evidence Extraction")
+        published_links = db.upsert_config.call_args.kwargs["links"]
+        self.assertEqual(published_links[0]["child_version"], 27)
+        self.assertEqual(published_links[0]["link_key"], "studio-extractor-step")
+
     def test_agent_contract_migration_publishes_reviewed_atomic_evidence_prompt(self) -> None:
         db = MagicMock()
         db.get_component.return_value = {"current_version": 7}
@@ -1730,6 +1767,7 @@ class EvidenceExtractionTest(unittest.IsolatedAsyncioTestCase):
         current = MagicMock()
         current.metadata = dict(seeded.metadata or {})
         current.instructions = "Studio 已发布的自定义提示词"
+        current.model = seeded.model
 
         with (
             patch("agents.evidence_extractor.get_postgres_db", return_value=db),

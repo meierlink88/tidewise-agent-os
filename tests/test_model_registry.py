@@ -7,8 +7,17 @@ from unittest.mock import patch
 from agno.models.deepseek import DeepSeek
 from agno.models.openai import OpenAIResponses
 
+from agents.event_extractor import build_event_extractor_agent
+from agents.event_identity import build_event_identity_agent
+from agents.event_signal_analyst import build_event_signal_analyst_agent
+from agents.evidence_extractor import build_evidence_extractor_agent
+from agents.investment_reasoner import build_investment_reasoner_agent
+from agents.investment_report_writer import build_investment_report_writer_agent
+from agents.investment_reviewer import build_investment_reviewer_agent
+from agents.tidewise_assistant import tidewise_assistant
+from agents.title_curator import build_title_curator_agent
 from app.registry import registry
-from app.settings import SOL_MEDIUM_DEFAULT_BASE_URL, SOL_MEDIUM_MODEL_ID, sol_medium_model
+from app.settings import SOL_MEDIUM_DEFAULT_BASE_URL, SOL_MEDIUM_MODEL_ID, is_sol_medium_model, sol_medium_model
 
 
 class ModelRegistryTest(unittest.TestCase):
@@ -44,6 +53,22 @@ class ModelRegistryTest(unittest.TestCase):
         self.assertIsInstance(sol, OpenAIResponses)
         assert isinstance(sol, OpenAIResponses)
         self.assertEqual(sol.reasoning_effort, "medium")
+
+    def test_all_agents_use_sol_medium(self) -> None:
+        agents = (
+            tidewise_assistant,
+            build_title_curator_agent(),
+            build_evidence_extractor_agent(),
+            build_event_extractor_agent(),
+            build_event_identity_agent(),
+            build_event_signal_analyst_agent(),
+            build_investment_reasoner_agent(),
+            build_investment_report_writer_agent(),
+            build_investment_reviewer_agent(),
+        )
+
+        self.assertEqual(len(agents), 9)
+        self.assertTrue(all(is_sol_medium_model(agent.model) for agent in agents))
 
 
 if __name__ == "__main__":
