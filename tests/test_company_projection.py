@@ -272,7 +272,7 @@ class CompanyDataClientTest(unittest.IsolatedAsyncioTestCase):
 
 class CompanyOntologyAndPlanTest(unittest.TestCase):
     def test_registers_company_without_enabling_event_extraction(self) -> None:
-        self.assertEqual(ONTOLOGY_VERSION, "reasoning-ontology/v5")
+        self.assertEqual(ONTOLOGY_VERSION, "reasoning-ontology/v6")
         self.assertIs(ENTITY_TYPES["Company"].__name__, "Company")
         self.assertEqual(
             EDGE_TYPE_MAP[("Company", "Industry")],
