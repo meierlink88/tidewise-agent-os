@@ -14,7 +14,7 @@ from agents.investment_report_writer import INVESTMENT_REPORT_WRITER_AGENT_ID, l
 from agents.investment_reviewer import INVESTMENT_REVIEWER_AGENT_ID, load_investment_reviewer_agent
 from agents.tidewise_assistant import tidewise_assistant
 from agents.title_curator import TITLE_CURATOR_AGENT_ID, load_title_curator_agent
-from app.settings import SOL_LOW_MODEL_ID, default_model, sol_low_model
+from app.settings import EVENT_DEEPSEEK_PROFILE, SOL_LOW_MODEL_ID, default_model, event_model, sol_low_model
 from app.workflow_runtime import install_raw_collection_session_compatibility
 from capabilities.collection import (
     CollectionRequest,
@@ -144,6 +144,10 @@ class TidewiseRegistry(Registry):
     """Resolve Studio Agents as sessionless runtime copies when composing Workflows."""
 
     def get_model(self, model_id: str, provider: str | None = None, name: str | None = None) -> Model | None:
+        if name == EVENT_DEEPSEEK_PROFILE and provider in (None, "DeepSeek"):
+            model = event_model()
+            if model_id == model.id:
+                return model
         # Historical Reviewer variants stay loadable without duplicate Studio options.
         if model_id == SOL_LOW_MODEL_ID and provider in (None, "OpenAI"):
             if name in ("RawEvidenceFilter-low", "RawEvidenceFilter-none"):

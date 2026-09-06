@@ -13,11 +13,12 @@ from agents.event_batch import batch_agent
 from agents.event_extractor import build_event_extractor_agent
 from agents.event_identity import build_event_identity_agent
 from agents.event_signal_analyst import build_event_signal_analyst_agent
-from app.settings import event_model, is_event_model
+from app.registry import registry
+from app.settings import default_model, event_model, is_event_model
 
 
 class EventModelsTest(unittest.IsolatedAsyncioTestCase):
-    def test_all_event_agents_use_deepseek_without_thinking(self):
+    def test_all_event_agents_use_deepseek_thinking_low(self):
         with patch.dict("os.environ", {"DEEPSEEK_USE_THINKING": "false"}):
             for build in (
                 build_event_extractor_agent,
@@ -29,16 +30,29 @@ class EventModelsTest(unittest.IsolatedAsyncioTestCase):
                     model = build().model
                     self.assertIsInstance(model, DeepSeek)
                     self.assertTrue(is_event_model(model))
-                    self.assertFalse(model.use_thinking)
+                    self.assertTrue(model.use_thinking)
+                    self.assertEqual(model.reasoning_effort, "low")
+            self.assertFalse(default_model().use_thinking)
 
     def test_batch_profile_survives_registry_model_rehydration(self):
-        model = DeepSeek(id="deepseek-v4-flash", use_thinking=False)
+        model = Agent.from_dict(Agent(model=event_model()).to_dict(), registry=registry).model
         with patch.dict("os.environ", {"DEEPSEEK_USE_THINKING": "false"}):
             self.assertTrue(is_event_model(model))
         runtime_model = batch_agent(Agent(model=model), "batch-extract").model
         self.assertEqual(runtime_model.max_tokens, 32768)
         self.assertEqual(runtime_model.max_retries, 0)
         self.assertEqual(runtime_model.timeout, 180)
+        params = runtime_model.get_request_params(response_format={"type": "json_object"})
+        self.assertEqual(params["extra_body"]["thinking"], {"type": "enabled"})
+        self.assertEqual(params["reasoning_effort"], "low")
+        self.assertEqual(params["response_format"], {"type": "json_object"})
+
+    def test_old_non_thinking_and_other_efforts_are_migrated(self):
+        self.assertFalse(is_event_model(default_model()))
+        for effort in (None, "high", "max"):
+            model = event_model()
+            model.reasoning_effort = effort
+            self.assertFalse(is_event_model(model))
 
     async def test_transport_timeout_is_not_retried_by_sdk(self):
         attempts = []

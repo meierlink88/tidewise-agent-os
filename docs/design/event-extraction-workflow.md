@@ -1,5 +1,17 @@
 # Event Extraction Workflow
 
+## Event thinking profile (#197)
+
+Event Extractor, Identity, Association and Signal Analyst now use the fixed
+`EventDeepSeek-low` profile: `use_thinking=True`, `reasoning_effort="low"`.
+Registry resolves that saved profile name without adding duplicate model options.
+Other Agents and the shared `DEEPSEEK_USE_THINKING` default remain unchanged.
+Existing model-contract migration preserves Studio prompts and refreshes workflow
+pins. JSON mode, output ceiling and SDK timeout/retry limits remain unchanged.
+Thinking may increase latency/output usage and does not guarantee semantic accuracy.
+Pending batch results retain old pins; do not silently relabel or replay them.
+Rollback restores the previous non-thinking Event profile and matching versions.
+
 ## LLM response extra fields (#193)
 
 The four batch LLM response roots use Pydantic's recursive `extra="ignore"` override
