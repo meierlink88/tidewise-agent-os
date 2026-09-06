@@ -9,10 +9,11 @@ A future periodic source refresh requires a Data-owned versioned API.
 
 One GPR identity produces one Entity + GeopoliticRivalry node through the existing
 Data-ID UUID5 rule. Each contains the Chinese name, classification, core proposition,
-core actors, single domain ID/code/name/description, complete tactics, main transmission,
+core actors, single domain code/name/description, complete tactics, main transmission,
 candidate assets, Data timestamps and projection ownership/fingerprint.
 No separate domain or tactic node is created. Tactics are a JSON array encoded as a
-string because Neo4j properties cannot store lists of objects; decoding reproduces
+string. The PG domain foreign key is used only to validate the joined input and is
+not projected as a graph property. Neo4j properties cannot store lists of objects; decoding reproduces
 the exact ordered name/description objects. Candidate assets remain native string arrays.
 
 Event-facing summary includes name, classification, domain, proposition, actors and

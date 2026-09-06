@@ -70,6 +70,7 @@ class ProjectionTests(unittest.IsolatedAsyncioTestCase):
         node = build_plan(Snapshot.model_validate(data))[0]
         self.assertEqual(json.loads(node.attributes["tactics"]), data["items"][0]["tactics"])
         self.assertEqual(node.attributes["candidate_assets"], ["半导体设备板块", "黄金"])
+        self.assertNotIn("geopolitic_domain_id", node.attributes)
         self.assertNotIn("黄金", node.summary)
         self.assertNotIn("设备供应到产能", node.summary)
         self.assertIn("科技外交", node.summary)

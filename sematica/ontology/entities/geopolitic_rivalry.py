@@ -24,7 +24,6 @@ class GeopoliticRivalry(TidewiseEntity):
     category: NonBlankText | None = None
     core_proposition: NonBlankText | None = None
     core_actors: NonBlankText | None = None
-    geopolitic_domain_id: str | None = Field(default=None, pattern="^GPD" + ID_SUFFIX + "$")
     domain_code: NonBlankText | None = None
     domain_name: NonBlankText | None = None
     domain_description: NonBlankText | None = None

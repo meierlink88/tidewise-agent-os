@@ -54,7 +54,6 @@ class Storyline(BaseModel):
             category=self.category,
             core_proposition=self.core_proposition,
             core_actors=self.core_actors,
-            geopolitic_domain_id=self.geopolitic_domain_id,
             domain_code=self.domain_code,
             domain_name=self.domain_name,
             domain_description=self.domain_description,
