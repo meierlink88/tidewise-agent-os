@@ -16,6 +16,23 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class UatIngressContractTest(TestCase):
+    def test_gpt_agent_model_probe_matches_agno_rest_shape(self) -> None:
+        observed = {
+            "name": "OpenAIResponses",
+            "model": "gpt-5.6-sol",
+            "provider": "OpenAI",
+        }
+
+        self.assertTrue(smoke_uat._is_expected_agent_model(observed))
+        for field, value in (
+            ("name", "OpenAIChat"),
+            ("model", "deepseek-v4-flash"),
+            ("provider", "DeepSeek"),
+        ):
+            with self.subTest(field=field):
+                self.assertFalse(smoke_uat._is_expected_agent_model({**observed, field: value}))
+        self.assertFalse(smoke_uat._is_expected_agent_model(None))
+
     def test_failure_diagnostics_redact_neo4j_auth_values(self) -> None:
         diagnostics = REPOSITORY_ROOT / "infra/uat/collect-diagnostics.sh"
         leaked_value = "neo4j/unsafe-example-value"
@@ -112,6 +129,9 @@ class UatIngressContractTest(TestCase):
         self.assertIn("OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}", compose)
         self.assertIn("OPENAI_BASE_URL: ${OPENAI_BASE_URL:?OPENAI_BASE_URL is required}", compose)
         self.assertIn("openai-base-url", preflight)
+        self.assertIn("responses.create(", preflight)
+        self.assertIn('model="gpt-5.6-sol"', preflight)
+        self.assertIn("pass openai-gpt-5.6-sol", preflight)
         self.assertIn("public Data Service Source Snapshot", preflight)
         self.assertIn("is_private", preflight)
         self.assertNotIn("--insecure", preflight)
@@ -148,6 +168,11 @@ class UatIngressContractTest(TestCase):
         self.assertIn("openssl pkey -pubin -noout", workflow)
         self.assertIn('lines.append(f"JWT_VERIFICATION_KEY={json.dumps(verification_key)}")', workflow)
         self.assertIn('if [ ! -s "$current_sha" ]; then', deploy)
+        self.assertIn("while IFS='=' read -r variable_name _", deploy)
+        self.assertIn('unset "$variable_name"', deploy)
+        self.assertIn("FAIL internal-release", deploy)
+        self.assertIn("up -d --force-recreate", deploy)
+        self.assertIn('|| return 1\n    echo "PASS rollback-previous-agentos-release"', deploy)
         self.assertIn("python -m scripts.seed_schedules", deploy)
         first_release = deploy.split(
             'migrate_candidate_database "$runtime_env" "$candidate_images" "$candidate_compose"',

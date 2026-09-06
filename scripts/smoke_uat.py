@@ -56,6 +56,15 @@ REQUIRED_GPT_AGENT_IDS = {
 }
 
 
+def _is_expected_agent_model(model: object) -> bool:
+    """Match the model summary shape returned by Agno's REST Agent list."""
+    return isinstance(model, dict) and (
+        model.get("name") == "OpenAIResponses"
+        and model.get("model") == EXPECTED_AGENT_MODEL_ID
+        and model.get("provider") == "OpenAI"
+    )
+
+
 async def _probe(token: str, schedule_token: str) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=20.0) as client:
@@ -83,8 +92,7 @@ async def _probe(token: str, schedule_token: str) -> None:
             raise RuntimeError(f"retired Agent is still active: {RETIRED_AGENT_ID}")
         agents_by_id = {item["id"]: item for item in agents}
         for agent_id in sorted(required_agents):
-            model = agents_by_id[agent_id].get("model") or {}
-            if model.get("id") != EXPECTED_AGENT_MODEL_ID or model.get("provider") != "OpenAI":
+            if not _is_expected_agent_model(agents_by_id[agent_id].get("model")):
                 raise RuntimeError(f"Agent {agent_id} is not using OpenAI {EXPECTED_AGENT_MODEL_ID}")
         if not required_workflows <= workflow_ids:
             raise RuntimeError(f"missing Workflows: {sorted(required_workflows - workflow_ids)}")
