@@ -8,7 +8,6 @@ from sematica.analysis.event.contracts import (
     AnchorCandidate,
     EventAnalysisInput,
     EventClassification,
-    SignalDirection,
     SignalProposal,
     VariableCandidate,
 )
@@ -54,7 +53,6 @@ class ControlledSignalReviewer:
                 proposal.variable_uuid == variable.uuid,
                 anchor.entity_type.value != "IndustryChain",
                 anchor.entity_type in variable.allowed_anchor_types,
-                proposal.direction != SignalDirection.UNKNOWN,
                 proposal.valid_at == reference_time,
                 onset >= event_time,
                 onset <= event_time + timedelta(days=1095),
