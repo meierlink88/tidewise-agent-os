@@ -4,6 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from agno.agent import Agent
+from agno.models.deepseek import DeepSeek
 from agno.models.openai import OpenAIResponses
 from pydantic import BaseModel
 
@@ -60,9 +61,13 @@ def batch_agent(agent: Agent, step_id: str) -> Agent:
     result.structured_outputs = False
     result.retries = 0
     result.add_history_to_context = False
-    if isinstance(result.model, OpenAIResponses):
+    if isinstance(result.model, (OpenAIResponses, DeepSeek)):
         result.model.timeout = 180
         result.model.retries = 0
+        result.model.max_retries = 0
+    if isinstance(result.model, DeepSeek):
+        # Batch JSON can exceed the provider's default 8,192-token output limit.
+        result.model.max_tokens = 32768
     guidance = ""
     skill = "event-direct-signals" if step_id == "batch-signal" else "event-association"
     if step_id not in {"batch-extract", "batch-identity"}:

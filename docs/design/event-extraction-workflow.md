@@ -1,5 +1,24 @@
 # Event Extraction Workflow
 
+## Event model profile (#189)
+
+Extractor, Identity, Association and Signal Analyst use the existing configured
+DeepSeek model through an Event-only factory. Default is `deepseek-v4-flash`, with
+thinking controlled by `DEEPSEEK_USE_THINKING` (false by default). Other Agents and
+the model registry choices are unchanged. Event requests use a 180-second SDK timeout
+and `max_retries=0` in addition to disabling Agno retries; the latter alone did not
+disable SDK retries and previously multiplied timeout waits to about nine minutes.
+The batch execution adapter reapplies these settings after Registry rehydration and
+sets DeepSeek `max_tokens=32768`: a real 20-Evidence extraction was truncated at the
+provider default of 8,192 output tokens. Model drift checks compare provider identity
+and thinking mode, not transport settings discarded by Registry rehydration.
+
+Studio migration preserves custom instructions and refreshes workflow Agent pins via
+the existing model-contract checks. Inspect pending batch pins before rollout: old
+results must not be stamped with new versions. The failed pending batch is retained
+for separate operator reconciliation; no automatic replay or schedule re-enable.
+No schema or topology change. Rollback restores prior code/model versions.
+
 ## Unknown-direction observations (#187)
 
 A directly grounded Signal may retain `direction=UNKNOWN` when the source provides

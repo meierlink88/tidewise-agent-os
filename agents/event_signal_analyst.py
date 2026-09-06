@@ -9,7 +9,7 @@ from agno.db.base import ComponentType
 from agno.registry import Registry
 
 from agents.event_association import bind_event_skills, event_skill_digest
-from app.settings import is_sol_low_model, sol_low_model
+from app.settings import event_model, is_event_model
 from capabilities.event import EVENT_SIGNAL_ANALYST_AGENT_ID, SignalDecision
 from db import get_postgres_db
 
@@ -62,7 +62,7 @@ def _seed_metadata(instructions: str) -> dict[str, int | str]:
 
 def _configure(agent: Agent, instructions: str) -> Agent:
     agent.db = get_postgres_db()
-    agent.model = sol_low_model()
+    agent.model = event_model()
     agent.name = "Event Signal Analyst"
     agent.description = EVENT_SIGNAL_ANALYST_DESCRIPTION
     agent.tools = []
@@ -107,7 +107,7 @@ def _has_runtime_contract(agent: Agent) -> bool:
 
     return all(
         (
-            is_sol_low_model(agent.model),
+            is_event_model(agent.model),
             not agent.tools,
             agent.tool_call_limit is None,
             agent.tool_choice is None,
@@ -150,7 +150,7 @@ def build_event_signal_analyst_agent() -> Agent:
             id=EVENT_SIGNAL_ANALYST_AGENT_ID,
             name="Event Signal Analyst",
             description=EVENT_SIGNAL_ANALYST_DESCRIPTION,
-            model=sol_low_model(),
+            model=event_model(),
             instructions=instructions,
         ),
         instructions,
