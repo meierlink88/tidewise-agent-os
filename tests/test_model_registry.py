@@ -8,6 +8,11 @@ from agno.agent import Agent
 from agno.models.deepseek import DeepSeek
 from agno.models.openai import OpenAIResponses
 
+from agents.event_association import (
+    LoadedEventAssociationAgent,
+    build_event_association_agent,
+    ensure_event_association_agent,
+)
 from agents.event_extractor import build_event_extractor_agent
 from agents.event_identity import build_event_identity_agent
 from agents.event_signal_analyst import build_event_signal_analyst_agent
@@ -22,6 +27,27 @@ from app.settings import SOL_LOW_DEFAULT_BASE_URL, SOL_LOW_MODEL_ID, is_sol_low_
 
 
 class ModelRegistryTest(unittest.TestCase):
+    def test_association_model_migration_preserves_prompt_and_is_idempotent(self) -> None:
+        for old_model, expected_version in ((DeepSeek(id="deepseek-v4-flash"), 42), (sol_low_model(), 41)):
+            with self.subTest(model=old_model.id):
+                agent = build_event_association_agent()
+                agent.model = old_model
+                agent.instructions = "Studio custom association instructions"
+                loaded = LoadedEventAssociationAgent(agent, 41, "test-digest")
+                with (
+                    patch("agents.event_association.get_postgres_db", return_value=MagicMock()),
+                    patch("agents.event_association.load_event_association_agent", return_value=loaded),
+                    patch.object(Agent, "save", autospec=True, return_value=42) as save,
+                ):
+                    self.assertEqual(ensure_event_association_agent(registry), expected_version)
+                if expected_version == 42:
+                    repaired = save.call_args.args[0]
+                    self.assertTrue(is_sol_low_model(repaired.model))
+                    self.assertEqual(repaired.instructions, agent.instructions)
+                    self.assertIsNotNone(repaired.skills)
+                else:
+                    save.assert_not_called()
+
     def test_filter_low_survives_registry_round_trip_without_changing_other_agents(self) -> None:
         with patch.dict(os.environ, {"RAW_EVIDENCE_FILTER_REASONING_EFFORT": "low"}):
             agent = build_title_curator_agent()
@@ -118,6 +144,7 @@ class ModelRegistryTest(unittest.TestCase):
     def test_all_agents_use_sol_low(self) -> None:
         agents = (
             tidewise_assistant,
+            build_event_association_agent(),
             build_title_curator_agent(),
             build_evidence_extractor_agent(),
             build_event_extractor_agent(),
@@ -128,7 +155,7 @@ class ModelRegistryTest(unittest.TestCase):
             build_investment_reviewer_agent(),
         )
 
-        self.assertEqual(len(agents), 9)
+        self.assertEqual(len(agents), 10)
         self.assertTrue(all(is_sol_low_model(agent.model) for agent in agents))
 
 
