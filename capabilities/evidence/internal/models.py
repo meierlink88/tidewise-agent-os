@@ -379,24 +379,51 @@ class ArticleReviewRequest(EvidenceAnalysisRequest):
     article_key: str
 
 
-class ArticleReviewDraft(BaseModel):
-    """One reading: relevance plus the unchanged Evidence extraction envelope."""
+class EvidenceReviewDocument(BaseModel):
+    """Semantic source information only; no storage IDs, hashes, paths or claim tokens."""
 
     model_config = ConfigDict(extra="forbid")
 
-    article_key: str = Field(description="逐字回传输入文章的 article_key，不生成或修改。")
+    title: str | None
+    raw_text: str
+    source_name: str
+    source_url: str
+    published_at: datetime | None
+    collected_at: datetime
+
+
+class EvidenceReviewRequest(BaseModel):
+    """The current article and category vocabulary, without workflow identity."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    document: EvidenceReviewDocument
+    categories: list[EvidenceCategoryDefinition]
+
+
+class EvidenceReviewDraft(BaseModel):
+    """LLM-owned semantic judgment, never an article identity."""
+
+    model_config = ConfigDict(extra="forbid")
+
     is_relevant: bool = Field(strict=True, description="当前文章是否满足相关性规则；只能为布尔值。")
     extraction: EvidenceExtractionDraft | None = Field(
         description="无关时为 null；相关时必须包含 raw_evidence 对象和 evidences 数组。"
     )
 
     @model_validator(mode="after")
-    def validate_branch(self) -> "ArticleReviewDraft":
+    def validate_branch(self) -> "EvidenceReviewDraft":
         if self.is_relevant and self.extraction is None:
             raise ValueError("Relevant articles must return an extraction envelope")
         if not self.is_relevant and self.extraction is not None:
             raise ValueError("Irrelevant articles must not return Evidence")
         return self
+
+
+class ArticleReviewDraft(EvidenceReviewDraft):
+    """Code-bound stored review; also retained for historical Agent versions."""
+
+    article_key: str
 
 
 class RawEvidencePublication(BaseModel):

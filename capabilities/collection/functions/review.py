@@ -32,6 +32,8 @@ from capabilities.evidence import (
     ArticleReviewDraft,
     ArticleReviewRequest,
     EvidenceAnalysisRequest,
+    EvidenceReviewDraft,
+    EvidenceReviewRequest,
     PreparedEvidencePublication,
     SkippedEvidencePublication,
 )
@@ -89,7 +91,11 @@ async def prepare_evidence_review(step_input: StepInput, run_context: RunContext
     try:
         analysis = await prepare_evidence_analysis(read_prepared(claim["article_key"]), run_context)
         request = EvidenceAnalysisRequest.model_validate(analysis.content)
-        return StepOutput(content=ArticleReviewRequest(article_key=claim["article_key"], **request.model_dump()))
+        # Keep machine identity exclusively in run_context; send only semantic source fields.
+        document = request.document.model_dump(
+            include={"title", "raw_text", "source_name", "source_url", "published_at", "collected_at"}
+        )
+        return StepOutput(content=EvidenceReviewRequest(document=document, categories=request.categories))
     except Exception as exc:
         fail_claim(claim, type(exc).__name__, terminal=True)
         raise
@@ -99,7 +105,15 @@ async def evidence_publish(step_input: StepInput, run_context: RunContext) -> St
     """Own all deterministic result handling; never call an Agent or schedule recovery."""
     claim = _state(run_context)["claim"]
     try:
-        save_article_review(step_input, run_context)
+        content = _content(step_input)
+        draft = (
+            EvidenceReviewDraft.model_validate_json(content)
+            if isinstance(content, str)
+            else EvidenceReviewDraft.model_validate(content)
+        )
+        # Bind the semantic result to the code-owned claim, never to a generated identifier.
+        bound = ArticleReviewDraft(article_key=claim["article_key"], **draft.model_dump())
+        save_article_review(StepInput(previous_step_content=bound), run_context)
         validated = validate_article_review(StepInput(), run_context)
         if not article_has_evidence(StepInput(previous_step_content=validated.content)):
             return validated

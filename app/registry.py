@@ -74,6 +74,8 @@ from capabilities.evidence import (
     EvidenceAnalysisRequest,
     EvidenceCategoryCatalog,
     EvidenceExtractionDraft,
+    EvidenceReviewDraft,
+    EvidenceReviewRequest,
     PreparedEvidencePublication,
     PreparedRawDocument,
 )
@@ -162,6 +164,8 @@ registry = TidewiseRegistry(
     schemas=[
         ArticleReviewDraft,
         ArticleReviewRequest,
+        EvidenceReviewDraft,
+        EvidenceReviewRequest,
         CollectionRequest,
         TitleCurationRequest,
         TitleCurationDraft,

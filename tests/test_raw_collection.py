@@ -773,9 +773,9 @@ class CollectionVerticalSliceTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("全球风险偏好", current.instructions)
         self.assertNotIn("reason_code", current.instructions)
         self.assertNotIn("uncertain", current.instructions)
-        from capabilities.evidence import ArticleReviewDraft
+        from capabilities.evidence import EvidenceReviewDraft
 
-        self.assertIs(current.output_schema, ArticleReviewDraft)
+        self.assertIs(current.output_schema, EvidenceReviewDraft)
         self.assertEqual(current.metadata["title_curator_contract_version"], TITLE_CURATOR_CONTRACT_VERSION)
 
     def test_studio_workflow_seed_round_trips_registered_functions(self) -> None:
