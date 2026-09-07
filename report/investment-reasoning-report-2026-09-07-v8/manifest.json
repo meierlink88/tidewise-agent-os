@@ -1,0 +1,18 @@
+{
+  "baseline": "v8",
+  "source_baseline": "v7",
+  "input_events": 168,
+  "input_signals": 77,
+  "adopted_or_qualified_signals": 47,
+  "excluded_signals": 30,
+  "unique_evidence": 98,
+  "company_judgments": 11,
+  "source_sha256": {
+    "snapshot.json": "262188fdf365a18c30d33c4407c852189b753381d8787f7947949f3980997579",
+    "signal-audit.json": "86c875248a3440bb72f0672eca22b3cf8c7579e717226989b11e7c152d95ed3d",
+    "event-audit.json": "08c0fb3ccd02f0e0428cf42e654113af85ef2587a84961945fbc000ed8955fba",
+    "v7/report.json": "0f6c8e0baaa6758d8be985deaea93977b82b69aff28174219071926d7d25bc98"
+  },
+  "published": false,
+  "native_workflow_run": false
+}

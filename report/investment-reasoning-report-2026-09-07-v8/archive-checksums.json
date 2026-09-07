@@ -1,0 +1,17 @@
+{
+  "report.schema.json": "759ea6360b3cdcfb82dcd90888c10b5d9c43ba7a21f5b1ceae5d780252808a8e",
+  "report.json": "033a443074fcc7b17cbfe1093c24cc15d23cd7e6d726fd4a9ecd7b182dad633d",
+  "report.md": "d4c732ffd963bff2ae29beff540fc20e463cb4571e0c761c503a0040d198d49d",
+  "node-coverage-audit.json": "d1db6385cf8efe6f4f0203ab2417b42db83f2eebae2fde2674ce3c9ce8c4b248",
+  "evidence-catalog.json": "87098c9a70c7a4dcbdb6f5a223baef144bdb8377fb8fcfe86afb544f0a01e0d8",
+  "field-contract.md": "6d4ebe2234744274642e403cb4919636e5219e183134f9753bd804b7c8a2aecf",
+  "README.md": "734b64cf96d1aa8d5ffe5a18f765ed4f0c1f4f6cc54a2bbce2a63ceed840aae2",
+  "validation.json": "cc88f3bcedf9e8ea575c9686e3a6ab875360de0af70099fd04ce8bf5f31ce876",
+  "manifest.json": "5ad5d05a6ed8abdb2c0be332dea812232abfdd83f7b6961660de590d175d5846",
+  "report.html": "1144b140e9634abf2b8200825ea63e3aa6ce1472a47e75aaf660e3e819ad3f5f",
+  "signal-coverage-audit.json": "4f3649267fc3b40981fd21a6f0bc257bdf3c814cdd50a7dc17a39e807bde0f28",
+  "event-coverage-audit.json": "a4af5324f53132313a0b4911dbde6401bc39013a14f6e408acaf59cdf40ba1bf",
+  "scripts/build_v8.py.txt": "1dd66ce35d4c5b4ec8925db2da0bb0a209151bd67c2adc7a076900ca1f69d399",
+  "scripts/render_v8.py.txt": "b609613eae3c8a66e77f2c0fd116287a170a86b5e0b748a83456e3efc0bbaa88",
+  "scripts/validate_v8.py.txt": "9ed9e6f1045975aa6f96b2f11d7098869fbb0bd06b011f8164a5c21ad9292fbe"
+}

@@ -1,0 +1,23 @@
+{
+  "schema_passed": true,
+  "reference_closure_passed": true,
+  "signal_ownership_passed": true,
+  "layer_input_scope_passed": true,
+  "all_47_adopted_signals_have_judgments": true,
+  "all_graph_nodes_have_judgments": true,
+  "no_fabricated_graph_edges": true,
+  "counts": {
+    "summary_cards": 18,
+    "direct": 32,
+    "inferred": 104,
+    "macro_impacts": 1,
+    "chains": 27,
+    "nodes": 79,
+    "companies": 11
+  },
+  "input_events_reviewed": 168,
+  "events_used_in_judgments": 96,
+  "signal_records": 77,
+  "excluded_signals": 30,
+  "excluded_node_occurrences": 60
+}

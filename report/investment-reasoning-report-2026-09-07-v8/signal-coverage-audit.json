@@ -1,0 +1,867 @@
+[
+  {
+    "input_index": 0,
+    "signal_id": "01465dde-d344-5fac-a7f4-7cd628d2344e",
+    "entity_id": "COM75ad068e-4cbf-58d8-bb91-78deaeb36973",
+    "entity_name": "厦门空港",
+    "variable_name": "市场需求",
+    "decision": "排除",
+    "reason": "西安咸阳机场事实错挂厦门空港；主体不一致。",
+    "placements": []
+  },
+  {
+    "input_index": 1,
+    "signal_id": "7be1ded6-eb3f-5b6a-ae53-982f0d7b43c9",
+    "entity_id": "COM3314d1cc-1d1c-553a-8092-a079d06fc345",
+    "entity_name": "Li Auto Inc.",
+    "variable_name": "市场需求",
+    "decision": "排除",
+    "reason": "上市与本地化适配表示进入市场，不证明已经形成新增需求。",
+    "placements": []
+  },
+  {
+    "input_index": 2,
+    "signal_id": "e7e2e84e-03ca-50d3-ac83-6549cc1b0aa6",
+    "entity_id": "CNDf3372638-9689-5e7b-b9a5-2686e4bc7f0b",
+    "entity_name": "人形机器人",
+    "variable_name": "市场需求",
+    "decision": "限定采用",
+    "reason": "出货水平与全球占比不证明国内绝对需求增速。",
+    "placements": [
+      "/concept_analyses/4/detail/industry_chains/0/affected_nodes/0"
+    ]
+  },
+  {
+    "input_index": 3,
+    "signal_id": "a7557f4a-2f79-548f-9bd4-122c797086c9",
+    "entity_id": "COM4960dad1-fd7d-545b-99f9-b943ce50cd3d",
+    "entity_name": "宁德时代",
+    "variable_name": "订单可见度",
+    "decision": "排除",
+    "reason": "特斯拉—NatPower协议没有证明宁德时代获得订单。",
+    "placements": []
+  },
+  {
+    "input_index": 4,
+    "signal_id": "1ad75737-6efc-5a7d-be93-5dbd74569583",
+    "entity_id": "CNDb66447a1-5bca-5723-8913-306b16fd3074",
+    "entity_name": "煤炭开采",
+    "variable_name": "市场供给",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/industry_chain_analyses/1/detail/industry_chains/0/affected_nodes/1"
+    ]
+  },
+  {
+    "input_index": 5,
+    "signal_id": "9f0ca7d8-e525-5199-9d5a-07593993653a",
+    "entity_id": "CNDdd5ec77d-dced-52a2-81ff-ea62db308183",
+    "entity_name": "光伏电站发电运营服务",
+    "variable_name": "市场供给",
+    "decision": "限定采用",
+    "reason": "预测的年发电量非当期实际供给。",
+    "placements": [
+      "/concept_analyses/3/detail/industry_chains/1/affected_nodes/2"
+    ]
+  },
+  {
+    "input_index": 6,
+    "signal_id": "e6a33fe9-6ed3-5231-8c1f-46a392aafe94",
+    "entity_id": "GPR2d8e7df9-c548-5f24-a1b1-9dcbfb383283",
+    "entity_name": "霍尔木兹海峡能源通道安全",
+    "variable_name": "供给可得性",
+    "decision": "排除",
+    "reason": "日本替代采购和进口支出不直接测量霍尔木兹供给可得性。",
+    "placements": []
+  },
+  {
+    "input_index": 7,
+    "signal_id": "c49e3e5c-5dc7-5e6e-99bb-6c3507831cad",
+    "entity_id": "CND190c144e-c966-5967-9b5b-57a271c013da",
+    "entity_name": "炼厂原油进料",
+    "variable_name": "供给可得性",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/industry_chain_analyses/0/detail/industry_chains/0/affected_nodes/0"
+    ]
+  },
+  {
+    "input_index": 8,
+    "signal_id": "061c243b-8e23-5c90-8640-1bbfe266035a",
+    "entity_id": "CNDf040fe76-5a55-5fc9-b572-b2c28fab94c3",
+    "entity_name": "数据中心",
+    "variable_name": "有效产能",
+    "decision": "限定采用",
+    "reason": "ANTICIPATED：仅部署承诺，非新增有效容量。",
+    "placements": [
+      "/concept_analyses/4/detail/industry_chains/1/affected_nodes/2"
+    ]
+  },
+  {
+    "input_index": 9,
+    "signal_id": "8170a60d-a4af-5792-a756-b8185d28c8b4",
+    "entity_id": "COMa45bfcb9-e109-5e98-860a-6863e1b51aa4",
+    "entity_name": "欣旺达",
+    "variable_name": "有效产能",
+    "decision": "排除",
+    "reason": "合作能力承诺缺少新增有效产能数值和投产依据。",
+    "placements": []
+  },
+  {
+    "input_index": 10,
+    "signal_id": "da51f30b-747f-5294-be3e-e4b2b50520d3",
+    "entity_id": "CND0498ab5b-592c-5191-8024-60be4855dcc1",
+    "entity_name": "抽水蓄能发电运营服务",
+    "variable_name": "有效产能",
+    "decision": "限定采用",
+    "reason": "ANTICIPATED：2030—2031年计划，不计当期产能。",
+    "placements": [
+      "/concept_analyses/2/detail/industry_chains/2/affected_nodes/2"
+    ]
+  },
+  {
+    "input_index": 11,
+    "signal_id": "1700deef-3a9b-5a58-a53b-bee1c98693df",
+    "entity_id": "CND96da41b7-3fd4-5997-a4d0-bd7b5261effa",
+    "entity_name": "并网光伏电站",
+    "variable_name": "有效产能",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/concept_analyses/3/detail/industry_chains/1/affected_nodes/0"
+    ]
+  },
+  {
+    "input_index": 12,
+    "signal_id": "dc846ee1-435e-596e-a236-9e4079e579f0",
+    "entity_id": "CNDafc64c30-6bb2-50e3-8f4a-83a37797691d",
+    "entity_name": "航空运输服务",
+    "variable_name": "有效产能",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/industry_chain_analyses/2/detail/industry_chains/0/affected_nodes/0"
+    ]
+  },
+  {
+    "input_index": 13,
+    "signal_id": "86792811-8a96-5e51-b68a-ad4c9c0f2f79",
+    "entity_id": "CND2edbbc83-22f5-577b-996d-23c9f5cf6395",
+    "entity_name": "机场运营",
+    "variable_name": "有效产能",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/industry_chain_analyses/2/detail/industry_chains/0/affected_nodes/1"
+    ]
+  },
+  {
+    "input_index": 14,
+    "signal_id": "7eee0144-b380-5e61-91eb-a536057e3fa1",
+    "entity_id": "COM4960dad1-fd7d-545b-99f9-b943ce50cd3d",
+    "entity_name": "宁德时代",
+    "variable_name": "销售价格",
+    "decision": "限定采用",
+    "reason": "ASSUMED：行业人士转述、特定电芯规格；非全公司均价。",
+    "placements": [
+      "/concept_analyses/2/detail/companies/1"
+    ]
+  },
+  {
+    "input_index": 15,
+    "signal_id": "5882f2eb-90de-5ef0-a501-17b92746d4a7",
+    "entity_id": "CND7e522813-b6e7-5674-ac93-a71bd85a0d4b",
+    "entity_name": "影视动漫制作",
+    "variable_name": "销售价格",
+    "decision": "限定采用",
+    "reason": "限标准AI短剧报价，非成交价、非全影视制作均价。",
+    "placements": [
+      "/concept_analyses/0/detail/industry_chains/0/affected_nodes/0"
+    ]
+  },
+  {
+    "input_index": 16,
+    "signal_id": "2e244126-5704-5943-b747-a1cbd56b72cc",
+    "entity_id": "COM7670a8a2-afa7-5f9a-ba14-f5ad796f178a",
+    "entity_name": "FLEX LTD.",
+    "variable_name": "资本开支",
+    "decision": "排除",
+    "reason": "收购交易不能推出Flex资本开支下降；卖方和买方角色混乱。",
+    "placements": []
+  },
+  {
+    "input_index": 17,
+    "signal_id": "d78f13c6-c498-5bae-afd5-69c9952dcace",
+    "entity_id": "COM10bad82a-47ea-559c-ad74-ec84d6e566bf",
+    "entity_name": "GOLDMAN SACHS GROUP INC",
+    "variable_name": "资本开支",
+    "decision": "排除",
+    "reason": "股权出售与资本开支下降不是同一财务指标，且交易角色表述混乱。",
+    "placements": []
+  },
+  {
+    "input_index": 18,
+    "signal_id": "535218c8-6d18-5c85-a3a9-eeaaf4405a9c",
+    "entity_id": "COMcab56105-a68b-5cb0-b0c7-28376bbc3504",
+    "entity_name": "CHEVRON CORP",
+    "variable_name": "资本开支",
+    "decision": "限定采用",
+    "reason": "宣布投资计划，非已经支出。",
+    "placements": [
+      "/concept_analyses/1/detail/companies/0"
+    ]
+  },
+  {
+    "input_index": 19,
+    "signal_id": "bc32bb07-a2dc-5a98-b363-2eeaefd8c8a7",
+    "entity_id": "COM2e019572-e3cf-5751-89ce-e28264f84033",
+    "entity_name": "Tesla, Inc.",
+    "variable_name": "扩产强度",
+    "decision": "限定采用",
+    "reason": "50GWh为名义产能目标，不当作实际年产出。",
+    "placements": [
+      "/concept_analyses/2/detail/companies/0"
+    ]
+  },
+  {
+    "input_index": 20,
+    "signal_id": "562cce56-2893-55b1-8ccd-f287b523b161",
+    "entity_id": "COMbbdce748-ddd1-520e-b4d8-022b9ffdcc29",
+    "entity_name": "E-Power Inc.",
+    "variable_name": "扩产强度",
+    "decision": "排除",
+    "reason": "EPC Power与E-Power Inc.主体不一致。",
+    "placements": []
+  },
+  {
+    "input_index": 21,
+    "signal_id": "7c60380e-b828-52b4-a431-f5ce36f1e3a6",
+    "entity_id": "CND735ddfb8-3aa9-589d-9739-6e1aea72e4f2",
+    "entity_name": "晶硅光伏电池片",
+    "variable_name": "扩产强度",
+    "decision": "排除",
+    "reason": "非洲光伏制造总产能预测未拆分产品，不认定晶硅电池片扩产。",
+    "placements": []
+  },
+  {
+    "input_index": 22,
+    "signal_id": "91d09457-afba-582c-a90c-2ee41f752191",
+    "entity_id": "COMcab56105-a68b-5cb0-b0c7-28376bbc3504",
+    "entity_name": "CHEVRON CORP",
+    "variable_name": "扩产强度",
+    "decision": "限定采用",
+    "reason": "2031年前扩产计划，不是已投产。",
+    "placements": [
+      "/concept_analyses/1/detail/companies/0"
+    ]
+  },
+  {
+    "input_index": 23,
+    "signal_id": "8eecc2ea-a607-56e6-b779-f3f2cbaaf78a",
+    "entity_id": "CND0d4cb5ea-1136-5351-aa17-44d5c8c5c9ba",
+    "entity_name": "可逆式水泵水轮机",
+    "variable_name": "扩产强度",
+    "decision": "排除",
+    "reason": "电站施工推进不能证明水轮机制造扩产强度上升；仅作未来设备需求假设。",
+    "placements": []
+  },
+  {
+    "input_index": 24,
+    "signal_id": "a60c780e-0932-55e6-8703-07f4798badef",
+    "entity_id": "CNDd73cfee5-2a94-5379-a123-5cd243550134",
+    "entity_name": "抽水蓄能电站基础设施",
+    "variable_name": "扩产强度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/concept_analyses/2/detail/industry_chains/2/affected_nodes/0"
+    ]
+  },
+  {
+    "input_index": 25,
+    "signal_id": "37a8032e-265d-51e9-b44d-d992aa4df579",
+    "entity_id": "CNDd4012131-d248-5fd4-b26b-33072964a03e",
+    "entity_name": "油气开采",
+    "variable_name": "扩产强度",
+    "decision": "限定采用",
+    "reason": "山西增产规划而非当期产量或订单。",
+    "placements": [
+      "/concept_analyses/1/detail/industry_chains/0/affected_nodes/1"
+    ]
+  },
+  {
+    "input_index": 26,
+    "signal_id": "5f8148bd-336f-5dcc-af88-92a17fbba00e",
+    "entity_id": "COMade5c32d-fcf4-599d-b36a-e3caaeac39b6",
+    "entity_name": "EQUINOR ASA",
+    "variable_name": "扩产强度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/concept_analyses/2/detail/companies/2"
+    ]
+  },
+  {
+    "input_index": 27,
+    "signal_id": "220839b6-6c43-5446-aee0-633d827e60a9",
+    "entity_id": "CND7e522813-b6e7-5674-ac93-a71bd85a0d4b",
+    "entity_name": "影视动漫制作",
+    "variable_name": "扩产强度",
+    "decision": "限定采用",
+    "reason": "限AI短剧制作子集的产能线索。",
+    "placements": [
+      "/concept_analyses/0/detail/industry_chains/0/affected_nodes/0"
+    ]
+  },
+  {
+    "input_index": 28,
+    "signal_id": "5c133711-1a33-5a48-b04e-5a0f50e7ced1",
+    "entity_id": "COMa4b1870b-5a10-5fa2-a58d-ed8e0fe44a01",
+    "entity_name": "国脉科技",
+    "variable_name": "技术成熟度",
+    "decision": "排除",
+    "reason": "国脉聚能研发基地不能仅凭名称挂到国脉科技，也不足以确认技术成熟度提高。",
+    "placements": []
+  },
+  {
+    "input_index": 29,
+    "signal_id": "397cdddc-18ec-55a1-ae57-e56cf41bd291",
+    "entity_id": "CND918816a1-2e61-5cb7-ab0b-e3e076d88462",
+    "entity_name": "火电设备",
+    "variable_name": "技术成熟度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/industry_chain_analyses/3/detail/industry_chains/0/affected_nodes/1"
+    ]
+  },
+  {
+    "input_index": 30,
+    "signal_id": "a71173f2-4c38-54e4-a75f-4dc98702c0b2",
+    "entity_id": "CND5dbe8579-432a-5536-849b-b28281ae22d9",
+    "entity_name": "AI芯片",
+    "variable_name": "性价比",
+    "decision": "排除",
+    "reason": "特定模型和硬件横向基准不能证明整个AI芯片节点的时间方向STABLE。",
+    "placements": []
+  },
+  {
+    "input_index": 31,
+    "signal_id": "fc8b7a4e-f762-55ea-bd9b-545fa03e7b3c",
+    "entity_id": "COMc3dd7fcf-9ea9-5115-a685-c445449d4ca2",
+    "entity_name": "IONIS PHARMACEUTICALS INC",
+    "variable_name": "商业化进度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/company_analyses/0"
+    ]
+  },
+  {
+    "input_index": 32,
+    "signal_id": "28ee8b89-25c1-5e68-9a66-e536145a8a91",
+    "entity_id": "COMc3dd7fcf-9ea9-5115-a685-c445449d4ca2",
+    "entity_name": "IONIS PHARMACEUTICALS INC",
+    "variable_name": "商业化进度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/company_analyses/0"
+    ]
+  },
+  {
+    "input_index": 33,
+    "signal_id": "e8ec7978-47da-580e-a38e-3c77aaa9a1dc",
+    "entity_id": "COMc63ec01b-1d13-5f1b-84ce-3aa5c80e1ab9",
+    "entity_name": "Climb Bio, Inc.",
+    "variable_name": "商业化进度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/company_analyses/1"
+    ]
+  },
+  {
+    "input_index": 34,
+    "signal_id": "efa519b6-bd01-514a-924f-e9f81d3ca38e",
+    "entity_id": "COM47953e72-dcab-5357-a56a-25ad7a371bf1",
+    "entity_name": "Ultragenyx Pharmaceutical Inc.",
+    "variable_name": "商业化进度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/company_analyses/2"
+    ]
+  },
+  {
+    "input_index": 35,
+    "signal_id": "721c6eeb-4c89-5de5-ada4-9557bc6ceb0e",
+    "entity_id": "CND8c854bea-6274-5824-bfe2-4b0cda145413",
+    "entity_name": "水处理膜材料",
+    "variable_name": "商业化进度",
+    "decision": "排除",
+    "reason": "研究材料开发尚无商业合同或产业化里程碑，不确认商业化进展。",
+    "placements": []
+  },
+  {
+    "input_index": 36,
+    "signal_id": "3d5855ac-a9e9-567c-b323-699167fbd2c0",
+    "entity_id": "COMc3dd7fcf-9ea9-5115-a685-c445449d4ca2",
+    "entity_name": "IONIS PHARMACEUTICALS INC",
+    "variable_name": "商业化进度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/company_analyses/0"
+    ]
+  },
+  {
+    "input_index": 37,
+    "signal_id": "82e63d6a-dde9-5f0e-9266-68352ab94cbf",
+    "entity_id": "COM2e019572-e3cf-5751-89ce-e28264f84033",
+    "entity_name": "Tesla, Inc.",
+    "variable_name": "商业化进度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/concept_analyses/2/detail/companies/0"
+    ]
+  },
+  {
+    "input_index": 38,
+    "signal_id": "b9326dd5-2b6e-5d23-b1b8-5ac8ca1e9b75",
+    "entity_id": "COM12b68828-9e8c-591a-8347-c4691d3e1816",
+    "entity_name": "ALUMIS INC.",
+    "variable_name": "商业化进度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/company_analyses/3"
+    ]
+  },
+  {
+    "input_index": 39,
+    "signal_id": "ba84946f-042d-51f2-bed9-2bf4eff70cb3",
+    "entity_id": "COM2e019572-e3cf-5751-89ce-e28264f84033",
+    "entity_name": "Tesla, Inc.",
+    "variable_name": "商业化进度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/concept_analyses/2/detail/companies/0"
+    ]
+  },
+  {
+    "input_index": 40,
+    "signal_id": "56ddf622-0c20-54e0-93d0-7b15da482ddd",
+    "entity_id": "COMa45bfcb9-e109-5e98-860a-6863e1b51aa4",
+    "entity_name": "欣旺达",
+    "variable_name": "市场份额",
+    "decision": "限定采用",
+    "reason": "UNKNOWN：只反映当月份额，不能赋予增长方向。",
+    "placements": [
+      "/company_analyses/6"
+    ]
+  },
+  {
+    "input_index": 41,
+    "signal_id": "f54759df-2879-5507-aad6-f2a4ee1ce348",
+    "entity_id": "COM4ced7482-7d48-5b69-83ed-d85acb9e9917",
+    "entity_name": "Broadcom Inc.",
+    "variable_name": "卡点暴露度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/company_analyses/4"
+    ]
+  },
+  {
+    "input_index": 42,
+    "signal_id": "9d05b2f0-debb-50f5-ad92-cb9b338c8c5c",
+    "entity_id": "COMb3ab4c9a-5ffb-5206-a55c-1b4eb272ae1d",
+    "entity_name": "TI CLOUD",
+    "variable_name": "卡点暴露度",
+    "decision": "排除",
+    "reason": "JetBrains Cadence事件错挂TI CLOUD。",
+    "placements": []
+  },
+  {
+    "input_index": 43,
+    "signal_id": "b70389b2-301b-52c8-860b-362d58ca7323",
+    "entity_id": "MEC61c0244e-88ef-566d-be25-9fb03dcc93dd",
+    "entity_name": "中国人工智能应用支持政策",
+    "variable_name": "政策支持力度",
+    "decision": "排除",
+    "reason": "七部门部署没有具体措施或前后比较，不能确认政策支持力度上升。",
+    "placements": []
+  },
+  {
+    "input_index": 44,
+    "signal_id": "c41f44be-7c34-5236-a659-3b5390d0acb1",
+    "entity_id": "MECb7792fa5-4152-5030-8799-a1af97bbb89d",
+    "entity_name": "中国住房购买政策调整",
+    "variable_name": "政策支持力度",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/macroeconomic_stories/2/detail"
+    ]
+  },
+  {
+    "input_index": 45,
+    "signal_id": "16f9451b-a61a-561c-a695-9da03e0353a9",
+    "entity_id": "CND15b6b535-fd70-5390-a46f-4add2fb6dd4c",
+    "entity_name": "储能变流器（PCS）",
+    "variable_name": "监管准入条件",
+    "decision": "限定采用",
+    "reason": "印度草案，未按最终生效法规处理。",
+    "placements": [
+      "/concept_analyses/2/detail/industry_chains/0/affected_nodes/2",
+      "/concept_analyses/2/detail/industry_chains/1/affected_nodes/0"
+    ]
+  },
+  {
+    "input_index": 46,
+    "signal_id": "2810a07e-2a9e-5ec1-95e6-f9606dadb5d9",
+    "entity_id": "CND29b778b1-0f5c-5c88-9a49-550292b937e4",
+    "entity_name": "电化学储能系统",
+    "variable_name": "监管准入条件",
+    "decision": "限定采用",
+    "reason": "印度草案，未按最终生效法规处理。",
+    "placements": [
+      "/concept_analyses/2/detail/industry_chains/1/affected_nodes/1"
+    ]
+  },
+  {
+    "input_index": 47,
+    "signal_id": "bd32e192-31dc-54a9-8c06-4eb16691a993",
+    "entity_id": "MECb14b2ce4-b5de-5b03-a09c-e21d5635b736",
+    "entity_name": "中国存款准备金政策调整",
+    "variable_name": "金融体系流动性",
+    "decision": "排除",
+    "reason": "买断式逆回购不是存款准备金政策调整；未核对到期量，不能断言净投放。",
+    "placements": []
+  },
+  {
+    "input_index": 48,
+    "signal_id": "0aef0364-7e8d-5a43-b076-4838323e16d6",
+    "entity_id": "MECd51510ca-b683-54b2-a48e-d0892c40cf2f",
+    "entity_name": "美国劳动力市场松紧",
+    "variable_name": "政策利率",
+    "decision": "排除",
+    "reason": "就业报道带来的加息预期不等于政策利率已上升。",
+    "placements": []
+  },
+  {
+    "input_index": 49,
+    "signal_id": "896743b2-2c79-50e2-9c60-537f66d867fc",
+    "entity_id": "MEC8cbff79f-72d8-5898-afa2-6bfda7036fb3",
+    "entity_name": "美联储政策利率路径",
+    "variable_name": "政策利率",
+    "decision": "排除",
+    "reason": "官员主张降息不等于政策利率下降。",
+    "placements": []
+  },
+  {
+    "input_index": 50,
+    "signal_id": "4e973b22-987c-5fd6-9e73-c6941d7e2525",
+    "entity_id": "MEC8cbff79f-72d8-5898-afa2-6bfda7036fb3",
+    "entity_name": "美联储政策利率路径",
+    "variable_name": "政策利率",
+    "decision": "限定采用",
+    "reason": "仅历史7月决定，不代表9月当前利率已重新确认。",
+    "placements": [
+      "/macroeconomic_stories/0/detail"
+    ]
+  },
+  {
+    "input_index": 51,
+    "signal_id": "d91f3461-223f-5441-827a-ee900e3f60b4",
+    "entity_id": "GPR97bd7519-4ae8-5bd7-b2b4-626e1396f0f0",
+    "entity_name": "美伊军事冲突",
+    "variable_name": "地缘政治风险",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/geopolitical_stories/1/detail"
+    ]
+  },
+  {
+    "input_index": 52,
+    "signal_id": "b6d1a0bd-dbfb-505f-b6bc-246b06612a81",
+    "entity_id": "GPR97bd7519-4ae8-5bd7-b2b4-626e1396f0f0",
+    "entity_name": "美伊军事冲突",
+    "variable_name": "地缘政治风险",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/geopolitical_stories/1/detail"
+    ]
+  },
+  {
+    "input_index": 53,
+    "signal_id": "f5b8c3d7-0098-5c13-8532-56430062a60e",
+    "entity_id": "GPR97bd7519-4ae8-5bd7-b2b4-626e1396f0f0",
+    "entity_name": "美伊军事冲突",
+    "variable_name": "地缘政治风险",
+    "decision": "限定采用",
+    "reason": "保留伊朗方面声称的交火与风险；不将军舰受损当独立核实事实。",
+    "placements": [
+      "/geopolitical_stories/1/detail"
+    ]
+  },
+  {
+    "input_index": 54,
+    "signal_id": "e50787a0-c95a-569c-ab54-c9d7cb47dd08",
+    "entity_id": "GPR97bd7519-4ae8-5bd7-b2b4-626e1396f0f0",
+    "entity_name": "美伊军事冲突",
+    "variable_name": "地缘政治风险",
+    "decision": "限定采用",
+    "reason": "仅为威胁表态，不视为更大打击已发生。",
+    "placements": [
+      "/geopolitical_stories/1/detail"
+    ]
+  },
+  {
+    "input_index": 55,
+    "signal_id": "d964989f-e5bd-5a13-9d80-8b3b6e8100d1",
+    "entity_id": "GPR1878c374-55a5-5f95-9fe6-6405f71ac1f2",
+    "entity_name": "伊朗—以色列军事冲突",
+    "variable_name": "地缘政治风险",
+    "decision": "排除",
+    "reason": "以军与真主党直接交战不证明伊朗—以色列直接军事交战升级。",
+    "placements": []
+  },
+  {
+    "input_index": 56,
+    "signal_id": "4a48bcc8-1527-5ae8-88f1-4223984bcddc",
+    "entity_id": "GPR97bd7519-4ae8-5bd7-b2b4-626e1396f0f0",
+    "entity_name": "美伊军事冲突",
+    "variable_name": "地缘政治风险",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/geopolitical_stories/1/detail"
+    ]
+  },
+  {
+    "input_index": 57,
+    "signal_id": "542b6558-04f4-517c-bfaa-cb073554b177",
+    "entity_id": "GPR7c1f68e2-206f-57e9-bd19-b8152b0f4cbe",
+    "entity_name": "美日韩军事安全合作",
+    "variable_name": "地缘政治风险",
+    "decision": "排除",
+    "reason": "民用核工业合作不是军事安全合作风险上升的直接证据。",
+    "placements": []
+  },
+  {
+    "input_index": 58,
+    "signal_id": "840c61ab-aa29-5f77-b723-06511fb14627",
+    "entity_id": "GPR97bd7519-4ae8-5bd7-b2b4-626e1396f0f0",
+    "entity_name": "美伊军事冲突",
+    "variable_name": "地缘政治风险",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/geopolitical_stories/1/detail"
+    ]
+  },
+  {
+    "input_index": 59,
+    "signal_id": "50271d54-3f84-51d8-9e13-fd85f70fdef1",
+    "entity_id": "GPRb7e132e5-34bc-5073-adde-2148db7d523a",
+    "entity_name": "中美关键矿产供应链博弈",
+    "variable_name": "制裁暴露度",
+    "decision": "限定采用",
+    "reason": "限钇的出口许可与发货约束，避免将其泛称所有制裁；发货下降不唯一证明政策因果。",
+    "placements": [
+      "/geopolitical_stories/2/detail"
+    ]
+  },
+  {
+    "input_index": 60,
+    "signal_id": "7f7400f4-d832-5c97-818f-9c0ac95aa8b9",
+    "entity_id": "GPRb7e132e5-34bc-5073-adde-2148db7d523a",
+    "entity_name": "中美关键矿产供应链博弈",
+    "variable_name": "出口管制暴露度",
+    "decision": "排除",
+    "reason": "电力设备进口限制错挂关键矿产博弈；仅保留源事件作对应设备市场的待核实条件。",
+    "placements": []
+  },
+  {
+    "input_index": 61,
+    "signal_id": "aa18ebda-2211-55cf-aa3b-d4c8b898521d",
+    "entity_id": "GPRb7e132e5-34bc-5073-adde-2148db7d523a",
+    "entity_name": "中美关键矿产供应链博弈",
+    "variable_name": "出口管制暴露度",
+    "decision": "限定采用",
+    "reason": "UNKNOWN保留为政策不确定，未转为上升或下降源信号。",
+    "placements": [
+      "/geopolitical_stories/2/detail"
+    ]
+  },
+  {
+    "input_index": 62,
+    "signal_id": "e7c92eff-d11f-588e-9758-f78431e5f43c",
+    "entity_id": "GPR0023c0b1-0ee9-57c7-89ec-0094d54d677e",
+    "entity_name": "中美先进半导体出口管制",
+    "variable_name": "出口管制暴露度",
+    "decision": "排除",
+    "reason": "研发资助投向调整不等于半导体出口管制暴露度上升。",
+    "placements": []
+  },
+  {
+    "input_index": 63,
+    "signal_id": "4b2e1fb9-d87b-5496-983d-04ffd1b05ae9",
+    "entity_id": "GPR2d8e7df9-c548-5f24-a1b1-9dcbfb383283",
+    "entity_name": "霍尔木兹海峡能源通道安全",
+    "variable_name": "贸易通道可用性",
+    "decision": "限定采用",
+    "reason": "清障是安全改善行动，不能单独确认通道流量或可用性已恢复。",
+    "placements": [
+      "/geopolitical_stories/0/detail"
+    ]
+  },
+  {
+    "input_index": 64,
+    "signal_id": "11d38465-f2ed-5d48-9443-f1867cd56578",
+    "entity_id": "GPR2d8e7df9-c548-5f24-a1b1-9dcbfb383283",
+    "entity_name": "霍尔木兹海峡能源通道安全",
+    "variable_name": "贸易通道可用性",
+    "decision": "排除",
+    "reason": "军事无人艇受击不能独立证明商业贸易通道可用性下降。",
+    "placements": []
+  },
+  {
+    "input_index": 65,
+    "signal_id": "c6717701-7ef1-55d3-87f2-87537e3f7a1d",
+    "entity_id": "GPR2d8e7df9-c548-5f24-a1b1-9dcbfb383283",
+    "entity_name": "霍尔木兹海峡能源通道安全",
+    "variable_name": "贸易通道可用性",
+    "decision": "排除",
+    "reason": "绕行延布港不等于霍尔木兹通道本身可用性上升；源事件保留为缓冲。",
+    "placements": []
+  },
+  {
+    "input_index": 66,
+    "signal_id": "a2ca1306-1c13-5e96-87c2-b810951ea0b9",
+    "entity_id": "GPR2d8e7df9-c548-5f24-a1b1-9dcbfb383283",
+    "entity_name": "霍尔木兹海峡能源通道安全",
+    "variable_name": "贸易通道可用性",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/geopolitical_stories/0/detail"
+    ]
+  },
+  {
+    "input_index": 67,
+    "signal_id": "a9e57cd8-a2be-5771-b49e-6d05fa664f55",
+    "entity_id": "GPR97bd7519-4ae8-5bd7-b2b4-626e1396f0f0",
+    "entity_name": "美伊军事冲突",
+    "variable_name": "航运安全",
+    "decision": "排除",
+    "reason": "事实描述航运风险升高，信号却标航运安全UP，方向语义相反。",
+    "placements": []
+  },
+  {
+    "input_index": 68,
+    "signal_id": "53edd802-58fe-58b3-a5b9-9121b46f20da",
+    "entity_id": "GPR2d8e7df9-c548-5f24-a1b1-9dcbfb383283",
+    "entity_name": "霍尔木兹海峡能源通道安全",
+    "variable_name": "航运安全",
+    "decision": "限定采用",
+    "reason": "限清障活动对安全条件的潜在改善，不认定整体安全已恢复。",
+    "placements": [
+      "/geopolitical_stories/0/detail"
+    ]
+  },
+  {
+    "input_index": 69,
+    "signal_id": "e5ee61d4-44b3-580d-a7b8-a9cbdace02e7",
+    "entity_id": "GPR2d8e7df9-c548-5f24-a1b1-9dcbfb383283",
+    "entity_name": "霍尔木兹海峡能源通道安全",
+    "variable_name": "航运安全",
+    "decision": "排除",
+    "reason": "日本采购行为与支出不直接测量霍尔木兹航运安全变化。",
+    "placements": []
+  },
+  {
+    "input_index": 70,
+    "signal_id": "a676cca3-30d5-5fd1-9074-0ef8dcbcefec",
+    "entity_id": "GPR97bd7519-4ae8-5bd7-b2b4-626e1396f0f0",
+    "entity_name": "美伊军事冲突",
+    "variable_name": "航运安全",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/geopolitical_stories/1/detail"
+    ]
+  },
+  {
+    "input_index": 71,
+    "signal_id": "b716b768-45a5-53ab-bf24-7f277758fda0",
+    "entity_id": "GPR2d8e7df9-c548-5f24-a1b1-9dcbfb383283",
+    "entity_name": "霍尔木兹海峡能源通道安全",
+    "variable_name": "航运安全",
+    "decision": "限定采用",
+    "reason": "遇险记录源自伊朗革命卫队说法，保留归因与待核实状态。",
+    "placements": [
+      "/geopolitical_stories/0/detail"
+    ]
+  },
+  {
+    "input_index": 72,
+    "signal_id": "bbfb9967-4b97-5e79-ae74-b695242a5e65",
+    "entity_id": "COM6f5e8758-29ec-57b8-94b4-96ca41652e5d",
+    "entity_name": "赛力斯",
+    "variable_name": "销量",
+    "decision": "排除",
+    "reason": "岚图预售错挂赛力斯；预售启动也不证明销量增长。",
+    "placements": []
+  },
+  {
+    "input_index": 73,
+    "signal_id": "3468dd7c-11a1-54fc-b902-67ad32247f90",
+    "entity_id": "COM3314d1cc-1d1c-553a-8092-a079d06fc345",
+    "entity_name": "Li Auto Inc.",
+    "variable_name": "销量",
+    "decision": "保留候选",
+    "reason": "在原事件主体、地域、产品、时间和模态内保留；不是人工验证，也不自动产生链结论。",
+    "placements": [
+      "/company_analyses/5"
+    ]
+  },
+  {
+    "input_index": 74,
+    "signal_id": "a41806ec-ffcf-55f1-98c1-e51d304c5e2f",
+    "entity_id": "COM58be8e5c-c4b4-5525-b0b8-60de4a2c0d1f",
+    "entity_name": "NEUROONE MEDICAL TECHNOLOGIES Corp",
+    "variable_name": "融资成本",
+    "decision": "排除",
+    "reason": "NeuShen与NEUROONE主体不同；融资金额不证明融资成本下降。",
+    "placements": []
+  },
+  {
+    "input_index": 75,
+    "signal_id": "8e9d30e0-5cdf-51e2-a794-515cafd2e402",
+    "entity_id": "COMa45bfcb9-e109-5e98-860a-6863e1b51aa4",
+    "entity_name": "欣旺达",
+    "variable_name": "自由现金流",
+    "decision": "排除",
+    "reason": "净亏损不能等同自由现金流下降，且EVB与上市母公司财务口径不同。",
+    "placements": []
+  },
+  {
+    "input_index": 76,
+    "signal_id": "f381a0fb-2ced-5769-b818-4e95638c2f0d",
+    "entity_id": "COMe766c418-27dc-5e8e-a7f3-b8f1196d6bd4",
+    "entity_name": "工商银行",
+    "variable_name": "债务杠杆",
+    "decision": "排除",
+    "reason": "发行A股补充核心一级资本不能证明债务杠杆上升。",
+    "placements": []
+  }
+]

@@ -1,0 +1,6676 @@
+{
+  "EVD00d82162-b4b5-5b51-90bb-0d6808e719d6": {
+    "id": "EVD00d82162-b4b5-5b51-90bb-0d6808e719d6",
+    "raw_evidence_id": "RAWdc1d5b9c-0983-5b88-bcd5-5039fd0eb2d3",
+    "title": "AI短剧制作价格大跳水 AI短剧行业大洗牌",
+    "summary": "今年以来，技术门槛下降、从业者涌入和产能扩张推动AI短剧每分钟制作报价从5000元降至几百元，定制业务仍报1万至2万元。",
+    "semantic": {
+      "actors": [
+        "AI短剧制作行业"
+      ],
+      "action": "制作报价下降",
+      "objects": [
+        "AI短剧制作服务"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "今年以来",
+        "start_at": null,
+        "end_at": null,
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "中国"
+      ],
+      "reason": "技术门槛下降、大量从业者涌入及产能快速扩张",
+      "method": null,
+      "metrics": [
+        {
+          "name": "AI短剧每分钟制作报价",
+          "value": "几百元",
+          "unit": "元/分钟",
+          "change": "从5000元跌至几百元",
+          "period": "今年以来"
+        },
+        {
+          "name": "定制短剧每分钟报价",
+          "value": "1万-2万元",
+          "unit": "元/分钟",
+          "change": null,
+          "period": "今年以来"
+        }
+      ],
+      "attribution": {
+        "reported_by": "东方财富",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC02a34cd9-b141-5a77-a628-c4458b77dd4e",
+        "code": "MARKET_MOVEMENT_BRIEF",
+        "name": "行情异动简讯",
+        "description": "简短报告市场价格、收益率、成交量等指标的显著变化，通常只附简要原因。"
+      }
+    ],
+    "source_id": "eastmoney_fastnews",
+    "source_name": "东方财富",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://finance.eastmoney.com/a/202609063866071059.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "AI短剧",
+      "制作价格",
+      "产能扩张"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-06T05:25:26Z",
+    "collected_at": "2026-09-06T05:40:47.377723Z"
+  },
+  "EVD09244b06-6aef-5ec2-a3d0-1df865a17780": {
+    "id": "EVD09244b06-6aef-5ec2-a3d0-1df865a17780",
+    "raw_evidence_id": "RAW2f7ba4f8-7545-59b2-8553-e01671096472",
+    "title": "U.S., Iran exchange strikes for first time since July as Trump threatens strategic oil hub",
+    "summary": "伊朗革命卫队称，一艘超级油轮周一在霍尔木兹海峡南部撞上两枚水雷后起火并失去航行能力。",
+    "semantic": {
+      "actors": [
+        "一艘超级油轮"
+      ],
+      "action": "触雷起火并失去航行能力",
+      "objects": [
+        "霍尔木兹海峡航运"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "周一",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "霍尔木兹海峡"
+      ],
+      "reason": "伊朗革命卫队称该油轮未遵守伊朗的通行规则",
+      "method": "撞上两枚海军水雷",
+      "metrics": [
+        {
+          "name": "撞击水雷数量",
+          "value": "2",
+          "unit": "枚",
+          "change": null,
+          "period": "周一"
+        }
+      ],
+      "attribution": {
+        "reported_by": "伊朗媒体",
+        "claimed_by": "伊朗伊斯兰革命卫队"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "cnbc",
+    "source_name": "CNBC",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.cnbc.com/2026/08/30/us-iran-strikes-strait-hormuz.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "伊朗革命",
+      "超级油轮",
+      "霍尔木兹",
+      "水雷",
+      "航运"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-31T08:42:40Z",
+    "collected_at": "2026-08-31T09:56:02.626907Z"
+  },
+  "EVD0a58d1b0-43a3-5c4e-8f50-1f200fd86539": {
+    "id": "EVD0a58d1b0-43a3-5c4e-8f50-1f200fd86539",
+    "raw_evidence_id": "RAW2f87a0be-0c7c-54ea-8910-9ef108c0ea45",
+    "title": "Li Auto to invest $390 million in Sunwoda EVB, becoming second-largest shareholder",
+    "summary": "欣旺达EVB于2026年7月在中国装机2.66 GWh动力电池，以3.59%的市场份额排名第七。",
+    "semantic": {
+      "actors": [
+        "欣旺达EVB"
+      ],
+      "action": "完成动力电池装机",
+      "objects": [
+        "中国动力电池市场"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "July",
+        "start_at": null,
+        "end_at": null,
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "中国"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [
+        {
+          "name": "中国市场排名",
+          "value": "7",
+          "unit": "名",
+          "change": null,
+          "period": "2026年7月"
+        },
+        {
+          "name": "动力电池装机量",
+          "value": "2.66",
+          "unit": "GWh",
+          "change": null,
+          "period": "2026年7月"
+        },
+        {
+          "name": "市场份额",
+          "value": "3.59",
+          "unit": "%",
+          "change": null,
+          "period": "2026年7月"
+        }
+      ],
+      "attribution": {
+        "reported_by": "CnEVPost",
+        "claimed_by": "中国汽车动力电池产业创新联盟"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "cnevpost",
+    "source_name": "CnEVPost",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://cnevpost.com/2026/09/04/li-auto-to-invest-sunwoda-evb/",
+    "is_original": false,
+    "quoted_source_name": "欣旺达",
+    "keywords": [
+      "欣旺达EVB",
+      "动力电池",
+      "装机量",
+      "市场份额"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T12:38:26Z",
+    "collected_at": "2026-09-06T05:06:10.261397Z"
+  },
+  "EVD0b8c93da-16c0-54b3-99d1-b4b4fc07030a": {
+    "id": "EVD0b8c93da-16c0-54b3-99d1-b4b4fc07030a",
+    "raw_evidence_id": "RAW929b57a7-2253-5732-a0e5-c965f153f701",
+    "title": "U.S. attacks 3 Iranian oil tankers after missiles target Navy warships",
+    "summary": "美国军队周六打击三艘伊朗原油运输船，其中两艘分别在哈尔克岛近海和贾斯克附近被永久瘫痪，另一艘在阿曼湾遭袭。",
+    "semantic": {
+      "actors": [
+        "美国军队"
+      ],
+      "action": "打击并永久瘫痪",
+      "objects": [
+        "三艘伊朗原油运输船"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "周六",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "伊朗",
+        "阿曼湾"
+      ],
+      "reason": "伊朗伊斯兰革命卫队向两艘美国海军军舰发射弹道导弹",
+      "method": "军事打击，其中两艘油轮被永久瘫痪",
+      "metrics": [
+        {
+          "name": "被永久瘫痪的原油运输船数量",
+          "value": "2",
+          "unit": "艘",
+          "change": null,
+          "period": "周六"
+        },
+        {
+          "name": "遭打击的伊朗原油运输船数量",
+          "value": "3",
+          "unit": "艘",
+          "change": null,
+          "period": "周六"
+        }
+      ],
+      "attribution": {
+        "reported_by": "CNBC",
+        "claimed_by": "美国中央司令部"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "cnbc",
+    "source_name": "CNBC",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.cnbc.com/2026/09/05/us-iran-oil-tankers-navy-missile-attack.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美伊冲突",
+      "原油油轮",
+      "美军",
+      "伊朗"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T15:43:08Z",
+    "collected_at": "2026-09-06T03:43:55.048958Z"
+  },
+  "EVD0c49bb94-1e00-59ea-8ea4-ce4fb521a978": {
+    "id": "EVD0c49bb94-1e00-59ea-8ea4-ce4fb521a978",
+    "raw_evidence_id": "RAW9c947e5b-b03f-555d-b45c-28f12f813d50",
+    "title": "Iran War Forces a Rewrite of Global Oil Trade Routes",
+    "summary": "中国和印度增加俄罗斯原油进口，以替代部分因中东战争而突然中断的中东原油供应。",
+    "semantic": {
+      "actors": [
+        "中国",
+        "印度"
+      ],
+      "action": "增加俄罗斯原油进口",
+      "objects": [
+        "俄罗斯原油进口"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "中东战争导致供应中断后",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "中国",
+        "俄罗斯",
+        "印度"
+      ],
+      "reason": "部分中东原油供应突然中断",
+      "method": "以俄罗斯原油替代部分突然中断的中东原油",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Energy/Crude-Oil/Iran-War-Forces-a-Rewrite-of-Global-Oil-Trade-Routes.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "中国",
+      "印度",
+      "俄油进口",
+      "中东原油"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T23:00:00Z",
+    "collected_at": "2026-09-06T03:04:23.686071Z"
+  },
+  "EVD0e1994ee-b1af-5333-83c4-690fcd12039e": {
+    "id": "EVD0e1994ee-b1af-5333-83c4-690fcd12039e",
+    "raw_evidence_id": "RAWa5c5fa1c-e9a0-5360-9580-47bfa8a243c9",
+    "title": "Digital public infrastructure and the future of renewable energy: insights from India Energy Stack",
+    "summary": "印度AI影响力峰会2026期间，印度能源栈现场演示点对点能源交易，一名农户通过数字平台向小型商业用户出售剩余太阳能电力并实时结算。",
+    "semantic": {
+      "actors": [
+        "一名印度农户"
+      ],
+      "action": "完成点对点售电演示",
+      "objects": [
+        "剩余太阳能电力",
+        "小型商业用户"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "印度AI影响力峰会2026期间",
+        "start_at": null,
+        "end_at": null,
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "印度"
+      ],
+      "reason": null,
+      "method": "通过安全数字平台进行实时匹配和结算",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "PV Tech",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "pv_tech",
+    "source_name": "PV Tech",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.pv-tech.org/digital-public-infrastructure-and-the-future-of-renewable-energy-insights-from-india-energy-stack/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "能源栈",
+      "电力交易",
+      "分布式光伏",
+      "实时结算"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T15:26:22Z",
+    "collected_at": "2026-09-06T06:32:33.940931Z"
+  },
+  "EVD0eba6120-b55d-5a62-bd52-3b1b082a34ee": {
+    "id": "EVD0eba6120-b55d-5a62-bd52-3b1b082a34ee",
+    "raw_evidence_id": "RAW0a02815d-ba3e-5464-b372-c021ab726336",
+    "title": "BESS Industry Buzz: German grid attack, revenue cannibilisation, CATL’s price cut, sodium-ion’s ramp-up and more",
+    "summary": "Enspired的Ryan Alexander称，其储能组合在德国电网遭遇双重破坏袭击期间参与维持系统稳定。",
+    "semantic": {
+      "actors": [
+        "Enspired储能组合"
+      ],
+      "action": "协助维持系统稳定",
+      "objects": [
+        "德国电网"
+      ],
+      "stage": "OCCURRED",
+      "modality": "SPEC",
+      "time": {
+        "raw": "this week",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "德国"
+      ],
+      "reason": "德国电网遭遇双重破坏袭击并发生停电风险",
+      "method": "在电网遭遇双重破坏袭击期间调度电池储能系统",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "Energy Storage News",
+        "claimed_by": "Ryan Alexander"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCb7505968-f65e-55a5-9294-b8a7be829a4a",
+        "code": "SOCIAL_MEDIA_BRIEF",
+        "name": "社交媒体快讯",
+        "description": "来自社交媒体平台的简短发布、评论或即时消息。"
+      }
+    ],
+    "source_id": "energy_storage_news",
+    "source_name": "Energy Storage News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.energy-storage.news/bess-industry-buzz-german-grid-attack-revenue-cannibilisation-catls-price-cut-sodium-ions-ramp-up-and-more/",
+    "is_original": false,
+    "quoted_source_name": "LinkedIn",
+    "keywords": [
+      "德国电网",
+      "蓄电系统",
+      "破坏袭击"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T11:14:49Z",
+    "collected_at": "2026-09-06T03:43:56.11867Z"
+  },
+  "EVD0ed8b665-10ae-5e74-bca1-168a439acfad": {
+    "id": "EVD0ed8b665-10ae-5e74-bca1-168a439acfad",
+    "raw_evidence_id": "RAWab864df0-8216-5afa-8a4b-12e124057366",
+    "title": "Under the hood: Inside Tesla’s Megapack 3 as Texas production begins",
+    "summary": "随着Megapack需求增长，特斯拉已在美国得州Brookshire工厂开始生产下一代Megapack 3储能系统。",
+    "semantic": {
+      "actors": [
+        "Tesla"
+      ],
+      "action": "开始生产",
+      "objects": [
+        "Megapack 3电池储能系统"
+      ],
+      "stage": "IMPLEMENTED",
+      "modality": "FACT",
+      "time": {
+        "raw": "just started",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": "Megapack需求增长",
+      "method": "在得州Brookshire工厂生产下一代Megapack 3电池储能系统",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "Energy Storage News",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "energy_storage_news",
+    "source_name": "Energy Storage News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.energy-storage.news/under-the-hood-inside-teslas-megapack-3-as-texas-production-begins/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "特斯拉",
+      "储能系统",
+      "得州产能"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T09:41:32Z",
+    "collected_at": "2026-09-06T03:43:56.11867Z"
+  },
+  "EVD0fe4be28-6f5a-5146-ba7d-e8c0694b9af6": {
+    "id": "EVD0fe4be28-6f5a-5146-ba7d-e8c0694b9af6",
+    "raw_evidence_id": "RAW794a38d7-95c5-59e4-883e-364d9e1b2e30",
+    "title": "Li Auto launches new L9 in UAE in key Middle East expansion step",
+    "summary": "理想汽车2026年8月交付37679辆，同比增长32.07%，结束连续3个月同比下滑；前8个月累计交付261619辆，同比下降0.6%。",
+    "semantic": {
+      "actors": [
+        "理想汽车"
+      ],
+      "action": "交付汽车",
+      "objects": [
+        "理想汽车交付量"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "August and the first 8 months of the year",
+        "start_at": null,
+        "end_at": null,
+        "precision": "MONTH"
+      },
+      "jurisdictions": null,
+      "reason": null,
+      "method": null,
+      "metrics": [
+        {
+          "name": "汽车交付量",
+          "value": "37679",
+          "unit": "辆",
+          "change": "同比增长32.07%",
+          "period": "2026年8月"
+        },
+        {
+          "name": "汽车交付量",
+          "value": "261619",
+          "unit": "辆",
+          "change": "同比下降0.6%",
+          "period": "2026年前8个月"
+        }
+      ],
+      "attribution": {
+        "reported_by": "CnEVPost",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "cnevpost",
+    "source_name": "CnEVPost",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://cnevpost.com/2026/09/04/li-auto-launches-new-l9-uae/",
+    "is_original": false,
+    "quoted_source_name": "理想汽车",
+    "keywords": [
+      "理想汽车",
+      "汽车交付",
+      "销量增长"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T13:58:39Z",
+    "collected_at": "2026-09-06T03:43:55.147816Z"
+  },
+  "EVD0ff81103-875b-57c1-85a7-ced2d450263c": {
+    "id": "EVD0ff81103-875b-57c1-85a7-ced2d450263c",
+    "raw_evidence_id": "RAWc1b895d2-a4e7-564e-99ce-438689091e2d",
+    "title": "China’s Grip on Erbium and Yttrium Could Choke Data-Center Growth",
+    "summary": "特朗普政府于2026年2月宣布规模120亿美元的Project Vault公私合作储备计划，其中包括美国进出口银行提供的100亿美元融资。",
+    "semantic": {
+      "actors": [
+        "特朗普政府"
+      ],
+      "action": "宣布建立关键材料储备计划",
+      "objects": [
+        "Project Vault稀土及关键材料储备计划"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "2026年2月",
+        "start_at": "2026-01-31T16:00:00Z",
+        "end_at": "2026-02-28T15:59:59.999999Z",
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": "推动关键矿产供应链回流美国并应对供应中断风险",
+      "method": "通过公私合作及美国进出口银行融资储备稀土和其他关键材料",
+      "metrics": [
+        {
+          "name": "美国进出口银行融资",
+          "value": "100",
+          "unit": "亿美元",
+          "change": null,
+          "period": "2026年2月宣布"
+        },
+        {
+          "name": "计划规模",
+          "value": "120",
+          "unit": "亿美元",
+          "change": null,
+          "period": "2026年2月宣布"
+        }
+      ],
+      "attribution": {
+        "reported_by": "IEEE Spectrum",
+        "claimed_by": "特朗普政府"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "ieee_spectrum_semiconductors",
+    "source_name": "IEEE Spectrum Semiconductor",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://spectrum.ieee.org/rare-earth-shortage",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美国政府",
+      "战略储备",
+      "关键矿产",
+      "金库计划"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-26T13:00:01Z",
+    "collected_at": "2026-09-06T07:35:57.929433Z"
+  },
+  "EVD11dd710a-6296-5bcb-ba61-3e7d4c160aa6": {
+    "id": "EVD11dd710a-6296-5bcb-ba61-3e7d4c160aa6",
+    "raw_evidence_id": "RAWc5883a52-6c78-5103-8c6a-8847acf39469",
+    "title": "走出国门拿下海外大单！解码国产“太行7”燃机突围之路",
+    "summary": "2026年1月，燃机创新发展示范项目通过国家能源局验收，中国由此打通燃机研发、材料、制造、试验及运维服务的完整自主产业链。",
+    "semantic": {
+      "actors": [
+        "燃机创新发展示范项目"
+      ],
+      "action": "通过验收",
+      "objects": [
+        "国家能源局验收"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "2026年1月",
+        "start_at": "2025-12-31T16:00:00Z",
+        "end_at": "2026-01-31T15:59:59.999999Z",
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "中国"
+      ],
+      "reason": null,
+      "method": "完成燃机研发、材料研制、部件制造、试验验证和运维服务全链条建设",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "中国新闻网",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "eastmoney_stock_news",
+    "source_name": "中国新闻网",
+    "source_level": "L3_MEDIA",
+    "source_url": "http://finance.eastmoney.com/a/202609063866073526.html",
+    "is_original": false,
+    "quoted_source_name": "中国新闻网",
+    "keywords": [
+      "太行7",
+      "燃气轮机",
+      "自主产业链",
+      "国家能源局"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-06T05:46:04Z",
+    "collected_at": "2026-09-06T06:04:19.63321Z"
+  },
+  "EVD125ee432-912f-5289-a5e1-b05d5b72ef3e": {
+    "id": "EVD125ee432-912f-5289-a5e1-b05d5b72ef3e",
+    "raw_evidence_id": "RAW2a983780-ba89-5e10-a682-fdfe250d595d",
+    "title": "US and Iran exchange fire for the first time in more than a month",
+    "summary": "美国与伊朗一个多月来首次交火后，国际油价上涨。",
+    "semantic": {
+      "actors": [
+        "国际油价"
+      ],
+      "action": "上涨",
+      "objects": [
+        "原油价格"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": null,
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": null,
+      "reason": "美国打击霍尔木兹海峡岛屿及伊朗报复性袭击",
+      "method": null,
+      "metrics": [
+        {
+          "name": "油价",
+          "value": null,
+          "unit": null,
+          "change": "上涨",
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "Financial Times",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "financial_times",
+    "source_name": "Financial Times",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.ft.com/content/f270814f-e836-44e8-80c2-ec1034f80519?syn-25a6b1a6=1",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "国际油价",
+      "美伊冲突",
+      "霍尔木兹"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-31T05:16:43Z",
+    "collected_at": "2026-08-31T09:56:04.291298Z"
+  },
+  "EVD141b941f-7f71-5719-a8c3-8aee08c7cf06": {
+    "id": "EVD141b941f-7f71-5719-a8c3-8aee08c7cf06",
+    "raw_evidence_id": "RAWe341b733-09cd-558f-afe1-f686b2dabbcf",
+    "title": "ARENA commits AU$105.6 million to next wave of solar research in Australia",
+    "summary": "澳大利亚可再生能源署白皮书显示，公用事业级光伏加权平均安装成本停滞在每瓦1.52澳元，系统平衡成本已成为主要成本项。",
+    "semantic": {
+      "actors": [
+        "澳大利亚可再生能源署"
+      ],
+      "action": "发布成本与效率评估",
+      "objects": [
+        "澳大利亚公用事业级光伏成本与效率"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "2026年7月",
+        "start_at": "2026-06-30T16:00:00Z",
+        "end_at": "2026-07-31T15:59:59.999999Z",
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "澳大利亚"
+      ],
+      "reason": null,
+      "method": "通过白皮书评估公用事业级光伏安装成本、系统平衡成本及电池和组件效率",
+      "metrics": [
+        {
+          "name": "公用事业级光伏加权平均安装成本",
+          "value": "1.52",
+          "unit": "澳元/瓦",
+          "change": "降本停滞",
+          "period": "截至2026年7月"
+        },
+        {
+          "name": "商业组件效率",
+          "value": "26.2",
+          "unit": "%",
+          "change": "由2022年的22%升至26.2%",
+          "period": "2025年"
+        },
+        {
+          "name": "实验室电池效率",
+          "value": "27.9",
+          "unit": "%",
+          "change": null,
+          "period": "截至2026年7月"
+        }
+      ],
+      "attribution": {
+        "reported_by": "PV Tech",
+        "claimed_by": "澳大利亚可再生能源署"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "pv_tech",
+    "source_name": "PV Tech",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.pv-tech.org/arena-commits-au105-6-million-to-next-wave-of-solar-research-in-australia/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "澳能源署",
+      "光伏成本",
+      "系统成本",
+      "组件效率"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-31T05:18:27Z",
+    "collected_at": "2026-08-31T09:56:05.579925Z"
+  },
+  "EVD14e8fadb-cbb9-54a5-9c4d-ab1539c59128": {
+    "id": "EVD14e8fadb-cbb9-54a5-9c4d-ab1539c59128",
+    "raw_evidence_id": "RAW5b7affc7-8fa3-5c0d-925c-35aa8c9a6096",
+    "title": "America Is Betting Big on a New Generation of Small Nuclear Reactors",
+    "summary": "美国陆军的微型反应堆项目要求五家入选企业另行筹集数十亿美元私人投资，以支持项目开发。",
+    "semantic": {
+      "actors": [
+        "美国陆军"
+      ],
+      "action": "要求筹集私人投资",
+      "objects": [
+        "五家微型反应堆开发企业的项目融资"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "8月宣布的项目安排",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": "支持微型反应堆开发工作",
+      "method": "由入选企业从私人资本市场筹资支持开发",
+      "metrics": [
+        {
+          "name": "私人投资规模",
+          "value": "数十亿",
+          "unit": "美元",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": "美国陆军"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Alternative-Energy/Nuclear-Power/America-Is-Betting-Big-on-a-New-Generation-of-Small-Nuclear-Reactors.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美国陆军",
+      "微型堆",
+      "私募融资"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T19:00:00Z",
+    "collected_at": "2026-09-06T03:43:59.781095Z"
+  },
+  "EVD1575267d-9617-5620-8b31-8cf6b12bb7c0": {
+    "id": "EVD1575267d-9617-5620-8b31-8cf6b12bb7c0",
+    "raw_evidence_id": "RAW2748f13d-db09-5730-9651-f8d272b677a0",
+    "title": "Equinor’s East Point Energy begins operations at 200MWh Texas BESS",
+    "summary": "Equinor已启动弗吉尼亚州PJM市场四个电池储能项目的建设，合计规模为80MW/160MWh。",
+    "semantic": {
+      "actors": [
+        "Equinor"
+      ],
+      "action": "启动建设",
+      "objects": [
+        "弗吉尼亚州PJM市场电池储能项目组合"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": null,
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "美国",
+        "美国弗吉尼亚州"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [
+        {
+          "name": "总储能容量",
+          "value": "160",
+          "unit": "MWh",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "总功率规模",
+          "value": "80",
+          "unit": "MW",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "项目数量",
+          "value": "4",
+          "unit": "个",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "Energy Storage News",
+        "claimed_by": "Equinor"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "energy_storage_news",
+    "source_name": "Energy Storage News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.energy-storage.news/equinors-east-point-energy-begins-operations-at-200mwh-texas-bess/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "弗吉尼亚",
+      "电池储能",
+      "项目建设"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T13:19:36Z",
+    "collected_at": "2026-09-06T03:43:56.11867Z"
+  },
+  "EVD177d982d-d354-566f-ba9c-c35294fd2ea5": {
+    "id": "EVD177d982d-d354-566f-ba9c-c35294fd2ea5",
+    "raw_evidence_id": "RAWc1469332-6c75-5910-85fa-0192a097db92",
+    "title": "Iran War Forces a Rewrite of Global Oil Trade Routes",
+    "summary": "美国和以色列打击伊朗后，霍尔木兹海峡原油日流量由接近2000万桶降至约600万至800万桶。",
+    "semantic": {
+      "actors": [
+        "海湾石油出口国"
+      ],
+      "action": "大幅减少经海峡运输",
+      "objects": [
+        "经霍尔木兹海峡的原油出口"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "美国和以色列首次打击伊朗之前至当前",
+        "start_at": null,
+        "end_at": null,
+        "precision": "RANGE"
+      },
+      "jurisdictions": [
+        "中东",
+        "霍尔木兹海峡"
+      ],
+      "reason": "美国和以色列打击伊朗及伊朗反击引发的战争扰动",
+      "method": null,
+      "metrics": [
+        {
+          "name": "霍尔木兹海峡原油日流量",
+          "value": "600万至800万",
+          "unit": "桶/日",
+          "change": "从接近2000万降至600万至800万",
+          "period": "美国和以色列首次打击伊朗之前至当前"
+        }
+      ],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Energy/Crude-Oil/Iran-War-Forces-a-Rewrite-of-Global-Oil-Trade-Routes.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "霍尔木兹",
+      "原油运输",
+      "供应风险",
+      "中东冲突"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T23:00:00Z",
+    "collected_at": "2026-09-06T06:32:34.613937Z"
+  },
+  "EVD17a4e165-551e-50e7-907f-de10373ec9f8": {
+    "id": "EVD17a4e165-551e-50e7-907f-de10373ec9f8",
+    "raw_evidence_id": "RAWb7b08e8f-acb6-5f4f-b219-d97d10b23f31",
+    "title": "India’s CEA proposes mandatory storage for new solar, wind projects from 2027",
+    "summary": "印度中央电力管理局发布修订条例草案，拟要求2027年7月1日起投运的可再生能源电站至少15%的逆变器具备构网型控制，电池储能系统的全部功率转换系统也须具备该能力。",
+    "semantic": {
+      "actors": [
+        "印度中央电力管理局"
+      ],
+      "action": "提议强制配置构网型控制能力",
+      "objects": [
+        "新建可再生能源电站逆变器",
+        "电池储能系统功率转换系统"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "3 September 2026",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "印度"
+      ],
+      "reason": "印度可再生能源扩张正加大电力基础设施压力",
+      "method": "通过《中央电力管理局（发电厂及电力线路建设技术标准）2026年第二次修订条例》草案实施",
+      "metrics": [
+        {
+          "name": "具备构网型控制的电池储能功率转换系统占比",
+          "value": "100",
+          "unit": "%",
+          "change": null,
+          "period": "草案适用期"
+        },
+        {
+          "name": "配备构网型控制的逆变器最低占比",
+          "value": "15",
+          "unit": "%",
+          "change": null,
+          "period": "2027年7月1日起投运的可再生能源电站"
+        }
+      ],
+      "attribution": {
+        "reported_by": "PV Tech",
+        "claimed_by": "印度中央电力管理局"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5965b67d-1578-54a6-9b81-900a61a47a3f",
+        "code": "POLICY_DOCUMENT_SUMMARY",
+        "name": "政策文件摘要",
+        "description": "对正式政策、法规、规划或政府文件进行解读和摘要。"
+      }
+    ],
+    "source_id": "pv_tech",
+    "source_name": "PV Tech",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.pv-tech.org/indias-cea-proposes-mandatory-storage-for-new-solar-wind-projects-from-2027/",
+    "is_original": false,
+    "quoted_source_name": "印度中央电力管理局",
+    "keywords": [
+      "印度电力局",
+      "构网控制",
+      "光伏",
+      "风电"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T13:09:22Z",
+    "collected_at": "2026-09-06T05:40:55.705197Z"
+  },
+  "EVD17e55e8b-0b54-506c-9ffc-67cf25ebbcca": {
+    "id": "EVD17e55e8b-0b54-506c-9ffc-67cf25ebbcca",
+    "raw_evidence_id": "RAWc90844b0-a8fb-5828-ba9e-ee3339d3bf98",
+    "title": "This week in charts: China deals, stock flatlines and Lilly’s M&A spree",
+    "summary": "Alumis称envudeucitinib治疗系统性红斑狼疮的中期研究未达到主要和次要终点，消息公布后股价跌至每股约10美元。",
+    "semantic": {
+      "actors": [
+        "Alumis"
+      ],
+      "action": "报告临床试验未达终点",
+      "objects": [
+        "TYK2抑制剂envudeucitinib",
+        "系统性红斑狼疮中期研究"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "FACT",
+      "time": {
+        "raw": "周二",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": null,
+      "reason": null,
+      "method": "开展针对系统性红斑狼疮的中期临床研究",
+      "metrics": [
+        {
+          "name": "研究终点达成情况",
+          "value": "主要和次要终点均未达到",
+          "unit": null,
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "股价",
+          "value": "约10",
+          "unit": "美元/股",
+          "change": "下跌至约10美元",
+          "period": "消息公布后"
+        }
+      ],
+      "attribution": {
+        "reported_by": "BioPharma Dive",
+        "claimed_by": "Alumis"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "biopharma_dive",
+    "source_name": "BioPharma Dive",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.biopharmadive.com/news/charts-biotech-deals-china-alumis-ultragenyx-stock/829635/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "Alumis",
+      "自身免疫",
+      "临床失败",
+      "股价下跌"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T15:56:31Z",
+    "collected_at": "2026-09-06T03:43:53.286606Z"
+  },
+  "EVD188907b7-57ea-57cd-97a2-454ef34a37f2": {
+    "id": "EVD188907b7-57ea-57cd-97a2-454ef34a37f2",
+    "raw_evidence_id": "RAW3b5f4036-707f-5440-99dc-c989f942da92",
+    "title": "America Is Betting Big on a New Generation of Small Nuclear Reactors",
+    "summary": "美国陆军8月宣布拟向五家公司提供最高22亿美元融资，在美国五座军事基地建设新一代微型核反应堆。",
+    "semantic": {
+      "actors": [
+        "美国陆军"
+      ],
+      "action": "宣布提供融资支持部署",
+      "objects": [
+        "五座美国军事基地的新一代微型核反应堆"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "In August",
+        "start_at": null,
+        "end_at": null,
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": "推进军用核能部署并帮助微型反应堆企业跨越开发阶段障碍",
+      "method": "向五家企业分别安排军事基地项目，并由联邦放宽创新反应堆设计监管提供支持",
+      "metrics": [
+        {
+          "name": "入选企业数量",
+          "value": "5",
+          "unit": "家",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "联邦融资上限",
+          "value": "22亿",
+          "unit": "美元",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "部署军事基地数量",
+          "value": "5",
+          "unit": "处",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": "美国陆军"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Alternative-Energy/Nuclear-Power/America-Is-Betting-Big-on-a-New-Generation-of-Small-Nuclear-Reactors.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美国陆军",
+      "微型堆",
+      "军事基地",
+      "核能投资"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T19:00:00Z",
+    "collected_at": "2026-09-06T07:35:59.978508Z"
+  },
+  "EVD1a3142f9-0171-5b80-b628-f35445aea492": {
+    "id": "EVD1a3142f9-0171-5b80-b628-f35445aea492",
+    "raw_evidence_id": "RAW2637357f-3e66-5214-885f-79736222e2b9",
+    "title": "印尼喀拉喀托之子火山喷发 首都主要机场暂停起降",
+    "summary": "受喀拉喀托之子火山自4日起持续喷发影响，雅加达苏加诺-哈达国际机场6日宣布暂停航班起降。",
+    "semantic": {
+      "actors": [
+        "苏加诺-哈达国际机场"
+      ],
+      "action": "宣布暂停",
+      "objects": [
+        "航班起降"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "FACT",
+      "time": {
+        "raw": "6日",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "印度尼西亚"
+      ],
+      "reason": "喀拉喀托之子火山自4日起持续喷发",
+      "method": null,
+      "metrics": [],
+      "attribution": {
+        "reported_by": "东方财富",
+        "claimed_by": "苏加诺-哈达国际机场"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "eastmoney_fastnews",
+    "source_name": "东方财富",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://finance.eastmoney.com/a/202609063866075247.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "印尼航空",
+      "雅加达机场",
+      "航班停飞",
+      "火山喷发"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-06T06:14:13Z",
+    "collected_at": "2026-09-06T06:32:26.458068Z"
+  },
+  "EVD1a74d115-d55c-544c-8e9b-984cfb12e910": {
+    "id": "EVD1a74d115-d55c-544c-8e9b-984cfb12e910",
+    "raw_evidence_id": "RAW06af379a-b68b-595c-a2e2-a86741083ab0",
+    "title": "煤与煤层气共采创新发展论坛举办",
+    "summary": "面向“十五五”，山西计划推进两大非常规天然气勘探开发基地及煤与煤层气共采，目标实现年产量300亿立方米、年产值1000亿元。",
+    "semantic": {
+      "actors": [
+        "山西省"
+      ],
+      "action": "推进非常规天然气增产开发",
+      "objects": [
+        "沁水盆地勘探开发基地",
+        "煤与煤层气共采",
+        "鄂尔多斯盆地东缘勘探开发基地",
+        "非常规天然气产量与产值"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "十五五",
+        "start_at": null,
+        "end_at": null,
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "中国山西省"
+      ],
+      "reason": null,
+      "method": "推进沁水盆地、鄂尔多斯盆地东缘两大勘探开发基地建设，强化采煤—采气一体化和煤—气共采",
+      "metrics": [
+        {
+          "name": "非常规天然气年产值",
+          "value": "1000",
+          "unit": "亿元",
+          "change": "双翻番目标",
+          "period": "十五五"
+        },
+        {
+          "name": "非常规天然气年产量",
+          "value": "300",
+          "unit": "亿立方米",
+          "change": "双翻番目标",
+          "period": "十五五"
+        }
+      ],
+      "attribution": {
+        "reported_by": "山西日报",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC097bf77a-fb8a-5756-ae47-e122c4367985",
+        "code": "FORECAST_PLAN_OUTLOOK",
+        "name": "预测/计划/展望",
+        "description": "表达对未来的预测、指引、目标、计划或行动展望。"
+      }
+    ],
+    "source_id": "eastmoney_fastnews",
+    "source_name": "东方财富",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://finance.eastmoney.com/a/202609063866066872.html",
+    "is_original": false,
+    "quoted_source_name": "山西日报",
+    "keywords": [
+      "山西",
+      "非常规气",
+      "煤层气",
+      "共采",
+      "勘探开发"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-06T04:02:52Z",
+    "collected_at": "2026-09-06T04:07:26.522712Z"
+  },
+  "EVD1cb73c16-039d-587c-acb3-a09a4c1ed1fa": {
+    "id": "EVD1cb73c16-039d-587c-acb3-a09a4c1ed1fa",
+    "raw_evidence_id": "RAW9c947e5b-b03f-555d-b45c-28f12f813d50",
+    "title": "Iran War Forces a Rewrite of Global Oil Trade Routes",
+    "summary": "美国和以色列打击伊朗后，经霍尔木兹海峡的原油日流量由接近2000万桶降至估计600万至800万桶。",
+    "semantic": {
+      "actors": [
+        "海湾产油国"
+      ],
+      "action": "大幅减少经海峡运输的原油",
+      "objects": [
+        "经霍尔木兹海峡的原油出口"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "美国和以色列首次打击伊朗后至当前",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "中东",
+        "霍尔木兹海峡"
+      ],
+      "reason": "美国和以色列打击伊朗及伊朗报复导致战争升级",
+      "method": "经霍尔木兹海峡出口原油",
+      "metrics": [
+        {
+          "name": "霍尔木兹原油流量",
+          "value": "600万至800万",
+          "unit": "桶/日",
+          "change": "由接近2000万桶/日降至600万至800万桶/日",
+          "period": "当前相较美以首次打击伊朗前"
+        }
+      ],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Energy/Crude-Oil/Iran-War-Forces-a-Rewrite-of-Global-Oil-Trade-Routes.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "霍尔木兹",
+      "原油运输",
+      "供应风险",
+      "美伊冲突"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T23:00:00Z",
+    "collected_at": "2026-09-06T03:04:23.686071Z"
+  },
+  "EVD1cee9d79-7454-5f21-92f4-1431c2effcb9": {
+    "id": "EVD1cee9d79-7454-5f21-92f4-1431c2effcb9",
+    "raw_evidence_id": "RAW97d6dcf7-a8ff-5cb5-8390-aa41bf4bf8c9",
+    "title": "America Is Betting Big on a New Generation of Small Nuclear Reactors",
+    "summary": "美国陆军8月宣布最高投入22亿美元，资助五家公司在五座美国军事基地建设新一代微型反应堆。",
+    "semantic": {
+      "actors": [
+        "美国陆军"
+      ],
+      "action": "宣布提供融资",
+      "objects": [
+        "军事基地新一代微型反应堆"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "August",
+        "start_at": null,
+        "end_at": null,
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": "推进军事核能和美国先进反应堆发展",
+      "method": "向五家公司提供资金，在五座美国军事基地建设新一代微型反应堆，并由联邦放宽创新反应堆设计监管予以支持",
+      "metrics": [
+        {
+          "name": "入选公司数量",
+          "value": "5",
+          "unit": "家",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "融资上限",
+          "value": "22亿",
+          "unit": "美元",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "部署基地数量",
+          "value": "5",
+          "unit": "座",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": "美国陆军"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Alternative-Energy/Nuclear-Power/America-Is-Betting-Big-on-a-New-Generation-of-Small-Nuclear-Reactors.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美国陆军",
+      "微型堆",
+      "联邦融资",
+      "军事基地",
+      "核能"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T19:00:00Z",
+    "collected_at": "2026-09-06T06:32:34.613937Z"
+  },
+  "EVD1ef72162-dbf8-5bde-a673-9eab87c12c6d": {
+    "id": "EVD1ef72162-dbf8-5bde-a673-9eab87c12c6d",
+    "raw_evidence_id": "RAWa5c5fa1c-e9a0-5360-9580-47bfa8a243c9",
+    "title": "Digital public infrastructure and the future of renewable energy: insights from India Energy Stack",
+    "summary": "印度上一财年新增约45GW太阳能装机，同比增长逾40%；屋顶光伏装机由约17GW增至25GW，增幅逾47%。",
+    "semantic": {
+      "actors": [
+        "印度"
+      ],
+      "action": "新增太阳能装机",
+      "objects": [
+        "太阳能装机容量",
+        "屋顶太阳能装机容量"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "上一财年",
+        "start_at": null,
+        "end_at": null,
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "印度"
+      ],
+      "reason": "政策支持、技术成本下降和私营部门参与度提高",
+      "method": null,
+      "metrics": [
+        {
+          "name": "太阳能装机容量",
+          "value": null,
+          "unit": "GW",
+          "change": "新增约45",
+          "period": "上一财年"
+        },
+        {
+          "name": "太阳能装机容量增幅",
+          "value": null,
+          "unit": "%",
+          "change": "超过40%",
+          "period": "上一财年"
+        },
+        {
+          "name": "屋顶太阳能装机容量",
+          "value": "25",
+          "unit": "GW",
+          "change": "由约17增至25",
+          "period": "上一财年"
+        },
+        {
+          "name": "屋顶太阳能装机容量增幅",
+          "value": null,
+          "unit": "%",
+          "change": "超过47%",
+          "period": "上一财年"
+        }
+      ],
+      "attribution": {
+        "reported_by": "PV Tech",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "pv_tech",
+    "source_name": "PV Tech",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.pv-tech.org/digital-public-infrastructure-and-the-future-of-renewable-energy-insights-from-india-energy-stack/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "印度光伏",
+      "装机增长",
+      "户用光伏"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T15:26:22Z",
+    "collected_at": "2026-09-06T06:32:33.940931Z"
+  },
+  "EVD203a2cb8-22d4-535e-af9f-f4bc6545e709": {
+    "id": "EVD203a2cb8-22d4-535e-af9f-f4bc6545e709",
+    "raw_evidence_id": "RAWe5313acb-d629-506c-be6d-4afd31eb4b44",
+    "title": "Gemini Omni 1.1 Flash lets you build with more control",
+    "summary": "Google发布并上线生产就绪的Gemini Omni 1.1 Flash，新增最长40秒场景延展、首尾帧插值、360p快速低成本预览和最高4K输出等能力。",
+    "semantic": {
+      "actors": [
+        "Google",
+        "Google DeepMind"
+      ],
+      "action": "发布并上线",
+      "objects": [
+        "Gemini Omni 1.1 Flash生成式视频模型",
+        "开发者生态及订阅用户"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "today",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "全球"
+      ],
+      "reason": "提升生成式视频的可控性、迭代效率和专业制作能力",
+      "method": "通过Gemini API、Google AI Studio、Gemini Enterprise Agent Platform、Google Flow及Gemini应用提供",
+      "metrics": [
+        {
+          "name": "360p预览生成成本",
+          "value": null,
+          "unit": null,
+          "change": "降至720p标准分辨率成本的三分之一",
+          "period": null
+        },
+        {
+          "name": "360p预览生成速度",
+          "value": null,
+          "unit": null,
+          "change": "最高加快60%",
+          "period": null
+        },
+        {
+          "name": "场景延展累计时长上限",
+          "value": "40",
+          "unit": "秒",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "既有视频上下文分析时长",
+          "value": "10",
+          "unit": "秒",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "最高输出分辨率",
+          "value": "4",
+          "unit": "K",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": null,
+        "claimed_by": "Google DeepMind"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "deepmind_blog",
+    "source_name": "DeepMind",
+    "source_level": "L1_OFFICIAL",
+    "source_url": "https://deepmind.google/blog/gemini-omni-1-1-flash-lets-you-build-with-more-control/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "谷歌",
+      "视频模型",
+      "生成视频",
+      "模型发布",
+      "开发平台"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-27T16:11:32Z",
+    "collected_at": "2026-09-06T03:35:38.29081Z"
+  },
+  "EVD21332969-bf02-5d3b-9b5d-2300c573549d": {
+    "id": "EVD21332969-bf02-5d3b-9b5d-2300c573549d",
+    "raw_evidence_id": "RAW8d94454c-8cc0-5651-9d84-40dfcfeda7ca",
+    "title": "人形机器人出货量激增却难进家门 ，家居企业入局尝试“啃下”空间适配“硬骨头”",
+    "summary": "中国电子学会报告显示，2026年上半年中国人形机器人出货量已超4万台，全球占比提升至97%。",
+    "semantic": {
+      "actors": [
+        "中国人形机器人产业"
+      ],
+      "action": "出货",
+      "objects": [
+        "人形机器人"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "2026年上半年",
+        "start_at": null,
+        "end_at": null,
+        "precision": "RANGE"
+      },
+      "jurisdictions": [
+        "中国"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [
+        {
+          "name": "全球出货量占比",
+          "value": "97",
+          "unit": "%",
+          "change": "提升至97%",
+          "period": "2026年上半年"
+        },
+        {
+          "name": "出货量",
+          "value": "超4万",
+          "unit": "台",
+          "change": null,
+          "period": "2026年上半年"
+        }
+      ],
+      "attribution": {
+        "reported_by": "每日经济新闻",
+        "claimed_by": "中国电子学会"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "eastmoney_stock_news",
+    "source_name": "每日经济新闻",
+    "source_level": "L3_MEDIA",
+    "source_url": "http://finance.eastmoney.com/a/202609063866073162.html",
+    "is_original": false,
+    "quoted_source_name": "中国电子学会《2026年人形机器人产业发展报告》",
+    "keywords": [
+      "人形机器人",
+      "中国",
+      "出货量"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-06T05:38:45Z",
+    "collected_at": "2026-09-06T06:04:19.63321Z"
+  },
+  "EVD2254b436-ca93-592b-ab3d-49b6b76d393d": {
+    "id": "EVD2254b436-ca93-592b-ab3d-49b6b76d393d",
+    "raw_evidence_id": "RAW6c869dcf-3982-5b11-abb9-b17930248a47",
+    "title": "Iran War Forces a Rewrite of Global Oil Trade Routes",
+    "summary": "CREA称，美国、以色列与伊朗之间的战争推高油气价格，使3月至8月全球能源进口账单较原预期增加3300亿美元。",
+    "semantic": {
+      "actors": [
+        "美国、以色列与伊朗之间的战争"
+      ],
+      "action": "推高全球能源进口账单",
+      "objects": [
+        "全球石油和天然气进口成本"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "3月至8月的六个月",
+        "start_at": null,
+        "end_at": null,
+        "precision": "RANGE"
+      },
+      "jurisdictions": [
+        "全球"
+      ],
+      "reason": null,
+      "method": "通过推高石油和天然气价格增加进口成本",
+      "metrics": [
+        {
+          "name": "全球能源进口账单",
+          "value": null,
+          "unit": "美元",
+          "change": "较原预期增加3300亿",
+          "period": "3月至8月的六个月"
+        }
+      ],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": "能源与清洁空气研究中心（CREA）"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Energy/Crude-Oil/Iran-War-Forces-a-Rewrite-of-Global-Oil-Trade-Routes.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "能源进口",
+      "进口成本",
+      "油气价格",
+      "中东冲突"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T23:00:00Z",
+    "collected_at": "2026-09-06T06:04:28.34731Z"
+  },
+  "EVD23254a7d-4301-568a-88e0-d4f1b9cde225": {
+    "id": "EVD23254a7d-4301-568a-88e0-d4f1b9cde225",
+    "raw_evidence_id": "RAW29c772cf-5036-5a7b-afd3-d778872e6d33",
+    "title": "Iran War Forces a Rewrite of Global Oil Trade Routes",
+    "summary": "阿联酋已将原油流向改至霍尔木兹海峡外的富查伊拉港，但同样面临出口能力限制。",
+    "semantic": {
+      "actors": [
+        "阿联酋"
+      ],
+      "action": "将原油流向改至富查伊拉港",
+      "objects": [
+        "原油出口流向"
+      ],
+      "stage": "IMPLEMENTED",
+      "modality": "FACT",
+      "time": {
+        "raw": "战争期间",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "阿联酋"
+      ],
+      "reason": "降低出口路线遭受攻击的风险",
+      "method": "利用位于霍尔木兹海峡外的富查伊拉港出口",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Energy/Crude-Oil/Iran-War-Forces-a-Rewrite-of-Global-Oil-Trade-Routes.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "阿联酋",
+      "富查伊拉",
+      "输油管道",
+      "原油改道"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T23:00:00Z",
+    "collected_at": "2026-09-06T07:35:59.978508Z"
+  },
+  "EVD24f3fcec-634f-50b5-8632-a3e0f0cbfa55": {
+    "id": "EVD24f3fcec-634f-50b5-8632-a3e0f0cbfa55",
+    "raw_evidence_id": "RAW0a02815d-ba3e-5464-b372-c021ab726336",
+    "title": "BESS Industry Buzz: German grid attack, revenue cannibilisation, CATL’s price cut, sodium-ion’s ramp-up and more",
+    "summary": "AmpVerve的Farah Z称，澳大利亚电池储能系统对电价价差的利用正反过来压缩可套利价差。",
+    "semantic": {
+      "actors": [
+        "澳大利亚电池储能系统"
+      ],
+      "action": "压缩电价价差",
+      "objects": [
+        "澳大利亚电力市场电价价差"
+      ],
+      "stage": "OCCURRED",
+      "modality": "SPEC",
+      "time": {
+        "raw": null,
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "澳大利亚"
+      ],
+      "reason": null,
+      "method": "利用电力市场电价价差进行充放电交易",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "Energy Storage News",
+        "claimed_by": "Farah Z"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCb7505968-f65e-55a5-9294-b8a7be829a4a",
+        "code": "SOCIAL_MEDIA_BRIEF",
+        "name": "社交媒体快讯",
+        "description": "来自社交媒体平台的简短发布、评论或即时消息。"
+      }
+    ],
+    "source_id": "energy_storage_news",
+    "source_name": "Energy Storage News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.energy-storage.news/bess-industry-buzz-german-grid-attack-revenue-cannibilisation-catls-price-cut-sodium-ions-ramp-up-and-more/",
+    "is_original": false,
+    "quoted_source_name": "LinkedIn",
+    "keywords": [
+      "澳洲储能",
+      "电价价差",
+      "储能收益"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T11:14:49Z",
+    "collected_at": "2026-09-06T03:43:56.11867Z"
+  },
+  "EVD27980646-8dd7-52cd-8a32-3de3f6ed0911": {
+    "id": "EVD27980646-8dd7-52cd-8a32-3de3f6ed0911",
+    "raw_evidence_id": "RAW0a02815d-ba3e-5464-b372-c021ab726336",
+    "title": "BESS Industry Buzz: German grid attack, revenue cannibilisation, CATL’s price cut, sodium-ion’s ramp-up and more",
+    "summary": "JLi Battery创始人Jerry Wan称，宁德时代本周下调了314Ah磷酸铁锂电芯价格。",
+    "semantic": {
+      "actors": [
+        "宁德时代"
+      ],
+      "action": "下调价格",
+      "objects": [
+        "314Ah磷酸铁锂电芯"
+      ],
+      "stage": "OCCURRED",
+      "modality": "SPEC",
+      "time": {
+        "raw": "this week",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "中国"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [],
+      "attribution": {
+        "reported_by": "Energy Storage News",
+        "claimed_by": "Jerry Wan"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCb7505968-f65e-55a5-9294-b8a7be829a4a",
+        "code": "SOCIAL_MEDIA_BRIEF",
+        "name": "社交媒体快讯",
+        "description": "来自社交媒体平台的简短发布、评论或即时消息。"
+      }
+    ],
+    "source_id": "energy_storage_news",
+    "source_name": "Energy Storage News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.energy-storage.news/bess-industry-buzz-german-grid-attack-revenue-cannibilisation-catls-price-cut-sodium-ions-ramp-up-and-more/",
+    "is_original": false,
+    "quoted_source_name": "LinkedIn",
+    "keywords": [
+      "宁德时代",
+      "磷酸铁锂",
+      "电芯降价"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T11:14:49Z",
+    "collected_at": "2026-09-06T03:43:56.11867Z"
+  },
+  "EVD27e4114c-96b2-5f5b-887e-458b29a5a547": {
+    "id": "EVD27e4114c-96b2-5f5b-887e-458b29a5a547",
+    "raw_evidence_id": "RAWe192692f-66f8-5e70-be08-f318755efedf",
+    "title": "Japan, South Korea and the U.S. Forge a New Nuclear Alliance",
+    "summary": "美国、日本和韩国于今年7月签署小型模块化反应堆部署合作协议，拟协调三国核工业、简化许可并优化供应链。",
+    "semantic": {
+      "actors": [
+        "日本",
+        "美国",
+        "韩国"
+      ],
+      "action": "签署合作协议",
+      "objects": [
+        "小型模块化反应堆部署合作框架"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "今年7月",
+        "start_at": null,
+        "end_at": null,
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "日本",
+        "美国",
+        "韩国"
+      ],
+      "reason": "发挥三国在民用核能领域的互补优势，并为地区伙伴提供更具竞争力的反应堆技术选择",
+      "method": "通过三国民用核工业合作，推动规模化部署模式、降低项目开发风险、促进私人投资、简化许可流程并优化供应链",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": "美国国务院"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Alternative-Energy/Nuclear-Power/Japan-South-Korea-and-the-US-Forge-a-New-Nuclear-Alliance.html",
+    "is_original": false,
+    "quoted_source_name": "美国国务院",
+    "keywords": [
+      "美日韩",
+      "小型堆",
+      "核能合作",
+      "供应链"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-05T21:00:00Z",
+    "collected_at": "2026-09-06T03:43:59.781095Z"
+  },
+  "EVD2997ae1b-a29c-5e0b-a53a-df961e8d67a2": {
+    "id": "EVD2997ae1b-a29c-5e0b-a53a-df961e8d67a2",
+    "raw_evidence_id": "RAWc1469332-6c75-5910-85fa-0192a097db92",
+    "title": "Iran War Forces a Rewrite of Global Oil Trade Routes",
+    "summary": "沙特逆转东西向管道流向，将原油向西输往延布港，以绕开霍尔木兹海峡，但延布港处理能力有限。",
+    "semantic": {
+      "actors": [
+        "沙特阿拉伯"
+      ],
+      "action": "逆转管道流向并改道出口",
+      "objects": [
+        "原油出口路线"
+      ],
+      "stage": "IMPLEMENTED",
+      "modality": "FACT",
+      "time": {
+        "raw": "战事发生后",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "沙特阿拉伯"
+      ],
+      "reason": "绕开受战争影响的霍尔木兹海峡",
+      "method": "逆转东西向管道流向，将原油向西输往延布港",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Energy/Crude-Oil/Iran-War-Forces-a-Rewrite-of-Global-Oil-Trade-Routes.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "沙特",
+      "东西管道",
+      "延布港",
+      "出口改道"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T23:00:00Z",
+    "collected_at": "2026-09-06T06:32:34.613937Z"
+  },
+  "EVD29cc719e-6d30-5970-bae1-c49899ae11a8": {
+    "id": "EVD29cc719e-6d30-5970-bae1-c49899ae11a8",
+    "raw_evidence_id": "RAW68e21397-3951-596d-abf7-a07aa31d188c",
+    "title": "Inox Solar Americas signs 767MW US module supply agreement",
+    "summary": "Inox Clean Energy于2026年4月完成约7.5亿美元收购Boviet Solar，取得其美国北卡罗来纳州工厂3GW光伏组件年产能。",
+    "semantic": {
+      "actors": [
+        "Inox Clean Energy"
+      ],
+      "action": "完成收购",
+      "objects": [
+        "Boviet Solar",
+        "美国光伏组件制造产能"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "2026年4月",
+        "start_at": "2026-03-31T16:00:00Z",
+        "end_at": "2026-04-30T15:59:59.999999Z",
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "美国",
+        "美国北卡罗来纳州"
+      ],
+      "reason": "扩大在美国光伏制造市场的布局",
+      "method": "以约7.5亿美元收购Boviet Solar，取得其位于北卡罗来纳州格林维尔的美国组件制造设施",
+      "metrics": [
+        {
+          "name": "取得的组件年产能",
+          "value": "3",
+          "unit": "GW",
+          "change": null,
+          "period": "年度"
+        },
+        {
+          "name": "收购金额",
+          "value": "约7.5亿",
+          "unit": "美元",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "PV Tech",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "pv_tech",
+    "source_name": "PV Tech",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.pv-tech.org/inox-solar-americas-signs-767mw-us-module-supply-agreement/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "Inox清能",
+      "Boviet",
+      "光伏并购",
+      "组件产能",
+      "美国制造"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T15:11:41Z",
+    "collected_at": "2026-09-06T06:04:27.201325Z"
+  },
+  "EVD2b86bc11-fd22-5b15-a088-573c03d9d587": {
+    "id": "EVD2b86bc11-fd22-5b15-a088-573c03d9d587",
+    "raw_evidence_id": "RAW0b023c64-2af5-5ac7-b55c-b9c6f887c135",
+    "title": "Iran War Forces a Rewrite of Global Oil Trade Routes",
+    "summary": "CREA称，3月至8月全球能源进口支出较原预期增加3300亿美元，油气涨价与美以和伊朗之间的战争有关。",
+    "semantic": {
+      "actors": [
+        "全球能源进口国"
+      ],
+      "action": "增加全球能源进口支出",
+      "objects": [
+        "全球能源进口支出"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "3月至8月的六个月",
+        "start_at": null,
+        "end_at": null,
+        "precision": "RANGE"
+      },
+      "jurisdictions": null,
+      "reason": "美国和以色列与伊朗之间的战争推高油气价格",
+      "method": null,
+      "metrics": [
+        {
+          "name": "全球能源进口支出",
+          "value": null,
+          "unit": "美元",
+          "change": "较原预期增加3300亿",
+          "period": "3月至8月的六个月"
+        }
+      ],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": "能源与清洁空气研究中心（CREA）"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Energy/Crude-Oil/Iran-War-Forces-a-Rewrite-of-Global-Oil-Trade-Routes.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "能源进口",
+      "进口成本",
+      "油气价格",
+      "中东战争"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T23:00:00Z",
+    "collected_at": "2026-09-06T07:32:12.483468Z"
+  },
+  "EVD2c032da7-cc4c-53c8-9010-b9e0052a8513": {
+    "id": "EVD2c032da7-cc4c-53c8-9010-b9e0052a8513",
+    "raw_evidence_id": "RAW68e21397-3951-596d-abf7-a07aa31d188c",
+    "title": "Inox Solar Americas signs 767MW US module supply agreement",
+    "summary": "Boviet Solar收购交易还包括新增3GW光伏电池年产能的计划，相关电池工厂预计于2027年投产。",
+    "semantic": {
+      "actors": [
+        "Boviet Solar",
+        "Inox Clean Energy"
+      ],
+      "action": "计划投产",
+      "objects": [
+        "光伏电池制造设施",
+        "美国光伏电池产能"
+      ],
+      "stage": "EXPECTED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "2027年",
+        "start_at": "2026-12-31T16:00:00Z",
+        "end_at": "2027-12-31T15:59:59.999999Z",
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": null,
+      "method": "建设光伏电池制造设施",
+      "metrics": [
+        {
+          "name": "计划新增电池年产能",
+          "value": "3",
+          "unit": "GW",
+          "change": null,
+          "period": "年度"
+        }
+      ],
+      "attribution": {
+        "reported_by": "PV Tech",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "pv_tech",
+    "source_name": "PV Tech",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.pv-tech.org/inox-solar-americas-signs-767mw-us-module-supply-agreement/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "Inox清能",
+      "光伏电池",
+      "产能扩张",
+      "美国制造"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T15:11:41Z",
+    "collected_at": "2026-09-06T06:04:27.201325Z"
+  },
+  "EVD2dc3e4a8-b5b0-5f7f-924b-c025a8379c1d": {
+    "id": "EVD2dc3e4a8-b5b0-5f7f-924b-c025a8379c1d",
+    "raw_evidence_id": "RAWb672b4eb-e555-55d9-aaee-157f7bf8e0f3",
+    "title": "伊朗打击企图进入霍尔木兹海峡的美军海上无人艇",
+    "summary": "美国与伊朗在无人艇遇袭事件前数小时相互实施了军事打击。",
+    "semantic": {
+      "actors": [
+        "伊朗",
+        "美国"
+      ],
+      "action": "相互实施军事打击",
+      "objects": [
+        "对方军事目标"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "此前数小时",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "伊朗",
+        "美国"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [],
+      "attribution": {
+        "reported_by": "央视新闻",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "cls_telegraph",
+    "source_name": "财联社",
+    "source_level": "L2_WIRE",
+    "source_url": "https://www.cls.cn/detail/2475097",
+    "is_original": false,
+    "quoted_source_name": "央视新闻",
+    "keywords": [
+      "伊朗",
+      "美军",
+      "军事冲突"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-06T05:44:22Z",
+    "collected_at": "2026-09-06T06:04:19.451948Z"
+  },
+  "EVD2ed90fa6-a8db-5a83-a3c9-8c6d946cdab4": {
+    "id": "EVD2ed90fa6-a8db-5a83-a3c9-8c6d946cdab4",
+    "raw_evidence_id": "RAWb50373f9-b5ea-5cb0-9ee6-cff1a13ec4ce",
+    "title": "Playco cut manual fixes 50% prototyping games with GPT-6 Astra",
+    "summary": "Playco使用GPT-6 Astra从同一灰盒基础构建了三个主题游戏原型，并称人工修正次数较上一代模型减少50%。",
+    "semantic": {
+      "actors": [
+        "Playco"
+      ],
+      "action": "构建并测试",
+      "objects": [
+        "主题游戏原型",
+        "游戏原型开发流程"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": null,
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": null,
+      "reason": null,
+      "method": "使用GPT-6 Astra，以一个灰盒基础构建三个主题游戏原型",
+      "metrics": [
+        {
+          "name": "主题游戏原型数量",
+          "value": "3",
+          "unit": "个",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "人工修正次数",
+          "value": null,
+          "unit": "%",
+          "change": "较上一代模型减少50%",
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "OpenAI",
+        "claimed_by": "Playco"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "openai_news",
+    "source_name": "OpenAI",
+    "source_level": "L1_OFFICIAL",
+    "source_url": "https://openai.com/index/playco-game-prototyping-with-astra",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "Playco",
+      "游戏原型",
+      "生成式AI",
+      "效率提升"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-03T12:00:00Z",
+    "collected_at": "2026-09-06T03:43:57.189049Z"
+  },
+  "EVD31f9e937-9f5b-58d1-a03b-87cfeeb11be6": {
+    "id": "EVD31f9e937-9f5b-58d1-a03b-87cfeeb11be6",
+    "raw_evidence_id": "RAWfd00f181-69c1-5102-b8e1-fbeaa9ee3729",
+    "title": "海口出台楼市新政 落户之日起即可享受海南居民同等购房待遇",
+    "summary": "海口市住建局9月5日印发楼市新政，落户人员自落户之日起即可享受海南居民同等购房待遇。",
+    "semantic": {
+      "actors": [
+        "海口市住房和城乡建设局"
+      ],
+      "action": "印发房地产市场支持措施",
+      "objects": [
+        "《关于促进房地产市场平稳健康发展若干措施的通知》",
+        "落户人员购房待遇"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "FACT",
+      "time": {
+        "raw": "9月5日",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "中国海南省海口市"
+      ],
+      "reason": null,
+      "method": "允许落户人员自落户之日起享受海南居民同等购房待遇",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "东方财富",
+        "claimed_by": "海口市住房和城乡建设局"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5965b67d-1578-54a6-9b81-900a61a47a3f",
+        "code": "POLICY_DOCUMENT_SUMMARY",
+        "name": "政策文件摘要",
+        "description": "对正式政策、法规、规划或政府文件进行解读和摘要。"
+      }
+    ],
+    "source_id": "eastmoney_fastnews",
+    "source_name": "东方财富",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://finance.eastmoney.com/a/202609063866070759.html",
+    "is_original": false,
+    "quoted_source_name": "海口市住房和城乡建设局",
+    "keywords": [
+      "海口楼市",
+      "购房政策",
+      "落户待遇"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-06T05:13:04Z",
+    "collected_at": "2026-09-06T05:40:47.377723Z"
+  },
+  "EVD32205fd1-0319-5382-8d78-c9cfc50e2c31": {
+    "id": "EVD32205fd1-0319-5382-8d78-c9cfc50e2c31",
+    "raw_evidence_id": "RAW97d6dcf7-a8ff-5cb5-8390-aa41bf4bf8c9",
+    "title": "America Is Betting Big on a New Generation of Small Nuclear Reactors",
+    "summary": "Aalo在7月宣布其临界试验反应堆已实现临界运行，并正开发用于AI数据中心的10 MWe反应堆及50 MWe组合模块。",
+    "semantic": {
+      "actors": [
+        "Aalo"
+      ],
+      "action": "实现临界运行",
+      "objects": [
+        "Critical Test Reactor"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "In July",
+        "start_at": null,
+        "end_at": null,
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": null,
+      "method": "从破土动工到形成可持续、自持式受控链式反应用时不到八个月",
+      "metrics": [
+        {
+          "name": "实现临界运行建设时间",
+          "value": "少于8",
+          "unit": "个月",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "目标单堆电功率",
+          "value": "10",
+          "unit": "MWe",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "目标模块总电功率",
+          "value": "50",
+          "unit": "MWe",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": "Aalo"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Alternative-Energy/Nuclear-Power/America-Is-Betting-Big-on-a-New-Generation-of-Small-Nuclear-Reactors.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "Aalo",
+      "试验堆",
+      "临界运行",
+      "数据中心"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T19:00:00Z",
+    "collected_at": "2026-09-06T06:32:34.613937Z"
+  },
+  "EVD32c66d12-55f7-5d13-8e27-384af7017964": {
+    "id": "EVD32c66d12-55f7-5d13-8e27-384af7017964",
+    "raw_evidence_id": "RAWaa761ae3-a0aa-5d43-be13-630eaeb17b23",
+    "title": "Trump turns up the heat on Warsh as Fed rate hike looms",
+    "summary": "美联储7月会议维持利率不变，Beth Hammack、Neel Kashkari和Lorie Logan三人持异议并支持加息25个基点。",
+    "semantic": {
+      "actors": [
+        "美国联邦公开市场委员会"
+      ],
+      "action": "维持利率不变",
+      "objects": [
+        "美国政策利率"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "7月会议",
+        "start_at": null,
+        "end_at": null,
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": null,
+      "method": "在利率会议上表决维持利率不变，三名委员主张加息",
+      "metrics": [
+        {
+          "name": "异议委员主张的加息幅度",
+          "value": null,
+          "unit": "个百分点",
+          "change": "+0.25",
+          "period": "7月会议"
+        },
+        {
+          "name": "异议委员人数",
+          "value": "3",
+          "unit": "人",
+          "change": "主张上调",
+          "period": "7月会议"
+        },
+        {
+          "name": "政策利率",
+          "value": null,
+          "unit": null,
+          "change": "维持不变",
+          "period": "7月会议"
+        }
+      ],
+      "attribution": {
+        "reported_by": "CNBC",
+        "claimed_by": "美国联邦公开市场委员会官员"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "cnbc",
+    "source_name": "CNBC",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.cnbc.com/2026/09/05/trump-warsh-fed-september-rate-hike.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美联储",
+      "利率决议",
+      "加息分歧",
+      "通胀"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T19:12:53Z",
+    "collected_at": "2026-09-06T03:43:55.048958Z"
+  },
+  "EVD32ff51bc-b8e1-5d6b-a1e9-97b5470d1520": {
+    "id": "EVD32ff51bc-b8e1-5d6b-a1e9-97b5470d1520",
+    "raw_evidence_id": "RAWae8c1dc1-0ac1-56bc-aee4-b9118663e307",
+    "title": "1.2GW！江西寻乌抽水蓄能电站主体工程正式开工建设",
+    "summary": "8月31日，江西寻乌抽水蓄能电站启动地下厂房中导洞开挖，装机容量120万千瓦的主体工程进入全面建设阶段。",
+    "semantic": {
+      "actors": [
+        "江西寻乌抽水蓄能电站"
+      ],
+      "action": "进入全面建设阶段",
+      "objects": [
+        "电站主体工程"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "8月31日",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "中国",
+        "江西省"
+      ],
+      "reason": null,
+      "method": "启动地下厂房中导洞开挖",
+      "metrics": [
+        {
+          "name": "总装机容量",
+          "value": "120",
+          "unit": "万千瓦",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "国际能源网",
+        "claimed_by": "长江电力"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "in_en_energy",
+    "source_name": "国际能源网",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.in-en.com/article/html/energy-2343495.shtml",
+    "is_original": false,
+    "quoted_source_name": "长江电力",
+    "keywords": [
+      "寻乌抽蓄",
+      "长江电力",
+      "抽水蓄能",
+      "主体工程"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T09:46:03Z",
+    "collected_at": "2026-09-06T06:32:31.079015Z"
+  },
+  "EVD33ef95a3-e365-5c55-a6bc-bf2343afd84d": {
+    "id": "EVD33ef95a3-e365-5c55-a6bc-bf2343afd84d",
+    "raw_evidence_id": "RAWb7b08e8f-acb6-5f4f-b219-d97d10b23f31",
+    "title": "India’s CEA proposes mandatory storage for new solar, wind projects from 2027",
+    "summary": "印度中央电力管理局拟要求2027年7月1日起投运的地面光伏和陆上风电项目配建不低于装机容量10%、时长至少2小时的共址储能，并从2029年7月起将时长提高至4小时。",
+    "semantic": {
+      "actors": [
+        "印度中央电力管理局"
+      ],
+      "action": "提议强制配建储能系统",
+      "objects": [
+        "共址储能系统",
+        "新建地面光伏项目",
+        "新建陆上风电项目"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "3 September 2026",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "印度"
+      ],
+      "reason": "印度可再生能源扩张正加大电力基础设施压力",
+      "method": "要求储能系统与地面光伏或陆上风电项目共址配置，并分阶段提高最低储能时长",
+      "metrics": [
+        {
+          "name": "最低储能功率占电站装机容量比例",
+          "value": "10",
+          "unit": "%",
+          "change": null,
+          "period": "2027年7月1日至2031年6月30日期间投运的项目"
+        },
+        {
+          "name": "最低储能时长",
+          "value": "2",
+          "unit": "小时",
+          "change": null,
+          "period": "2027年7月1日起投运的项目"
+        },
+        {
+          "name": "最低储能时长",
+          "value": "4",
+          "unit": "小时",
+          "change": "由2小时提高至4小时",
+          "period": "2029年7月1日至2031年6月30日期间投运的项目"
+        }
+      ],
+      "attribution": {
+        "reported_by": "PV Tech",
+        "claimed_by": "印度中央电力管理局"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5965b67d-1578-54a6-9b81-900a61a47a3f",
+        "code": "POLICY_DOCUMENT_SUMMARY",
+        "name": "政策文件摘要",
+        "description": "对正式政策、法规、规划或政府文件进行解读和摘要。"
+      }
+    ],
+    "source_id": "pv_tech",
+    "source_name": "PV Tech",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.pv-tech.org/indias-cea-proposes-mandatory-storage-for-new-solar-wind-projects-from-2027/",
+    "is_original": false,
+    "quoted_source_name": "印度中央电力管理局",
+    "keywords": [
+      "印度电力局",
+      "强制储能",
+      "地面光伏",
+      "陆上风电"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T13:09:22Z",
+    "collected_at": "2026-09-06T05:40:55.705197Z"
+  },
+  "EVD34c9095c-bf55-55a1-a67b-50e533046329": {
+    "id": "EVD34c9095c-bf55-55a1-a67b-50e533046329",
+    "raw_evidence_id": "RAWab864df0-8216-5afa-8a4b-12e124057366",
+    "title": "Under the hood: Inside Tesla’s Megapack 3 as Texas production begins",
+    "summary": "特斯拉推出采用磷酸铁锂电芯的Megapack 3，单机容量5MWh、功率2.5MW，能量密度较上一代提高28%，最长支持8小时储能。",
+    "semantic": {
+      "actors": [
+        "Tesla"
+      ],
+      "action": "推出新一代产品",
+      "objects": [
+        "Megapack 3电池储能系统"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "FACT",
+      "time": {
+        "raw": "this time last year",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": null,
+      "reason": null,
+      "method": "采用更大的2.8L磷酸铁锂电芯，并提供多种应用配置",
+      "metrics": [
+        {
+          "name": "单机功率",
+          "value": "2.5",
+          "unit": "MW",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "单机容量",
+          "value": "5",
+          "unit": "MWh",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "循环寿命",
+          "value": "至少10000",
+          "unit": "次",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "最长储能时长",
+          "value": "8",
+          "unit": "小时",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "热管理连接点",
+          "value": null,
+          "unit": "%",
+          "change": "减少78%",
+          "period": "较Megapack 2 XL"
+        },
+        {
+          "name": "能量密度",
+          "value": null,
+          "unit": "%",
+          "change": "增加28%",
+          "period": "较Megapack 2 XL"
+        }
+      ],
+      "attribution": {
+        "reported_by": "Energy Storage News",
+        "claimed_by": "Tesla"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "energy_storage_news",
+    "source_name": "Energy Storage News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.energy-storage.news/under-the-hood-inside-teslas-megapack-3-as-texas-production-begins/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "特斯拉",
+      "巨型储能",
+      "磷酸铁锂"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T09:41:32Z",
+    "collected_at": "2026-09-06T03:43:56.11867Z"
+  },
+  "EVD352289ab-c93b-5ea3-aca5-8cac7393f5aa": {
+    "id": "EVD352289ab-c93b-5ea3-aca5-8cac7393f5aa",
+    "raw_evidence_id": "RAW9abcef17-5535-5279-904b-a661369f1ed0",
+    "title": "周末要闻汇总：事关人工智能、算力设施等 七部门最新部署",
+    "summary": "伊朗军方称可能对美国实施更大规模打击。",
+    "semantic": {
+      "actors": [
+        "伊朗军方"
+      ],
+      "action": "警告或实施更大规模打击",
+      "objects": [
+        "美国"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "SPEC",
+      "time": {
+        "raw": "本周末",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "伊朗",
+        "美国"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [
+        {
+          "name": "打击规模",
+          "value": null,
+          "unit": null,
+          "change": "更大规模",
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "东方财富Choice数据",
+        "claimed_by": "伊朗军方"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "eastmoney_stock_news",
+    "source_name": "东方财富Choice数据",
+    "source_level": "L3_MEDIA",
+    "source_url": "http://finance.eastmoney.com/a/202609063866073991.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "伊朗军方",
+      "对美打击",
+      "冲突升级"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-06T06:00:19Z",
+    "collected_at": "2026-09-06T06:04:19.63321Z"
+  },
+  "EVD35b4787d-9cd6-5191-9409-45187b611e72": {
+    "id": "EVD35b4787d-9cd6-5191-9409-45187b611e72",
+    "raw_evidence_id": "RAW981a2fff-f6ed-594f-a5c8-4b6c556c297b",
+    "title": "The E.U.’s AI Drive Undermines Its ​Own Chip Strategy",
+    "summary": "德国电信正在使用近10,000颗英伟达Blackwell GPU建设慕尼黑工业人工智能云。",
+    "semantic": {
+      "actors": [
+        "德国电信"
+      ],
+      "action": "建设工业人工智能云",
+      "objects": [
+        "慕尼黑工业人工智能云",
+        "英伟达Blackwell GPU"
+      ],
+      "stage": "IMPLEMENTED",
+      "modality": "FACT",
+      "time": {
+        "raw": null,
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "德国"
+      ],
+      "reason": null,
+      "method": "采用英伟达Blackwell GPU建设慕尼黑工业人工智能云",
+      "metrics": [
+        {
+          "name": "英伟达Blackwell GPU数量",
+          "value": "近10,000",
+          "unit": "颗",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "Tech Policy Press",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "ieee_spectrum_semiconductors",
+    "source_name": "IEEE Spectrum Semiconductor",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://spectrum.ieee.org/europes-ai-drive",
+    "is_original": false,
+    "quoted_source_name": "Tech Policy Press",
+    "keywords": [
+      "德国电信",
+      "英伟达",
+      "工业云",
+      "慕尼黑"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-31T14:00:04Z",
+    "collected_at": "2026-09-06T03:43:58.217143Z"
+  },
+  "EVD35e19465-a40a-5bf9-a3f4-da2b20d835fc": {
+    "id": "EVD35e19465-a40a-5bf9-a3f4-da2b20d835fc",
+    "raw_evidence_id": "RAWce9ebef1-f978-505f-bb91-acc91b3bb113",
+    "title": "湖南省老旧住房自主更新可获财政奖补",
+    "summary": "湖南省三部门联合印发并施行老旧住房自主更新支持政策，设置三种更新模式，以产权人出资为主并辅以财政奖补、社会资本和专项贷款，政策有效期5年。",
+    "semantic": {
+      "actors": [
+        "湖南省住房和城乡建设厅",
+        "湖南省自然资源厅",
+        "湖南省财政厅"
+      ],
+      "action": "联合印发并施行支持政策",
+      "objects": [
+        "城市（含县城）建成区国有土地上符合条件的老旧住房自主更新"
+      ],
+      "stage": "EFFECTIVE",
+      "modality": "FACT",
+      "time": {
+        "raw": "9月4日",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "中国湖南省"
+      ],
+      "reason": null,
+      "method": "采取原拆原建、改扩翻和整治提升三种更新模式；实行产权人出资为主、财政奖补为辅、社会资本补充的资金机制，符合条件的项目可申请政策性资金，并鼓励金融机构提供中长期、低息专项贷款",
+      "metrics": [
+        {
+          "name": "政策有效期",
+          "value": "5",
+          "unit": "年",
+          "change": null,
+          "period": "自施行之日起"
+        },
+        {
+          "name": "更新模式数量",
+          "value": "3",
+          "unit": "种",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "人民财讯（援引湖南日报）",
+        "claimed_by": "湖南省住房和城乡建设厅、湖南省自然资源厅、湖南省财政厅"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5965b67d-1578-54a6-9b81-900a61a47a3f",
+        "code": "POLICY_DOCUMENT_SUMMARY",
+        "name": "政策文件摘要",
+        "description": "对正式政策、法规、规划或政府文件进行解读和摘要。"
+      }
+    ],
+    "source_id": "stcn_quicknews",
+    "source_name": "人民财讯",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.stcn.com/article/detail/4173818.html",
+    "is_original": false,
+    "quoted_source_name": "湖南日报",
+    "keywords": [
+      "湖南住建",
+      "老旧住房",
+      "自主更新",
+      "财政奖补",
+      "专项贷款"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-06T00:59:55Z",
+    "collected_at": "2026-09-06T03:04:16.084356Z"
+  },
+  "EVD364a8b92-a9f7-5e7c-a1e8-3f0a72f09b28": {
+    "id": "EVD364a8b92-a9f7-5e7c-a1e8-3f0a72f09b28",
+    "raw_evidence_id": "RAWae8c1dc1-0ac1-56bc-aee4-b9118663e307",
+    "title": "1.2GW！江西寻乌抽水蓄能电站主体工程正式开工建设",
+    "summary": "江西寻乌抽水蓄能电站预计2030年首台机组投产发电，2031年全部机组投产发电。",
+    "semantic": {
+      "actors": [
+        "江西寻乌抽水蓄能电站"
+      ],
+      "action": "计划分阶段投产发电",
+      "objects": [
+        "全部机组",
+        "首台机组"
+      ],
+      "stage": "EXPECTED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "2030年至2031年",
+        "start_at": null,
+        "end_at": null,
+        "precision": "RANGE"
+      },
+      "jurisdictions": [
+        "中国",
+        "江西省"
+      ],
+      "reason": null,
+      "method": "先投产首台机组，后实现全部机组投产",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "国际能源网",
+        "claimed_by": "长江电力"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "in_en_energy",
+    "source_name": "国际能源网",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.in-en.com/article/html/energy-2343495.shtml",
+    "is_original": false,
+    "quoted_source_name": "长江电力",
+    "keywords": [
+      "寻乌抽蓄",
+      "抽水蓄能",
+      "投产发电"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T09:46:03Z",
+    "collected_at": "2026-09-06T06:32:31.079015Z"
+  },
+  "EVD3659f69f-954e-5166-8c10-b241a8d6957c": {
+    "id": "EVD3659f69f-954e-5166-8c10-b241a8d6957c",
+    "raw_evidence_id": "RAWd452cc45-de1c-55a7-a765-b70e009bf611",
+    "title": "AgentX - InferenceXv3: Does CUDA Moat Hold up in Agentic Inferencing?",
+    "summary": "2026年8月21日后，受vLLM优化推动，英伟达B200在DeepSeek V4 Pro智能体推理中的单位成本性能超过AMD MI355X，B300 vLLM和B200 SGLang也保持领先。",
+    "semantic": {
+      "actors": [
+        "英伟达B200"
+      ],
+      "action": "实现成本效率领先",
+      "objects": [
+        "AMD MI355X",
+        "DeepSeek V4 Pro智能体推理性能"
+      ],
+      "stage": "UPDATED",
+      "modality": "FACT",
+      "time": {
+        "raw": "After August 21, 2026",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": null,
+      "reason": "Inferact与英伟达对vLLM进行了优化",
+      "method": "在DeepSeek V4 Pro智能体推理负载下，按总拥有成本归一化比较vLLM与SGLang配置",
+      "metrics": [],
+      "attribution": {
+        "reported_by": null,
+        "claimed_by": "SemiAnalysis"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "semianalysis",
+    "source_name": "SemiAnalysis",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://newsletter.semianalysis.com/p/agentx-inferencexv3-does-cuda-moat",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "推理芯片",
+      "英伟达",
+      "AMD",
+      "成本效率",
+      "CUDA生态"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-24T00:19:35Z",
+    "collected_at": "2026-09-06T03:35:44.909551Z"
+  },
+  "EVD39391805-2d32-5f66-a0e2-95a71d1693f5": {
+    "id": "EVD39391805-2d32-5f66-a0e2-95a71d1693f5",
+    "raw_evidence_id": "RAW6c869dcf-3982-5b11-abb9-b17930248a47",
+    "title": "Iran War Forces a Rewrite of Global Oil Trade Routes",
+    "summary": "美国和以色列打击伊朗后，霍尔木兹海峡原油日流量由接近2000万桶降至约600万至800万桶。",
+    "semantic": {
+      "actors": [
+        "海湾产油国"
+      ],
+      "action": "大幅减少经海峡运输的原油",
+      "objects": [
+        "经霍尔木兹海峡的原油出口"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "美国和以色列首次打击伊朗前至今",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "中东",
+        "霍尔木兹海峡"
+      ],
+      "reason": "美国和以色列打击伊朗后，中东战争及航运风险持续",
+      "method": null,
+      "metrics": [
+        {
+          "name": "霍尔木兹海峡原油日流量",
+          "value": "600万至800万",
+          "unit": "桶/日",
+          "change": "从接近2000万降至600万至800万",
+          "period": "美以首次打击伊朗前至今"
+        }
+      ],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Energy/Crude-Oil/Iran-War-Forces-a-Rewrite-of-Global-Oil-Trade-Routes.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "霍尔木兹",
+      "原油运输",
+      "供应风险",
+      "中东冲突"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T23:00:00Z",
+    "collected_at": "2026-09-06T06:04:28.34731Z"
+  },
+  "EVD3ce39261-2539-5aa0-b0c7-158a5060ca7f": {
+    "id": "EVD3ce39261-2539-5aa0-b0c7-158a5060ca7f",
+    "raw_evidence_id": "RAWb10b943d-92aa-5798-bf8b-c51294278fc9",
+    "title": "Trump’s state capitalism comes to the oil industry with his unprecedented Venezuela deal",
+    "summary": "美国国防部战略资本办公室将无偿取得NABEP 35%股权，国务院可按成本购买20%产量并对其余80%享有优先购买权，美国政府还拥有董事任命否决权。",
+    "semantic": {
+      "actors": [
+        "美国国务院",
+        "美国国防部战略资本办公室"
+      ],
+      "action": "取得股权及石油供应控制权",
+      "objects": [
+        "North America Blue Energy Partners股权",
+        "董事会任命权",
+        "该公司石油产量"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "FACT",
+      "time": {
+        "raw": "Monday",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "委内瑞拉",
+        "美国"
+      ],
+      "reason": "保障美国国家安全所需资源，并为战略石油储备、军事及其他敏感用途提供供应",
+      "method": "战略资本办公室无偿取得股权；国务院可按生产成本购买部分产量并对其余产量享有优先购买权；美国政府可否决董事任命，且董事会多数须为美国公民",
+      "metrics": [
+        {
+          "name": "享有优先购买权的产量比例",
+          "value": "80",
+          "unit": "%",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "战略资本办公室持股比例",
+          "value": "35",
+          "unit": "%",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "按生产成本购买的产量比例",
+          "value": "20",
+          "unit": "%",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "CNBC",
+        "claimed_by": "白宫"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "cnbc",
+    "source_name": "CNBC",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.cnbc.com/2026/09/05/trump-venezuela-oil-north-america-blue-energy-partners-nabep.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美国防部",
+      "战略资本",
+      "北美蓝能",
+      "石油供应"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T15:11:03Z",
+    "collected_at": "2026-09-06T03:43:55.048958Z"
+  },
+  "EVD3e4c3e22-2cf7-5c98-8cec-0e3de1313c1f": {
+    "id": "EVD3e4c3e22-2cf7-5c98-8cec-0e3de1313c1f",
+    "raw_evidence_id": "RAW3930d4f5-afba-5bee-95dc-4640c6320bbb",
+    "title": "伊朗革命卫队称打击美航母和驱逐舰",
+    "summary": "伊朗革命卫队称其空军9月6日发射多枚弹道导弹，打击一艘参与对伊海上封锁的美军航母和一艘驱逐舰，两舰受损后撤离冲突地区。",
+    "semantic": {
+      "actors": [
+        "伊朗伊斯兰革命卫队空军"
+      ],
+      "action": "发射弹道导弹打击",
+      "objects": [
+        "美军航空母舰",
+        "美军驱逐舰"
+      ],
+      "stage": "OCCURRED",
+      "modality": "SPEC",
+      "time": {
+        "raw": "9月6日",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "伊朗",
+        "美国"
+      ],
+      "reason": null,
+      "method": "发射多枚弹道导弹",
+      "metrics": [
+        {
+          "name": "遭打击美军军舰数量",
+          "value": "2",
+          "unit": "艘",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "遭打击航空母舰数量",
+          "value": "1",
+          "unit": "艘",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "遭打击驱逐舰数量",
+          "value": "1",
+          "unit": "艘",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "东方财富",
+        "claimed_by": "伊朗伊斯兰革命卫队公共关系部门"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "eastmoney_fastnews",
+    "source_name": "东方财富",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://finance.eastmoney.com/a/202609063866061815.html",
+    "is_original": false,
+    "quoted_source_name": "伊朗方面",
+    "keywords": [
+      "伊朗革命卫队",
+      "美军航母",
+      "弹道导弹",
+      "海上封锁",
+      "美伊冲突"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-06T02:49:04Z",
+    "collected_at": "2026-09-06T03:43:51.21273Z"
+  },
+  "EVD419512fc-131a-5568-86e2-9b71c9837173": {
+    "id": "EVD419512fc-131a-5568-86e2-9b71c9837173",
+    "raw_evidence_id": "RAW1983b70e-e9e5-5971-a033-e0ba38ed19d9",
+    "title": "Digital public infrastructure and the future of renewable energy: insights from India Energy Stack",
+    "summary": "印度电力部已启动为期12个月的印度能源栈概念验证，在德里、古吉拉特、安得拉、北方邦和孟买的配电企业开展试点，示范安排在FY2026-27。",
+    "semantic": {
+      "actors": [
+        "印度电力部"
+      ],
+      "action": "启动概念验证试点",
+      "objects": [
+        "印度能源栈",
+        "配电企业"
+      ],
+      "stage": "IMPLEMENTED",
+      "modality": "FACT",
+      "time": {
+        "raw": "FY2026-27",
+        "start_at": null,
+        "end_at": null,
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "北方邦",
+        "印度",
+        "古吉拉特邦",
+        "孟买",
+        "安得拉邦",
+        "德里"
+      ],
+      "reason": "在多样且复杂的电力系统中验证印度能源栈的部署效果",
+      "method": "先行试点后向全国扩展，验证互操作性、数据治理流程及利益相关方的数字平台交互",
+      "metrics": [
+        {
+          "name": "概念验证周期",
+          "value": "12",
+          "unit": "个月",
+          "change": null,
+          "period": "FY2026-27"
+        }
+      ],
+      "attribution": {
+        "reported_by": "PV Tech",
+        "claimed_by": "印度电力部"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "pv_tech",
+    "source_name": "PV Tech",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.pv-tech.org/digital-public-infrastructure-and-the-future-of-renewable-energy-insights-from-india-energy-stack/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "印度电力部",
+      "能源栈",
+      "试点",
+      "配电企业"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T15:26:22Z",
+    "collected_at": "2026-09-06T03:43:59.054971Z"
+  },
+  "EVD4328ffb0-5a92-57ff-b01b-5beaa8ffbcac": {
+    "id": "EVD4328ffb0-5a92-57ff-b01b-5beaa8ffbcac",
+    "raw_evidence_id": "RAWb672b4eb-e555-55d9-aaee-157f7bf8e0f3",
+    "title": "伊朗打击企图进入霍尔木兹海峡的美军海上无人艇",
+    "summary": "伊朗伊斯兰革命卫队海军打击一艘企图驶入霍尔木兹海峡伊朗“保护区域”的美军海上无人艇。",
+    "semantic": {
+      "actors": [
+        "伊朗伊斯兰革命卫队海军"
+      ],
+      "action": "实施打击",
+      "objects": [
+        "企图驶入伊朗保护区域的美军海上无人艇"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "当地时间9月6日",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "伊朗",
+        "霍尔木兹海峡"
+      ],
+      "reason": "该无人艇企图驶入霍尔木兹海峡伊朗“保护区域”",
+      "method": null,
+      "metrics": [],
+      "attribution": {
+        "reported_by": "央视新闻",
+        "claimed_by": "伊朗伊斯兰革命卫队"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "cls_telegraph",
+    "source_name": "财联社",
+    "source_level": "L2_WIRE",
+    "source_url": "https://www.cls.cn/detail/2475097",
+    "is_original": false,
+    "quoted_source_name": "央视新闻",
+    "keywords": [
+      "伊朗",
+      "美军",
+      "霍尔木兹",
+      "军事冲突"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-06T05:44:22Z",
+    "collected_at": "2026-09-06T06:04:19.451948Z"
+  },
+  "EVD4634deec-556b-5364-83e3-7ea042d0599b": {
+    "id": "EVD4634deec-556b-5364-83e3-7ea042d0599b",
+    "raw_evidence_id": "RAWaa761ae3-a0aa-5d43-be13-630eaeb17b23",
+    "title": "Trump turns up the heat on Warsh as Fed rate hike looms",
+    "summary": "特朗普政府多名高级官员在过去一周公开要求美联储避免加息，部分官员进一步主张降息。",
+    "semantic": {
+      "actors": [
+        "特朗普政府高级官员"
+      ],
+      "action": "公开施压避免加息并推动降息",
+      "objects": [
+        "美联储利率政策"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "过去一周",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": "政府官员认为经济增长和供给侧扩张不必然引发通胀，并担忧加息冲击美国关键产业",
+      "method": "由总统、副总统、财政部长和高级经济顾问公开发表政策主张",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "CNBC",
+        "claimed_by": "特朗普政府高级官员"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "cnbc",
+    "source_name": "CNBC",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.cnbc.com/2026/09/05/trump-warsh-fed-september-rate-hike.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "特朗普政府",
+      "美联储",
+      "利率政策",
+      "降息"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T19:12:53Z",
+    "collected_at": "2026-09-06T03:43:55.048958Z"
+  },
+  "EVD46917294-9ffd-5276-9624-6dad78b59c59": {
+    "id": "EVD46917294-9ffd-5276-9624-6dad78b59c59",
+    "raw_evidence_id": "RAW75712091-9ae2-5c3b-aea4-99cfcc6ad68b",
+    "title": "Novartis, Ionis drug failure spurs questions about an emerging class of heart medicines",
+    "summary": "诺华与Ionis的pelacarsen在逾8000人三期试验中虽降低Lp(a)水平，但未能在标准治疗基础上降低心肌梗死、卒中和死亡风险。",
+    "semantic": {
+      "actors": [
+        "Ionis Pharmaceuticals",
+        "诺华"
+      ],
+      "action": "未能降低重大心血管事件风险",
+      "objects": [
+        "Lp(a)水平",
+        "pelacarsen三期临床试验",
+        "心肌梗死、卒中和死亡风险"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "Friday",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": null,
+      "reason": null,
+      "method": "在超过8000名参与者的多年三期试验中，将pelacarsen与标准药物联用，并与标准疗法加安慰剂比较",
+      "metrics": [
+        {
+          "name": "Lp(a)水平",
+          "value": null,
+          "unit": null,
+          "change": "降低",
+          "period": "三期试验"
+        },
+        {
+          "name": "试验参与者",
+          "value": "超过8000",
+          "unit": "人",
+          "change": null,
+          "period": "多年三期试验"
+        },
+        {
+          "name": "重大心血管事件风险",
+          "value": null,
+          "unit": null,
+          "change": "未降低",
+          "period": "三期试验"
+        }
+      ],
+      "attribution": {
+        "reported_by": "BioPharma Dive",
+        "claimed_by": "诺华"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "biopharma_dive",
+    "source_name": "BioPharma Dive",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.biopharmadive.com/news/novartis-ionis-pelacarsen-lpa-horizon-study-results-fail/829736/",
+    "is_original": false,
+    "quoted_source_name": "诺华",
+    "keywords": [
+      "诺华",
+      "Ionis",
+      "心血管药",
+      "三期试验",
+      "Lp(a)"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-05T16:51:00Z",
+    "collected_at": "2026-09-06T03:43:53.286606Z"
+  },
+  "EVD4857addd-f54b-5a5e-863f-90a082ab34de": {
+    "id": "EVD4857addd-f54b-5a5e-863f-90a082ab34de",
+    "raw_evidence_id": "RAWb10b943d-92aa-5798-bf8b-c51294278fc9",
+    "title": "Trump’s state capitalism comes to the oil industry with his unprecedented Venezuela deal",
+    "summary": "雪佛龙宣布将投资70亿美元，并计划到2031年把其在委内瑞拉的石油产量提高一倍以上。",
+    "semantic": {
+      "actors": [
+        "雪佛龙"
+      ],
+      "action": "投资并扩大石油产量",
+      "objects": [
+        "委内瑞拉石油业务",
+        "当地石油产量"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "by 2031",
+        "start_at": null,
+        "end_at": null,
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "委内瑞拉"
+      ],
+      "reason": null,
+      "method": "投资委内瑞拉石油业务以将当地生产规模扩大一倍以上",
+      "metrics": [
+        {
+          "name": "计划产量增幅",
+          "value": null,
+          "unit": "%",
+          "change": "增长超过100%",
+          "period": "截至2031年"
+        },
+        {
+          "name": "计划投资额",
+          "value": "70亿",
+          "unit": "美元",
+          "change": null,
+          "period": "截至2031年"
+        }
+      ],
+      "attribution": {
+        "reported_by": "CNBC",
+        "claimed_by": "雪佛龙"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "cnbc",
+    "source_name": "CNBC",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.cnbc.com/2026/09/05/trump-venezuela-oil-north-america-blue-energy-partners-nabep.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "雪佛龙",
+      "石油投资",
+      "委内瑞拉",
+      "产量扩张"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T15:11:03Z",
+    "collected_at": "2026-09-06T03:43:55.048958Z"
+  },
+  "EVD4d2e5ccd-f978-5436-a7ce-ef0b9a839fbe": {
+    "id": "EVD4d2e5ccd-f978-5436-a7ce-ef0b9a839fbe",
+    "raw_evidence_id": "RAW0b023c64-2af5-5ac7-b55c-b9c6f887c135",
+    "title": "Iran War Forces a Rewrite of Global Oil Trade Routes",
+    "summary": "拉斯拉凡枢纽受损后，卡塔尔遭遇不可抗力并难以维持液化天然气出口。",
+    "semantic": {
+      "actors": [
+        "卡塔尔"
+      ],
+      "action": "削减液化天然气出口",
+      "objects": [
+        "液化天然气出口"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "当前",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "卡塔尔"
+      ],
+      "reason": "伊朗报复美国打击时造成拉斯拉凡枢纽受损",
+      "method": "在不可抗力状态下维持部分天然气出口",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Energy/Crude-Oil/Iran-War-Forces-a-Rewrite-of-Global-Oil-Trade-Routes.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "卡塔尔",
+      "液化气",
+      "拉斯拉凡",
+      "不可抗力"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T23:00:00Z",
+    "collected_at": "2026-09-06T07:32:12.483468Z"
+  },
+  "EVD506e6f27-8b22-5f26-9e95-fa10575dc422": {
+    "id": "EVD506e6f27-8b22-5f26-9e95-fa10575dc422",
+    "raw_evidence_id": "RAWb10b943d-92aa-5798-bf8b-c51294278fc9",
+    "title": "Trump’s state capitalism comes to the oil industry with his unprecedented Venezuela deal",
+    "summary": "委内瑞拉罗德里格斯政府向North America Blue Energy Partners授予17个油田为期100年的特许经营权，涉及白宫所称650亿桶已探明原油储量。",
+    "semantic": {
+      "actors": [
+        "委内瑞拉罗德里格斯政府"
+      ],
+      "action": "授予油田特许经营权",
+      "objects": [
+        "650亿桶已探明原油储量",
+        "委内瑞拉17个油田"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "FACT",
+      "time": {
+        "raw": "this week",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "委内瑞拉"
+      ],
+      "reason": null,
+      "method": "向总部位于巴巴多斯的North America Blue Energy Partners授予17个油田为期一个世纪的特许经营权",
+      "metrics": [
+        {
+          "name": "油田数量",
+          "value": "17",
+          "unit": "个",
+          "change": null,
+          "period": "特许经营期内"
+        },
+        {
+          "name": "涉及储量占委内瑞拉储量比例",
+          "value": "约20",
+          "unit": "%",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "涉及已探明原油储量",
+          "value": "650",
+          "unit": "亿桶",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "特许经营期限",
+          "value": "100",
+          "unit": "年",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "CNBC",
+        "claimed_by": "白宫"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "cnbc",
+    "source_name": "CNBC",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.cnbc.com/2026/09/05/trump-venezuela-oil-north-america-blue-energy-partners-nabep.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "委内瑞拉",
+      "油田特许",
+      "原油储量",
+      "北美蓝能"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T15:11:03Z",
+    "collected_at": "2026-09-06T03:43:55.048958Z"
+  },
+  "EVD52a7e296-9b2c-55ad-a64f-7599fcab0d37": {
+    "id": "EVD52a7e296-9b2c-55ad-a64f-7599fcab0d37",
+    "raw_evidence_id": "RAWdc2f4889-1b9c-5c99-8c64-f5a5ba2025c5",
+    "title": "Africa’s hidden solar boom revealed",
+    "summary": "非洲光伏制造产能预计在2026年增至约3.5GW、达到原来的四倍，主要由埃及和坦桑尼亚新工厂投产推动，但多数产出将出口美国。",
+    "semantic": {
+      "actors": [
+        "非洲光伏制造业"
+      ],
+      "action": "预计扩大光伏制造产能",
+      "objects": [
+        "光伏制造产能",
+        "光伏组件"
+      ],
+      "stage": "EXPECTED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "2026年",
+        "start_at": "2025-12-31T16:00:00Z",
+        "end_at": "2026-12-31T15:59:59.999999Z",
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "坦桑尼亚",
+        "埃及",
+        "美国",
+        "非洲"
+      ],
+      "reason": null,
+      "method": "埃及和坦桑尼亚新工厂投产",
+      "metrics": [
+        {
+          "name": "光伏制造产能",
+          "value": "约3.5",
+          "unit": "GW",
+          "change": "增至四倍",
+          "period": "2026年"
+        }
+      ],
+      "attribution": {
+        "reported_by": "PV Tech",
+        "claimed_by": "Ember和African Tech Futures Lab"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "pv_tech",
+    "source_name": "PV Tech",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.pv-tech.org/africas-hidden-solar-boom-revealed/",
+    "is_original": false,
+    "quoted_source_name": "Ember和African Tech Futures Lab",
+    "keywords": [
+      "非洲光伏",
+      "组件制造",
+      "埃及",
+      "坦桑尼亚"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T14:04:50Z",
+    "collected_at": "2026-09-06T03:43:59.054971Z"
+  },
+  "EVD52bad6aa-9939-51ad-84c9-0f1b067f46f9": {
+    "id": "EVD52bad6aa-9939-51ad-84c9-0f1b067f46f9",
+    "raw_evidence_id": "RAWcc5d3e79-1373-5cca-b78e-c9f7687ea5e4",
+    "title": "America Is Betting Big on a New Generation of Small Nuclear Reactors",
+    "summary": "美国第14299号行政命令指定陆军牵头军事核能工作，并要求建立正式项目，在2028年9月30日前于美国国内军事设施投入一座可运行反应堆。",
+    "semantic": {
+      "actors": [
+        "美国政府"
+      ],
+      "action": "指定牵头并设定部署期限",
+      "objects": [
+        "军事核能项目",
+        "美国国内军事设施先进核反应堆",
+        "美国陆军"
+      ],
+      "stage": "EFFECTIVE",
+      "modality": "FACT",
+      "time": {
+        "raw": "by September 30, 2028",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": "服务国家安全和军事核能部署",
+      "method": "通过第14299号行政命令建立军事先进核反应堆部署安排",
+      "metrics": [
+        {
+          "name": "首座可运行反应堆部署期限",
+          "value": "2028年9月30日",
+          "unit": null,
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": "美国政府"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Alternative-Energy/Nuclear-Power/America-Is-Betting-Big-on-a-New-Generation-of-Small-Nuclear-Reactors.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美国政府",
+      "先进核能",
+      "行政命令",
+      "军事核能",
+      "微型核堆"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T19:00:00Z",
+    "collected_at": "2026-09-06T05:06:16.868487Z"
+  },
+  "EVD567d653c-eceb-562e-b856-bc9401ee603a": {
+    "id": "EVD567d653c-eceb-562e-b856-bc9401ee603a",
+    "raw_evidence_id": "RAWfaa276be-601f-5db0-a6df-ef1910ccda7f",
+    "title": "China’s Grip on Erbium and Yttrium Could Choke Data-Center Growth",
+    "summary": "中国于2025年11月将铒等部分稀土的出口限制暂停一年，但钇未被纳入暂停范围。",
+    "semantic": {
+      "actors": [
+        "中国"
+      ],
+      "action": "暂停部分出口限制",
+      "objects": [
+        "铒等部分稀土的出口限制"
+      ],
+      "stage": "SUSPENDED",
+      "modality": "FACT",
+      "time": {
+        "raw": "2025年11月",
+        "start_at": "2025-10-31T16:00:00Z",
+        "end_at": "2025-11-30T15:59:59.999999Z",
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "中国",
+        "全球"
+      ],
+      "reason": null,
+      "method": "将铒等部分受控稀土的限制暂停一年，钇不在暂停范围内",
+      "metrics": [
+        {
+          "name": "暂停期限",
+          "value": "1",
+          "unit": "年",
+          "change": null,
+          "period": "自2025年11月起"
+        }
+      ],
+      "attribution": {
+        "reported_by": "IEEE Spectrum",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "ieee_spectrum_semiconductors",
+    "source_name": "IEEE Spectrum Semiconductor",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://spectrum.ieee.org/rare-earth-shortage",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "中国",
+      "出口管制",
+      "铒",
+      "稀土"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-26T13:00:01Z",
+    "collected_at": "2026-09-06T03:35:41.000246Z"
+  },
+  "EVD5a8cf714-5a40-503a-871f-6d43dfe106cf": {
+    "id": "EVD5a8cf714-5a40-503a-871f-6d43dfe106cf",
+    "raw_evidence_id": "RAWcd64af48-dd48-5d20-bfd2-376e841f1aed",
+    "title": "Goldman Sachs Alternatives, Cleanhill Partners sell PCS manufacturer EPC Power for US$4.4 billion",
+    "summary": "EPC Power上月在南卡罗来纳州启用第三座美国制造工厂，新增27GW年名义产能，并可扩至40GW。",
+    "semantic": {
+      "actors": [
+        "EPC Power"
+      ],
+      "action": "新增制造产能",
+      "objects": [
+        "功率电子制造产能"
+      ],
+      "stage": "IMPLEMENTED",
+      "modality": "FACT",
+      "time": {
+        "raw": "last month",
+        "start_at": null,
+        "end_at": null,
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": null,
+      "method": "在南卡罗来纳州启用第三座美国制造工厂",
+      "metrics": [
+        {
+          "name": "年产能上限",
+          "value": "40",
+          "unit": "GW",
+          "change": "可提升至40",
+          "period": null
+        },
+        {
+          "name": "年名义产能",
+          "value": "27",
+          "unit": "GW",
+          "change": "新增27",
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "Energy Storage News",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "energy_storage_news",
+    "source_name": "Energy Storage News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.energy-storage.news/goldman-sachs-alternatives-cleanhill-partners-sell-pcs-manufacturer-epc-power-for-us4-4-billion/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "功率变换",
+      "扩产",
+      "美国制造"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T09:25:30Z",
+    "collected_at": "2026-09-06T03:43:56.11867Z"
+  },
+  "EVD5b0c8815-97f2-513c-a493-82945964cadb": {
+    "id": "EVD5b0c8815-97f2-513c-a493-82945964cadb",
+    "raw_evidence_id": "RAWc6bb298d-8aed-50d6-a6cc-b32467df5c51",
+    "title": "伊朗革命卫队称打击了美航母和驱逐舰",
+    "summary": "伊朗伊斯兰革命卫队称，其空军9月6日发射多枚弹道导弹，打击参与对伊朗海上封锁的一艘美军航母和一艘驱逐舰。",
+    "semantic": {
+      "actors": [
+        "伊朗伊斯兰革命卫队空军"
+      ],
+      "action": "发射弹道导弹打击",
+      "objects": [
+        "美军航空母舰",
+        "美军驱逐舰"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "9月6日",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "伊朗",
+        "美国"
+      ],
+      "reason": "相关美军军舰参与对伊朗的海上封锁并干扰伊朗船只",
+      "method": "发射多枚弹道导弹",
+      "metrics": [
+        {
+          "name": "遭打击航空母舰数量",
+          "value": "1",
+          "unit": "艘",
+          "change": null,
+          "period": "9月6日"
+        },
+        {
+          "name": "遭打击驱逐舰数量",
+          "value": "1",
+          "unit": "艘",
+          "change": null,
+          "period": "9月6日"
+        }
+      ],
+      "attribution": {
+        "reported_by": "央视新闻",
+        "claimed_by": "伊朗伊斯兰革命卫队公共关系部门"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "cls_telegraph",
+    "source_name": "财联社",
+    "source_level": "L2_WIRE",
+    "source_url": "https://www.cls.cn/detail/2475072",
+    "is_original": false,
+    "quoted_source_name": "央视新闻",
+    "keywords": [
+      "伊朗卫队",
+      "美军",
+      "导弹袭击",
+      "航母",
+      "驱逐舰"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-06T02:47:15Z",
+    "collected_at": "2026-09-06T03:43:51.213175Z"
+  },
+  "EVD5b83cab3-f215-5e03-b628-a8b18b3c734e": {
+    "id": "EVD5b83cab3-f215-5e03-b628-a8b18b3c734e",
+    "raw_evidence_id": "RAW981a2fff-f6ed-594f-a5c8-4b6c556c297b",
+    "title": "The E.U.’s AI Drive Undermines Its ​Own Chip Strategy",
+    "summary": "欧洲委员会的AI大陆行动计划包括19座AI工厂，并将AI千兆工厂规划由最多5座上调至7座，同时拟在未来5至7年至少把欧盟数据中心容量扩大至三倍。",
+    "semantic": {
+      "actors": [
+        "欧洲委员会"
+      ],
+      "action": "规划扩建人工智能算力基础设施",
+      "objects": [
+        "AI千兆工厂",
+        "AI工厂",
+        "欧盟数据中心容量"
+      ],
+      "stage": "UPDATED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "未来5至7年",
+        "start_at": null,
+        "end_at": null,
+        "precision": "RANGE"
+      },
+      "jurisdictions": [
+        "欧盟"
+      ],
+      "reason": "推进欧盟人工智能发展并构建欧洲半导体生态系统",
+      "method": "建设AI工厂和AI千兆工厂，并依据《云与人工智能发展法案》扩大数据中心容量",
+      "metrics": [
+        {
+          "name": "AI千兆工厂规划数量",
+          "value": "7",
+          "unit": "座",
+          "change": "由最多5座上调至7座",
+          "period": null
+        },
+        {
+          "name": "AI工厂数量",
+          "value": "19",
+          "unit": "座",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "数据中心容量",
+          "value": "3",
+          "unit": "倍",
+          "change": "至少增至当前的3倍",
+          "period": "未来5至7年"
+        }
+      ],
+      "attribution": {
+        "reported_by": "Tech Policy Press",
+        "claimed_by": "欧洲委员会"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "ieee_spectrum_semiconductors",
+    "source_name": "IEEE Spectrum Semiconductor",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://spectrum.ieee.org/europes-ai-drive",
+    "is_original": false,
+    "quoted_source_name": "Tech Policy Press",
+    "keywords": [
+      "欧盟",
+      "人工智能",
+      "算力设施",
+      "数据中心",
+      "先进芯片"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-31T14:00:04Z",
+    "collected_at": "2026-09-06T03:43:58.217143Z"
+  },
+  "EVD5e3dc40d-564f-5f4e-ab50-6ea1a51e3210": {
+    "id": "EVD5e3dc40d-564f-5f4e-ab50-6ea1a51e3210",
+    "raw_evidence_id": "RAW9abcef17-5535-5279-904b-a661369f1ed0",
+    "title": "周末要闻汇总：事关人工智能、算力设施等 七部门最新部署",
+    "summary": "美国8月非农数据大超预期，美联储加息预期随之升温。",
+    "semantic": {
+      "actors": [
+        "美国劳动力市场"
+      ],
+      "action": "非农数据大超预期",
+      "objects": [
+        "8月非农就业数据"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "8月",
+        "start_at": null,
+        "end_at": null,
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [
+        {
+          "name": "美联储加息预期",
+          "value": null,
+          "unit": null,
+          "change": "升温",
+          "period": null
+        },
+        {
+          "name": "非农就业数据",
+          "value": null,
+          "unit": null,
+          "change": "大超预期",
+          "period": "8月"
+        }
+      ],
+      "attribution": {
+        "reported_by": "东方财富Choice数据",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "eastmoney_stock_news",
+    "source_name": "东方财富Choice数据",
+    "source_level": "L3_MEDIA",
+    "source_url": "http://finance.eastmoney.com/a/202609063866073991.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美国非农",
+      "就业数据",
+      "加息预期"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-06T06:00:19Z",
+    "collected_at": "2026-09-06T06:04:19.63321Z"
+  },
+  "EVD60c0fd46-ffe5-553b-8952-b63b5220cdb0": {
+    "id": "EVD60c0fd46-ffe5-553b-8952-b63b5220cdb0",
+    "raw_evidence_id": "RAWc9a50ef4-f878-556c-8225-a2ecf4fa2a5a",
+    "title": "周末要闻汇总：事关人工智能、算力设施等 七部门最新部署",
+    "summary": "美国8月非农就业数据大幅超出预期，市场对美联储加息的预期升温。",
+    "semantic": {
+      "actors": [
+        "美国"
+      ],
+      "action": "大幅超出预期",
+      "objects": [
+        "非农就业数据"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "8月",
+        "start_at": null,
+        "end_at": null,
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [],
+      "attribution": {
+        "reported_by": "东方财富",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "eastmoney_fastnews",
+    "source_name": "东方财富",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://finance.eastmoney.com/a/202609063866073991.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美国非农",
+      "就业数据",
+      "加息预期"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-06T06:00:19Z",
+    "collected_at": "2026-09-06T06:04:19.475283Z"
+  },
+  "EVD68e4ec72-7a86-5d8f-8a97-ff14cda44fb3": {
+    "id": "EVD68e4ec72-7a86-5d8f-8a97-ff14cda44fb3",
+    "raw_evidence_id": "RAW0a6ea2d4-fedb-5cfc-823d-ce16577c6045",
+    "title": "央行将开展5000亿元买断式逆回购操作",
+    "summary": "中国人民银行公告将于2026年9月7日开展5000亿元、期限89天的买断式逆回购操作，以保持银行体系流动性充裕。",
+    "semantic": {
+      "actors": [
+        "中国人民银行"
+      ],
+      "action": "开展买断式逆回购操作",
+      "objects": [
+        "买断式逆回购操作",
+        "银行体系流动性"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "2026年9月7日",
+        "start_at": "2026-09-06T16:00:00Z",
+        "end_at": "2026-09-07T15:59:59.999999Z",
+        "precision": "DAY"
+      },
+      "jurisdictions": [
+        "中国"
+      ],
+      "reason": "保持银行体系流动性充裕",
+      "method": "采用固定数量、利率招标、多重价位中标方式",
+      "metrics": [
+        {
+          "name": "操作期限",
+          "value": "89",
+          "unit": "天",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "操作规模",
+          "value": "5000",
+          "unit": "亿元",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "中国经营报",
+        "claimed_by": "中国人民银行"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "eastmoney_stock_news",
+    "source_name": "中国经营报",
+    "source_level": "L3_MEDIA",
+    "source_url": "http://finance.eastmoney.com/a/202609063866075784.html",
+    "is_original": false,
+    "quoted_source_name": "中国人民银行",
+    "keywords": [
+      "中国央行",
+      "逆回购",
+      "流动性",
+      "公开市场"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-06T06:16:12Z",
+    "collected_at": "2026-09-06T06:32:26.645145Z"
+  },
+  "EVD8cf1d628-bb69-5d5d-ae0c-66bad94a0fd0": {
+    "id": "EVD8cf1d628-bb69-5d5d-ae0c-66bad94a0fd0",
+    "raw_evidence_id": "RAWc1b895d2-a4e7-564e-99ce-438689091e2d",
+    "title": "China’s Grip on Erbium and Yttrium Could Choke Data-Center Growth",
+    "summary": "中国预计将在2026年11月决定延长或取消部分或全部受控稀土的暂停措施，现行出口限制可能于11月10日全面生效。",
+    "semantic": {
+      "actors": [
+        "中国政府"
+      ],
+      "action": "预计决定延长或取消暂停措施",
+      "objects": [
+        "12种受出口管制稀土的暂停措施"
+      ],
+      "stage": "EXPECTED",
+      "modality": "SPEC",
+      "time": {
+        "raw": "2026年11月10日前后",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "中国",
+        "全球"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [],
+      "attribution": {
+        "reported_by": "IEEE Spectrum",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "ieee_spectrum_semiconductors",
+    "source_name": "IEEE Spectrum Semiconductor",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://spectrum.ieee.org/rare-earth-shortage",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "中国",
+      "稀土管制",
+      "铒",
+      "钇"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-26T13:00:01Z",
+    "collected_at": "2026-09-06T07:35:57.929433Z"
+  },
+  "EVD8dbf83bb-6796-5cb2-b38a-b841b33bcb4e": {
+    "id": "EVD8dbf83bb-6796-5cb2-b38a-b841b33bcb4e",
+    "raw_evidence_id": "RAW55e5288a-a2a2-5f23-b3c4-eb247c966085",
+    "title": "Korea’s Trillion-Dollar Sovereign AI Investment: Nvidia Wins, Hynix Loses",
+    "summary": "SK集团已承诺在其5GW数据中心建设中部署2GW英伟达Rubin算力，Naver另签约部署200MW，为英伟达增加韩国主权AI客户需求。",
+    "semantic": {
+      "actors": [
+        "Naver",
+        "SK集团"
+      ],
+      "action": "承诺部署英伟达Rubin算力",
+      "objects": [
+        "英伟达Rubin GPU算力"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "已承诺或已签约",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "韩国"
+      ],
+      "reason": "建设韩国AI数据中心和主权算力基础设施",
+      "method": "在韩国数据中心建设中配置英伟达Rubin平台",
+      "metrics": [
+        {
+          "name": "Naver部署容量",
+          "value": "200",
+          "unit": "MW",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "SK集团Rubin部署容量",
+          "value": "2",
+          "unit": "GW",
+          "change": null,
+          "period": "5GW建设项目"
+        }
+      ],
+      "attribution": {
+        "reported_by": "SemiAnalysis",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "semianalysis",
+    "source_name": "SemiAnalysis",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://newsletter.semianalysis.com/p/koreas-trillion-dollar-sovereign",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "SK集团",
+      "Naver",
+      "英伟达",
+      "Rubin",
+      "算力采购"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-01T20:14:32Z",
+    "collected_at": "2026-09-06T03:44:01.091781Z"
+  },
+  "EVD919523ff-5fc0-5b3b-a25c-12527cc35b60": {
+    "id": "EVD919523ff-5fc0-5b3b-a25c-12527cc35b60",
+    "raw_evidence_id": "RAW6d09c7e6-9d19-5390-9907-2136614464df",
+    "title": "Africa’s hidden solar boom revealed",
+    "summary": "研究预计非洲2026年新增光伏装机每年可发电约23TWh，足以覆盖非洲过去十年的平均年度用电需求增量；十国年度发电量将因此增加逾10%。",
+    "semantic": {
+      "actors": [
+        "非洲2026年新增光伏项目"
+      ],
+      "action": "预计提升光伏发电量",
+      "objects": [
+        "非洲年度光伏发电量",
+        "非洲电力需求增长"
+      ],
+      "stage": "EXPECTED",
+      "modality": "SPEC",
+      "time": {
+        "raw": "2026年",
+        "start_at": "2025-12-31T16:00:00Z",
+        "end_at": "2026-12-31T15:59:59.999999Z",
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "非洲"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [
+        {
+          "name": "光伏发电增量覆盖国家占比",
+          "value": "超过非洲54国的一半",
+          "unit": null,
+          "change": "超过历史电力需求增速",
+          "period": "2026年"
+        },
+        {
+          "name": "年度发电量增幅达到该水平的国家数量",
+          "value": "10",
+          "unit": "个",
+          "change": "新增超过10%",
+          "period": "2026年"
+        },
+        {
+          "name": "相关国家总人口",
+          "value": "190",
+          "unit": "百万人",
+          "change": null,
+          "period": "2026年"
+        },
+        {
+          "name": "预计年发电量",
+          "value": "23",
+          "unit": "TWh/年",
+          "change": null,
+          "period": "2026年新增装机投运后"
+        }
+      ],
+      "attribution": {
+        "reported_by": "PV Tech",
+        "claimed_by": "Ember、African Tech Futures Lab"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "pv_tech",
+    "source_name": "PV Tech",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.pv-tech.org/africas-hidden-solar-boom-revealed/",
+    "is_original": false,
+    "quoted_source_name": "Ember、African Tech Futures Lab",
+    "keywords": [
+      "非洲光伏",
+      "光伏发电",
+      "电力需求"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T14:04:50Z",
+    "collected_at": "2026-09-06T05:40:55.705197Z"
+  },
+  "EVD949be8cd-15d4-5a0a-963b-701bc6b500c4": {
+    "id": "EVD949be8cd-15d4-5a0a-963b-701bc6b500c4",
+    "raw_evidence_id": "RAW56aec47c-20f5-597e-89e5-96d5fcfb7c88",
+    "title": "OpenAI Jalapeño: Better Than Nvidia Blackwell",
+    "summary": "OpenAI的Jalapeño B0版本已进入晶圆厂，采用台积电N3P工艺；文章称其相较A0每瓦性能约提升25%，MXFP4算力为13.4 PFLOPs。",
+    "semantic": {
+      "actors": [
+        "OpenAI",
+        "TSMC"
+      ],
+      "action": "推进B0版芯片制造",
+      "objects": [
+        "Jalapeño B0版本"
+      ],
+      "stage": "IMPLEMENTED",
+      "modality": "FACT",
+      "time": {
+        "raw": "2026年8月正在晶圆厂制造",
+        "start_at": null,
+        "end_at": null,
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "中国台湾",
+        "美国"
+      ],
+      "reason": "优化A0版本的性能功耗表现",
+      "method": "采用TSMC N3P工艺制造单一光罩尺寸计算裸片",
+      "metrics": [
+        {
+          "name": "MXFP4算力",
+          "value": "13.4",
+          "unit": "PFLOPs",
+          "change": null,
+          "period": "B0版本"
+        },
+        {
+          "name": "每瓦性能",
+          "value": null,
+          "unit": "%",
+          "change": "约提升25%",
+          "period": "B0相对A0"
+        },
+        {
+          "name": "设计功耗",
+          "value": "700",
+          "unit": "W",
+          "change": null,
+          "period": "B0版本"
+        }
+      ],
+      "attribution": {
+        "reported_by": "SemiAnalysis",
+        "claimed_by": "OpenAI"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "semianalysis",
+    "source_name": "SemiAnalysis",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://newsletter.semianalysis.com/p/openai-jalapeno-better-than-nvidia",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "OpenAI",
+      "芯片迭代",
+      "台积电",
+      "能效"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-25T14:00:38Z",
+    "collected_at": "2026-09-06T03:35:44.909551Z"
+  },
+  "EVD9791e7d3-b651-5f76-830c-1c93b10a7a7e": {
+    "id": "EVD9791e7d3-b651-5f76-830c-1c93b10a7a7e",
+    "raw_evidence_id": "RAW68e21397-3951-596d-abf7-a07aa31d188c",
+    "title": "Inox Solar Americas signs 767MW US module supply agreement",
+    "summary": "Inox Solar Americas计划从2027年开始，为美国北卡罗来纳州和得克萨斯州三个合计约767MW的光伏项目交付组件。",
+    "semantic": {
+      "actors": [
+        "Inox Solar Americas"
+      ],
+      "action": "计划交付组件",
+      "objects": [
+        "三个公用事业级光伏项目的光伏组件"
+      ],
+      "stage": "EXPECTED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "2027年开始",
+        "start_at": null,
+        "end_at": null,
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "美国",
+        "美国北卡罗来纳州",
+        "美国得克萨斯州"
+      ],
+      "reason": null,
+      "method": "向三个公用事业级光伏项目交付Vega系列双面组件",
+      "metrics": [
+        {
+          "name": "计划交付容量",
+          "value": "767",
+          "unit": "MW",
+          "change": null,
+          "period": "自2027年起"
+        }
+      ],
+      "attribution": {
+        "reported_by": "PV Tech",
+        "claimed_by": "Inox Solar Americas"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "pv_tech",
+    "source_name": "PV Tech",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.pv-tech.org/inox-solar-americas-signs-767mw-us-module-supply-agreement/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "Inox光伏",
+      "组件交付",
+      "美国光伏",
+      "公用项目"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T15:11:41Z",
+    "collected_at": "2026-09-06T06:04:27.201325Z"
+  },
+  "EVD9f9f9dff-3700-53e0-8bdc-641b4acb1829": {
+    "id": "EVD9f9f9dff-3700-53e0-8bdc-641b4acb1829",
+    "raw_evidence_id": "RAWc90844b0-a8fb-5828-ba9e-ee3339d3bf98",
+    "title": "This week in charts: China deals, stock flatlines and Lilly’s M&A spree",
+    "summary": "Ultragenyx公布数据显示其Angelman综合征治疗药物未能显著帮助患者，随后公司股价约腰斩。",
+    "semantic": {
+      "actors": [
+        "Ultragenyx Pharmaceutical"
+      ],
+      "action": "公布临床试验失败数据",
+      "objects": [
+        "Angelman综合征治疗药物"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "FACT",
+      "time": {
+        "raw": "周三",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": null,
+      "reason": null,
+      "method": "测试针对Angelman综合征的基因治疗方案",
+      "metrics": [
+        {
+          "name": "治疗效果",
+          "value": "未能对患者产生有意义的帮助",
+          "unit": null,
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "股价",
+          "value": null,
+          "unit": "%",
+          "change": "下跌约50%",
+          "period": "数据公布后"
+        }
+      ],
+      "attribution": {
+        "reported_by": "BioPharma Dive",
+        "claimed_by": "Ultragenyx Pharmaceutical"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "biopharma_dive",
+    "source_name": "BioPharma Dive",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.biopharmadive.com/news/charts-biotech-deals-china-alumis-ultragenyx-stock/829635/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "基因治疗",
+      "临床失败",
+      "股价腰斩"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T15:56:31Z",
+    "collected_at": "2026-09-06T03:43:53.286606Z"
+  },
+  "EVDa5fc21a0-b087-5a6b-8d84-67548a8464a8": {
+    "id": "EVDa5fc21a0-b087-5a6b-8d84-67548a8464a8",
+    "raw_evidence_id": "RAWb41d99a8-f4ff-5689-b03c-56b280918518",
+    "title": "The risky mission to de-mine the Strait of Hormuz",
+    "summary": "美国海军派遣潜水员、船只和机器人秘密开展夜间行动，清除霍尔木兹海峡关键航道内的爆炸物。",
+    "semantic": {
+      "actors": [
+        "美国海军"
+      ],
+      "action": "清除爆炸物",
+      "objects": [
+        "霍尔木兹海峡航道内的爆炸物"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": null,
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "霍尔木兹海峡"
+      ],
+      "reason": null,
+      "method": "派遣潜水员、船只和机器人秘密开展夜间行动",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "Financial Times",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "financial_times",
+    "source_name": "Financial Times",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.ft.com/content/04031dbe-7412-441e-8aaa-89a9ee6c7439?syn-25a6b1a6=1",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美国海军",
+      "霍尔木兹",
+      "水雷清除",
+      "航运安全"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-06T04:00:12Z",
+    "collected_at": "2026-09-06T05:06:13.105035Z"
+  },
+  "EVDa8937789-809e-584d-b911-01d50774fc11": {
+    "id": "EVDa8937789-809e-584d-b911-01d50774fc11",
+    "raw_evidence_id": "RAW2748f13d-db09-5730-9651-f8d272b677a0",
+    "title": "Equinor’s East Point Energy begins operations at 200MWh Texas BESS",
+    "summary": "Equinor预计弗吉尼亚州PJM市场四个储能项目将于2027年初投入商业运营。",
+    "semantic": {
+      "actors": [
+        "Equinor"
+      ],
+      "action": "计划投入商业运营",
+      "objects": [
+        "弗吉尼亚州PJM市场电池储能项目组合"
+      ],
+      "stage": "EXPECTED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "early 2027",
+        "start_at": null,
+        "end_at": null,
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "美国",
+        "美国弗吉尼亚州"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [
+        {
+          "name": "总储能容量",
+          "value": "160",
+          "unit": "MWh",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "总功率规模",
+          "value": "80",
+          "unit": "MW",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "项目数量",
+          "value": "4",
+          "unit": "个",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "Energy Storage News",
+        "claimed_by": "Equinor"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "energy_storage_news",
+    "source_name": "Energy Storage News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.energy-storage.news/equinors-east-point-energy-begins-operations-at-200mwh-texas-bess/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "弗吉尼亚",
+      "电池储能",
+      "商业运营"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T13:19:36Z",
+    "collected_at": "2026-09-06T03:43:56.11867Z"
+  },
+  "EVDb318a847-1249-557c-a746-e95102531f7f": {
+    "id": "EVDb318a847-1249-557c-a746-e95102531f7f",
+    "raw_evidence_id": "RAW55e5288a-a2a2-5f23-b3c4-eb247c966085",
+    "title": "Korea’s Trillion-Dollar Sovereign AI Investment: Nvidia Wins, Hynix Loses",
+    "summary": "SK Telecom宣布建设2GW的DSX AI工厂，预计部署采用SK海力士HBM4的英伟达Vera Rubin系统。",
+    "semantic": {
+      "actors": [
+        "SK Telecom"
+      ],
+      "action": "宣布建设DSX AI工厂",
+      "objects": [
+        "DSX AI工厂",
+        "SK海力士HBM4",
+        "Vera Rubin系统"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": null,
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "韩国"
+      ],
+      "reason": null,
+      "method": "部署采用SK海力士HBM4的英伟达Vera Rubin系统",
+      "metrics": [
+        {
+          "name": "计划容量",
+          "value": "2",
+          "unit": "GW",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "SemiAnalysis",
+        "claimed_by": "SK Telecom"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "semianalysis",
+    "source_name": "SemiAnalysis",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://newsletter.semianalysis.com/p/koreas-trillion-dollar-sovereign",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "SK电讯",
+      "AI工厂",
+      "Rubin",
+      "海力士",
+      "HBM4"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-01T20:14:32Z",
+    "collected_at": "2026-09-06T03:44:01.091781Z"
+  },
+  "EVDb646d98a-9ee0-5b6a-85c3-a0076fa111aa": {
+    "id": "EVDb646d98a-9ee0-5b6a-85c3-a0076fa111aa",
+    "raw_evidence_id": "RAWc6bb298d-8aed-50d6-a6cc-b32467df5c51",
+    "title": "伊朗革命卫队称打击了美航母和驱逐舰",
+    "summary": "伊朗伊斯兰革命卫队公告称，两艘遭受损失的美军军舰被迫撤离冲突地区。",
+    "semantic": {
+      "actors": [
+        "美军航空母舰及驱逐舰"
+      ],
+      "action": "撤离",
+      "objects": [
+        "冲突地区"
+      ],
+      "stage": "OCCURRED",
+      "modality": "SPEC",
+      "time": {
+        "raw": "9月6日",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "伊朗",
+        "美国"
+      ],
+      "reason": "伊朗伊斯兰革命卫队公告称两艘军舰遭受损失",
+      "method": null,
+      "metrics": [
+        {
+          "name": "撤离军舰数量",
+          "value": "2",
+          "unit": "艘",
+          "change": null,
+          "period": "9月6日"
+        }
+      ],
+      "attribution": {
+        "reported_by": "央视新闻",
+        "claimed_by": "伊朗伊斯兰革命卫队公共关系部门"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "cls_telegraph",
+    "source_name": "财联社",
+    "source_level": "L2_WIRE",
+    "source_url": "https://www.cls.cn/detail/2475072",
+    "is_original": false,
+    "quoted_source_name": "央视新闻",
+    "keywords": [
+      "美军",
+      "航母",
+      "驱逐舰",
+      "冲突撤离"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-06T02:47:15Z",
+    "collected_at": "2026-09-06T03:43:51.213175Z"
+  },
+  "EVDbb70c579-896a-5469-9202-495f8bd58b91": {
+    "id": "EVDbb70c579-896a-5469-9202-495f8bd58b91",
+    "raw_evidence_id": "RAWfaa276be-601f-5db0-a6df-ef1910ccda7f",
+    "title": "China’s Grip on Erbium and Yttrium Could Choke Data-Center Growth",
+    "summary": "中国在2026年3月和4月分别批准60吨和10吨氧化钇输美，但当年对美钇发货量较2025年下降约75%。",
+    "semantic": {
+      "actors": [
+        "中国"
+      ],
+      "action": "批准并缩减对美供应",
+      "objects": [
+        "对美国的氧化钇和钇供应"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "2026年3月至4月；2026年至报道时",
+        "start_at": null,
+        "end_at": null,
+        "precision": "RANGE"
+      },
+      "jurisdictions": [
+        "中国",
+        "美国"
+      ],
+      "reason": "钇持续受到中国出口限制",
+      "method": "分别批准两批氧化钇输美，但全年对美钇发货量仍大幅下降",
+      "metrics": [
+        {
+          "name": "对美钇发货量",
+          "value": null,
+          "unit": "%",
+          "change": "同比下降约75%",
+          "period": "2026年至报道时，相比2025年"
+        },
+        {
+          "name": "氧化钇批准发货量",
+          "value": "60",
+          "unit": "吨",
+          "change": null,
+          "period": "2026年3月"
+        },
+        {
+          "name": "氧化钇批准发货量",
+          "value": "10",
+          "unit": "吨",
+          "change": null,
+          "period": "2026年4月"
+        }
+      ],
+      "attribution": {
+        "reported_by": "IEEE Spectrum",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "ieee_spectrum_semiconductors",
+    "source_name": "IEEE Spectrum Semiconductor",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://spectrum.ieee.org/rare-earth-shortage",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "中国",
+      "钇出口",
+      "美国",
+      "稀土供应"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-26T13:00:01Z",
+    "collected_at": "2026-09-06T03:35:41.000246Z"
+  },
+  "EVDc0155b15-b9fe-5095-880d-8903814b401b": {
+    "id": "EVDc0155b15-b9fe-5095-880d-8903814b401b",
+    "raw_evidence_id": "RAW56aec47c-20f5-597e-89e5-96d5fcfb7c88",
+    "title": "OpenAI Jalapeño: Better Than Nvidia Blackwell",
+    "summary": "OpenAI与Celestica合作设计Jalapeño机架级系统；每个ASIC机架配置128颗芯片，扩展网络最多连接16个机架、2048颗XPU。",
+    "semantic": {
+      "actors": [
+        "Celestica",
+        "OpenAI"
+      ],
+      "action": "设计机架级ASIC系统",
+      "objects": [
+        "ASIC机架",
+        "CPU主机架",
+        "Jalapeño机架级系统",
+        "扩展网络"
+      ],
+      "stage": "IMPLEMENTED",
+      "modality": "FACT",
+      "time": {
+        "raw": null,
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "加拿大",
+        "美国"
+      ],
+      "reason": null,
+      "method": "采用CPU主机架与ASIC机架配对，并通过本地及跨机架扩展网络连接",
+      "metrics": [
+        {
+          "name": "单一扩展网络最大XPU数量",
+          "value": "2048",
+          "unit": "颗",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "单机架Jalapeño芯片数量",
+          "value": "128",
+          "unit": "颗",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "双机架系统功耗",
+          "value": "约160",
+          "unit": "kW",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "扩展网络最大机架数量",
+          "value": "16",
+          "unit": "个",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "SemiAnalysis",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "semianalysis",
+    "source_name": "SemiAnalysis",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://newsletter.semianalysis.com/p/openai-jalapeno-better-than-nvidia",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "OpenAI",
+      "芯片机架",
+      "算力集群",
+      "博通"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-25T14:00:38Z",
+    "collected_at": "2026-09-06T03:35:44.909551Z"
+  },
+  "EVDc5850188-a8e8-5106-b109-ec3dfca5aaa0": {
+    "id": "EVDc5850188-a8e8-5106-b109-ec3dfca5aaa0",
+    "raw_evidence_id": "RAW56aec47c-20f5-597e-89e5-96d5fcfb7c88",
+    "title": "OpenAI Jalapeño: Better Than Nvidia Blackwell",
+    "summary": "OpenAI于2026年6月发布与Broadcom合作的Jalapeño自研ASIC项目，该芯片从零设计、专用于大语言模型推理，开发至流片约用16个月。",
+    "semantic": {
+      "actors": [
+        "Broadcom",
+        "OpenAI"
+      ],
+      "action": "发布自研推理芯片项目",
+      "objects": [
+        "Jalapeño ASIC推理芯片项目"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "FACT",
+      "time": {
+        "raw": "2026年6月",
+        "start_at": "2026-05-31T16:00:00Z",
+        "end_at": "2026-06-30T15:59:59.999999Z",
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": null,
+      "method": "从零设计，并通过软硬件协同面向大语言模型推理",
+      "metrics": [
+        {
+          "name": "从团队组建到制造流片的开发周期",
+          "value": "约16",
+          "unit": "个月",
+          "change": null,
+          "period": "自2024年中开始设计"
+        }
+      ],
+      "attribution": {
+        "reported_by": "SemiAnalysis",
+        "claimed_by": "OpenAI"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "semianalysis",
+    "source_name": "SemiAnalysis",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://newsletter.semianalysis.com/p/openai-jalapeno-better-than-nvidia",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "OpenAI",
+      "推理芯片",
+      "博通",
+      "芯片流片"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-25T14:00:38Z",
+    "collected_at": "2026-09-06T03:35:44.909551Z"
+  },
+  "EVDc8f0f17a-a5cf-5e95-ad9f-7aea3c1da1ec": {
+    "id": "EVDc8f0f17a-a5cf-5e95-ad9f-7aea3c1da1ec",
+    "raw_evidence_id": "RAW1983b70e-e9e5-5971-a033-e0ba38ed19d9",
+    "title": "Digital public infrastructure and the future of renewable energy: insights from India Energy Stack",
+    "summary": "印度政府于2025年宣布建设印度能源栈，拟以统一数字身份、资产登记、数据交换和开放接口支撑分布式能源并网及电力市场协同。",
+    "semantic": {
+      "actors": [
+        "印度政府"
+      ],
+      "action": "计划建设",
+      "objects": [
+        "印度电力系统数字公共基础设施",
+        "印度能源栈"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "2025年",
+        "start_at": "2024-12-31T16:00:00Z",
+        "end_at": "2025-12-31T15:59:59.999999Z",
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "印度"
+      ],
+      "reason": "支持分布式可再生能源并网和日益去中心化、数据密集型的电力系统管理",
+      "method": "建设采用联邦式架构的数字公共基础设施，通过统一数字身份、资产登记、开放接口、标准协议和数据模型连接电力价值链参与者",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "PV Tech",
+        "claimed_by": "印度政府"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "pv_tech",
+    "source_name": "PV Tech",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.pv-tech.org/digital-public-infrastructure-and-the-future-of-renewable-energy-insights-from-india-energy-stack/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "印度",
+      "能源栈",
+      "电力数字化",
+      "分布式能源"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T15:26:22Z",
+    "collected_at": "2026-09-06T03:43:59.054971Z"
+  },
+  "EVDcaf71077-ee98-54cd-b953-c51b72912b6c": {
+    "id": "EVDcaf71077-ee98-54cd-b953-c51b72912b6c",
+    "raw_evidence_id": "RAWe5313acb-d629-506c-be6d-4afd31eb4b44",
+    "title": "Gemini Omni 1.1 Flash lets you build with more control",
+    "summary": "Adobe已将Gemini Omni Flash集成到Adobe Firefly，用于提供生成式视频编辑能力。",
+    "semantic": {
+      "actors": [
+        "Adobe"
+      ],
+      "action": "集成",
+      "objects": [
+        "Adobe Firefly",
+        "Gemini Omni Flash"
+      ],
+      "stage": "IMPLEMENTED",
+      "modality": "FACT",
+      "time": {
+        "raw": null,
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": null,
+      "reason": null,
+      "method": null,
+      "metrics": [],
+      "attribution": {
+        "reported_by": null,
+        "claimed_by": "Google DeepMind"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "deepmind_blog",
+    "source_name": "DeepMind",
+    "source_level": "L1_OFFICIAL",
+    "source_url": "https://deepmind.google/blog/gemini-omni-1-1-flash-lets-you-build-with-more-control/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "Adobe",
+      "谷歌",
+      "视频模型"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-27T16:11:32Z",
+    "collected_at": "2026-09-06T03:35:38.29081Z"
+  },
+  "EVDcf7ff967-864d-54a1-9bab-55b84c30b8be": {
+    "id": "EVDcf7ff967-864d-54a1-9bab-55b84c30b8be",
+    "raw_evidence_id": "RAW56aec47c-20f5-597e-89e5-96d5fcfb7c88",
+    "title": "OpenAI Jalapeño: Better Than Nvidia Blackwell",
+    "summary": "Jalapeño目前仅有工程样片，OpenAI计划在2027年逐步扩大生产，多数产出安排在年末，下一阶段部署目标为100MW。",
+    "semantic": {
+      "actors": [
+        "OpenAI"
+      ],
+      "action": "计划逐步扩大量产",
+      "objects": [
+        "Jalapeño ASIC产量与数据中心部署"
+      ],
+      "stage": "EXPECTED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "2027年逐步爬坡，多数产出安排在2027年末",
+        "start_at": null,
+        "end_at": null,
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": "扩大自研推理算力供给",
+      "method": "与新兴云服务商及数据中心伙伴合作部署，并在2027年末集中主要产出",
+      "metrics": [
+        {
+          "name": "下一阶段部署目标",
+          "value": "100",
+          "unit": "MW",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "SemiAnalysis",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "semianalysis",
+    "source_name": "SemiAnalysis",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://newsletter.semianalysis.com/p/openai-jalapeno-better-than-nvidia",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "OpenAI",
+      "芯片量产",
+      "产能爬坡",
+      "算力部署"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-25T14:00:38Z",
+    "collected_at": "2026-09-06T03:35:44.909551Z"
+  },
+  "EVDd5be2061-7b80-5147-86ea-b40089890ff0": {
+    "id": "EVDd5be2061-7b80-5147-86ea-b40089890ff0",
+    "raw_evidence_id": "RAW56b3d10c-015e-5528-94a7-af6e6ed75019",
+    "title": "黑色能源变绿色经济 煤炭清洁利用持续解锁新场景",
+    "summary": "今年7月中国规模以上工业原煤产量3.4亿吨，同比下降10.1%；前7个月产量27.0亿吨，同比下降2.9%。",
+    "semantic": {
+      "actors": [
+        "中国规模以上工业企业"
+      ],
+      "action": "原煤产量同比下降",
+      "objects": [
+        "规模以上工业原煤产量"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "今年7月份及前7个月",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "中国"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [
+        {
+          "name": "日均原煤产量",
+          "value": "1107",
+          "unit": "万吨",
+          "change": null,
+          "period": "今年7月份"
+        },
+        {
+          "name": "规模以上工业原煤产量",
+          "value": "3.4",
+          "unit": "亿吨",
+          "change": "同比下降10.1%",
+          "period": "今年7月份"
+        },
+        {
+          "name": "规模以上工业原煤产量",
+          "value": "27.0",
+          "unit": "亿吨",
+          "change": "同比下降2.9%",
+          "period": "今年前7个月"
+        }
+      ],
+      "attribution": {
+        "reported_by": "东方财富",
+        "claimed_by": "中国煤炭工业协会"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "eastmoney_fastnews",
+    "source_name": "东方财富",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://finance.eastmoney.com/a/202609063866073012.html",
+    "is_original": false,
+    "quoted_source_name": "中国煤炭工业协会",
+    "keywords": [
+      "原煤产量",
+      "煤炭供给",
+      "工业生产"
+    ],
+    "is_split": false,
+    "published_at": "2026-09-06T05:38:45Z",
+    "collected_at": "2026-09-06T06:04:19.475283Z"
+  },
+  "EVDd67abdd5-92a7-5bfb-9fbc-d35aa6f9924e": {
+    "id": "EVDd67abdd5-92a7-5bfb-9fbc-d35aa6f9924e",
+    "raw_evidence_id": "RAW5b7affc7-8fa3-5c0d-925c-35aa8c9a6096",
+    "title": "America Is Betting Big on a New Generation of Small Nuclear Reactors",
+    "summary": "美国政府支持多类核技术发展，并以到2050年将美国核电产量增至四倍为目标。",
+    "semantic": {
+      "actors": [
+        "美国政府"
+      ],
+      "action": "设定核电产量目标",
+      "objects": [
+        "美国核电产量"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "到2050年",
+        "start_at": null,
+        "end_at": null,
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": "推动核电复兴",
+      "method": "支持常规核电站、小型模块化反应堆和微型反应堆等多类核技术",
+      "metrics": [
+        {
+          "name": "核电产量",
+          "value": null,
+          "unit": null,
+          "change": "增至四倍",
+          "period": "截至2050年"
+        }
+      ],
+      "attribution": {
+        "reported_by": "OilPrice",
+        "claimed_by": "美国总统特朗普"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCed6e9380-8b20-53d5-b748-fa45c774fa67",
+        "code": "INDUSTRY_THEME_ANALYSIS",
+        "name": "行业/主题分析",
+        "description": "围绕产业链、行业或投资主题展开具有逻辑链条的分析。"
+      }
+    ],
+    "source_id": "oilprice",
+    "source_name": "OilPrice",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://oilprice.com/Alternative-Energy/Nuclear-Power/America-Is-Betting-Big-on-a-New-Generation-of-Small-Nuclear-Reactors.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美国政府",
+      "核电扩张",
+      "先进核能"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T19:00:00Z",
+    "collected_at": "2026-09-06T03:43:59.781095Z"
+  },
+  "EVDd69dff8a-f6c4-57b0-8e72-2d06348c363f": {
+    "id": "EVDd69dff8a-f6c4-57b0-8e72-2d06348c363f",
+    "raw_evidence_id": "RAW31eb827c-a4ff-577f-b986-7d7a8956b98d",
+    "title": "Critical VMware Workstation and Fusion Flaw Lets VM Admins Execute Host Code",
+    "summary": "Broadcom发布安全更新，修复影响VMware Workstation和Fusion 25H2及26H1版本的两项高危代码执行漏洞。",
+    "semantic": {
+      "actors": [
+        "Broadcom"
+      ],
+      "action": "发布安全更新并修复漏洞",
+      "objects": [
+        "VMware Workstation和Fusion中的CVE-2026-59346与CVE-2026-59347漏洞"
+      ],
+      "stage": "IMPLEMENTED",
+      "modality": "FACT",
+      "time": {
+        "raw": null,
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "全球"
+      ],
+      "reason": "两项漏洞可被已拥有虚拟机本地管理员权限的攻击者利用，在宿主机上执行代码",
+      "method": "通过VMware Workstation 26H1u1和VMware Fusion 26H1u1版本修复，且不存在可用的临时规避措施",
+      "metrics": [
+        {
+          "name": "CVE-2026-59346 CVSS评分",
+          "value": "9.3",
+          "unit": "分",
+          "change": null,
+          "period": null
+        },
+        {
+          "name": "CVE-2026-59347 CVSS评分",
+          "value": "8.1",
+          "unit": "分",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "The Hacker News",
+        "claimed_by": "Broadcom"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "the_hacker_news",
+    "source_name": "The Hacker News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://thehackernews.com/2026/09/critical-vmware-workstation-and-fusion.html",
+    "is_original": false,
+    "quoted_source_name": "Broadcom",
+    "keywords": [
+      "博通",
+      "VMware",
+      "安全补丁",
+      "代码执行"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T16:05:08Z",
+    "collected_at": "2026-09-06T03:44:01.487773Z"
+  },
+  "EVDdcdf81cf-8d0c-584a-b30c-9adb622844a3": {
+    "id": "EVDdcdf81cf-8d0c-584a-b30c-9adb622844a3",
+    "raw_evidence_id": "RAWab864df0-8216-5afa-8a4b-12e124057366",
+    "title": "Under the hood: Inside Tesla’s Megapack 3 as Texas production begins",
+    "summary": "特斯拉计划使得州Brookshire工厂具备50GWh的Megapack 3年产能，并预计于2026年底开始交付。",
+    "semantic": {
+      "actors": [
+        "Tesla"
+      ],
+      "action": "规划产能及交付",
+      "objects": [
+        "Megapack 3产能与交付"
+      ],
+      "stage": "EXPECTED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "towards the end of 2026",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": null,
+      "method": "在得州Brookshire工厂建设Megapack 3产能",
+      "metrics": [
+        {
+          "name": "规划年产能",
+          "value": "50",
+          "unit": "GWh",
+          "change": null,
+          "period": "年度"
+        },
+        {
+          "name": "预计开始交付时间",
+          "value": "2026年底",
+          "unit": null,
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "Energy Storage News",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "energy_storage_news",
+    "source_name": "Energy Storage News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.energy-storage.news/under-the-hood-inside-teslas-megapack-3-as-texas-production-begins/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "特斯拉",
+      "储能系统",
+      "得州产能"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T09:41:32Z",
+    "collected_at": "2026-09-06T03:43:56.11867Z"
+  },
+  "EVDdceedae0-4732-54a3-afc4-8179657a79a6": {
+    "id": "EVDdceedae0-4732-54a3-afc4-8179657a79a6",
+    "raw_evidence_id": "RAW12dad7b9-6ea6-5f00-8dba-63874582d605",
+    "title": "Ionis’ rare neurology drug approved; Pfizer inks an ADC deal",
+    "summary": "Climb Bio计划将CLYM116继续推进至治疗IgA肾病的II期临床试验。",
+    "semantic": {
+      "actors": [
+        "Climb Bio"
+      ],
+      "action": "计划推进",
+      "objects": [
+        "CLYM116治疗IgA肾病的临床开发"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": null,
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": null,
+      "reason": "I期试验取得积极早期数据",
+      "method": "开展II期临床试验",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "BioPharma Dive",
+        "claimed_by": "Climb Bio"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "biopharma_dive",
+    "source_name": "BioPharma Dive",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.biopharmadive.com/news/ionis-rare-neurology-drug-approved-pfizer-inks-an-adc-deal/829639/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "Climb",
+      "肾病药物",
+      "二期试验"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T13:00:00Z",
+    "collected_at": "2026-09-06T03:43:53.286606Z"
+  },
+  "EVDdd2487da-ca85-5f3b-9c7c-34007e7b6978": {
+    "id": "EVDdd2487da-ca85-5f3b-9c7c-34007e7b6978",
+    "raw_evidence_id": "RAW12dad7b9-6ea6-5f00-8dba-63874582d605",
+    "title": "Ionis’ rare neurology drug approved; Pfizer inks an ADC deal",
+    "summary": "美国FDA批准Ionis的Zanvastro用于Alexander病，使其成为该罕见神经系统疾病的首款获批药物。",
+    "semantic": {
+      "actors": [
+        "美国食品药品监督管理局"
+      ],
+      "action": "批准上市",
+      "objects": [
+        "Ionis Pharmaceuticals开发的Alexander病药物Zanvastro"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "Thursday",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": "治疗极罕见且通常致命的Alexander病",
+      "method": "依据一项显示患者在步行测试中稳定性显著改善的研究作出决定",
+      "metrics": [],
+      "attribution": {
+        "reported_by": "BioPharma Dive",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "biopharma_dive",
+    "source_name": "BioPharma Dive",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.biopharmadive.com/news/ionis-rare-neurology-drug-approved-pfizer-inks-an-adc-deal/829639/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "艾奥尼斯",
+      "罕见病药",
+      "FDA批准",
+      "神经疾病"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T13:00:00Z",
+    "collected_at": "2026-09-06T03:43:53.286606Z"
+  },
+  "EVDdd64abbf-446c-5e52-b187-95dfcf3f4226": {
+    "id": "EVDdd64abbf-446c-5e52-b187-95dfcf3f4226",
+    "raw_evidence_id": "RAWab864df0-8216-5afa-8a4b-12e124057366",
+    "title": "Under the hood: Inside Tesla’s Megapack 3 as Texas production begins",
+    "summary": "特斯拉近期与NatPower签署多年期协议，将向意大利和英国供应超过25GWh储能系统，该协议属于目标部署超100GWh的更大项目。",
+    "semantic": {
+      "actors": [
+        "NatPower",
+        "Tesla"
+      ],
+      "action": "签署供应与执行协议",
+      "objects": [
+        "意大利和英国电池储能系统供应"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "recently",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "意大利",
+        "英国"
+      ],
+      "reason": null,
+      "method": "签署多年期供应与执行协议",
+      "metrics": [
+        {
+          "name": "储能供应规模",
+          "value": "超过25",
+          "unit": "GWh",
+          "change": null,
+          "period": "多年期协议"
+        },
+        {
+          "name": "整体项目目标规模",
+          "value": "超过100",
+          "unit": "GWh",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "Energy Storage News",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "energy_storage_news",
+    "source_name": "Energy Storage News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.energy-storage.news/under-the-hood-inside-teslas-megapack-3-as-texas-production-begins/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "特斯拉",
+      "储能订单"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T09:41:32Z",
+    "collected_at": "2026-09-06T03:43:56.11867Z"
+  },
+  "EVDdd89d9e2-93ea-507e-b27c-d70dee075e51": {
+    "id": "EVDdd89d9e2-93ea-507e-b27c-d70dee075e51",
+    "raw_evidence_id": "RAWcd64af48-dd48-5d20-bfd2-376e841f1aed",
+    "title": "Goldman Sachs Alternatives, Cleanhill Partners sell PCS manufacturer EPC Power for US$4.4 billion",
+    "summary": "Flex预计EPC Power在2026年实现约8亿美元营收，2027年营收增长约40%，并预计2027年EBITDA利润率约30%。",
+    "semantic": {
+      "actors": [
+        "Flex"
+      ],
+      "action": "预计经营增长",
+      "objects": [
+        "EPC Power经营业绩"
+      ],
+      "stage": "EXPECTED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "2026-2027",
+        "start_at": null,
+        "end_at": null,
+        "precision": "YEAR"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [
+        {
+          "name": "EBITDA利润率",
+          "value": "约30",
+          "unit": "%",
+          "change": null,
+          "period": "2027年"
+        },
+        {
+          "name": "营业收入",
+          "value": "约8亿",
+          "unit": "美元",
+          "change": null,
+          "period": "2026年"
+        },
+        {
+          "name": "营业收入",
+          "value": null,
+          "unit": null,
+          "change": "约增长40%",
+          "period": "2027年"
+        }
+      ],
+      "attribution": {
+        "reported_by": "Energy Storage News",
+        "claimed_by": "Flex"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "energy_storage_news",
+    "source_name": "Energy Storage News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.energy-storage.news/goldman-sachs-alternatives-cleanhill-partners-sell-pcs-manufacturer-epc-power-for-us4-4-billion/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "营收预测",
+      "利润率",
+      "数据中心"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T09:25:30Z",
+    "collected_at": "2026-09-06T03:43:56.11867Z"
+  },
+  "EVDded666d8-c847-5b19-8c27-3c7541779be5": {
+    "id": "EVDded666d8-c847-5b19-8c27-3c7541779be5",
+    "raw_evidence_id": "RAW65878fc9-22f4-5294-a197-c320936bf9c3",
+    "title": "河南出台15项金融举措 精准支持城市更新行动",
+    "summary": "截至7月末，河南银行机构对城市更新项目授信1146亿元、放款350亿元，并对城中村改造专项借款授信1928亿元、投放1311亿元。",
+    "semantic": {
+      "actors": [
+        "河南省银行机构"
+      ],
+      "action": "提供授信并投放贷款",
+      "objects": [
+        "城中村改造专项借款",
+        "纳入城市更新的项目"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "截至7月末",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "中国河南省"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [
+        {
+          "name": "城中村改造专项借款投放额",
+          "value": "1311",
+          "unit": "亿元",
+          "change": null,
+          "period": "截至7月末"
+        },
+        {
+          "name": "城中村改造专项借款授信额",
+          "value": "1928",
+          "unit": "亿元",
+          "change": null,
+          "period": "截至7月末"
+        },
+        {
+          "name": "城市更新项目授信额",
+          "value": "1146",
+          "unit": "亿元",
+          "change": null,
+          "period": "截至7月末"
+        },
+        {
+          "name": "城市更新项目放款额",
+          "value": "350",
+          "unit": "亿元",
+          "change": null,
+          "period": "截至7月末"
+        }
+      ],
+      "attribution": {
+        "reported_by": "河南日报",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5965b67d-1578-54a6-9b81-900a61a47a3f",
+        "code": "POLICY_DOCUMENT_SUMMARY",
+        "name": "政策文件摘要",
+        "description": "对正式政策、法规、规划或政府文件进行解读和摘要。"
+      }
+    ],
+    "source_id": "stcn_quicknews",
+    "source_name": "人民财讯",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.stcn.com/article/detail/4173822.html",
+    "is_original": false,
+    "quoted_source_name": "河南日报",
+    "keywords": [
+      "河南银行",
+      "城市更新",
+      "项目授信",
+      "城中村"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-06T01:44:04Z",
+    "collected_at": "2026-09-06T03:04:16.084356Z"
+  },
+  "EVDe1923077-6943-57a2-87a4-703c95af7de1": {
+    "id": "EVDe1923077-6943-57a2-87a4-703c95af7de1",
+    "raw_evidence_id": "RAW929b57a7-2253-5732-a0e5-c965f153f701",
+    "title": "U.S. attacks 3 Iranian oil tankers after missiles target Navy warships",
+    "summary": "美国财政部周五制裁一家土耳其投资银行及其两家子公司，指控其协助伊朗相关网络转移并兑换石油收入。",
+    "semantic": {
+      "actors": [
+        "美国财政部"
+      ],
+      "action": "实施制裁",
+      "objects": [
+        "Golden Global Yatirim Bankasi Anonim Sirketi及其两家子公司"
+      ],
+      "stage": "EFFECTIVE",
+      "modality": "FACT",
+      "time": {
+        "raw": "周五",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "伊朗",
+        "土耳其",
+        "美国"
+      ],
+      "reason": "美国指控这些机构协助伊朗相关网络将来自中国的石油收入转移至土耳其并兑换为现金和黄金",
+      "method": "通过“经济弃儿行动”制裁伊朗的商业伙伴",
+      "metrics": [
+        {
+          "name": "受制裁子公司数量",
+          "value": "2",
+          "unit": "家",
+          "change": null,
+          "period": "周五"
+        },
+        {
+          "name": "受制裁银行数量",
+          "value": "1",
+          "unit": "家",
+          "change": null,
+          "period": "周五"
+        }
+      ],
+      "attribution": {
+        "reported_by": "CNBC",
+        "claimed_by": "美国财政部"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "cnbc",
+    "source_name": "CNBC",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.cnbc.com/2026/09/05/us-iran-oil-tankers-navy-missile-attack.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美国制裁",
+      "土耳其银行",
+      "革命卫队",
+      "石油收入"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T15:43:08Z",
+    "collected_at": "2026-09-06T03:43:55.048958Z"
+  },
+  "EVDe369953a-44fb-5faa-b6f4-a9c0933c6c89": {
+    "id": "EVDe369953a-44fb-5faa-b6f4-a9c0933c6c89",
+    "raw_evidence_id": "RAW12dad7b9-6ea6-5f00-8dba-63874582d605",
+    "title": "Ionis’ rare neurology drug approved; Pfizer inks an ADC deal",
+    "summary": "Ionis表示Zanvastro将在未来数周于美国上市供应，成为其神经科学管线首次独立产品发布。",
+    "semantic": {
+      "actors": [
+        "Ionis Pharmaceuticals"
+      ],
+      "action": "计划供应",
+      "objects": [
+        "Zanvastro"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "PLAN",
+      "time": {
+        "raw": "in the coming weeks",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [],
+      "attribution": {
+        "reported_by": "BioPharma Dive",
+        "claimed_by": "Ionis Pharmaceuticals"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "biopharma_dive",
+    "source_name": "BioPharma Dive",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.biopharmadive.com/news/ionis-rare-neurology-drug-approved-pfizer-inks-an-adc-deal/829639/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "艾奥尼斯",
+      "药物上市",
+      "美国市场"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T13:00:00Z",
+    "collected_at": "2026-09-06T03:43:53.286606Z"
+  },
+  "EVDec03f9a3-a91d-5bd7-b798-f22ea9bc9f9a": {
+    "id": "EVDec03f9a3-a91d-5bd7-b798-f22ea9bc9f9a",
+    "raw_evidence_id": "RAW929b57a7-2253-5732-a0e5-c965f153f701",
+    "title": "U.S. attacks 3 Iranian oil tankers after missiles target Navy warships",
+    "summary": "美国中央司令部称，伊朗伊斯兰革命卫队向两艘美国海军军舰发射弹道导弹，军舰成功避开多次攻击且无美国人员受伤。",
+    "semantic": {
+      "actors": [
+        "伊朗伊斯兰革命卫队"
+      ],
+      "action": "发射弹道导弹",
+      "objects": [
+        "两艘美国海军军舰"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "周六",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "伊朗"
+      ],
+      "reason": null,
+      "method": "向在该地区巡逻的军舰发动多次导弹攻击",
+      "metrics": [
+        {
+          "name": "美国人员伤亡人数",
+          "value": "0",
+          "unit": "人",
+          "change": null,
+          "period": "周六"
+        },
+        {
+          "name": "遭袭美国海军军舰数量",
+          "value": "2",
+          "unit": "艘",
+          "change": null,
+          "period": "周六"
+        }
+      ],
+      "attribution": {
+        "reported_by": "CNBC",
+        "claimed_by": "美国中央司令部"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "cnbc",
+    "source_name": "CNBC",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.cnbc.com/2026/09/05/us-iran-oil-tankers-navy-missile-attack.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "革命卫队",
+      "弹道导弹",
+      "美国海军",
+      "美伊冲突"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-05T15:43:08Z",
+    "collected_at": "2026-09-06T03:43:55.048958Z"
+  },
+  "EVDecba0a46-6fa1-5a13-8ed9-1ddfa0835cf7": {
+    "id": "EVDecba0a46-6fa1-5a13-8ed9-1ddfa0835cf7",
+    "raw_evidence_id": "RAWcd64af48-dd48-5d20-bfd2-376e841f1aed",
+    "title": "Goldman Sachs Alternatives, Cleanhill Partners sell PCS manufacturer EPC Power for US$4.4 billion",
+    "summary": "美国总统唐纳德·特朗普发布行政命令，禁止从包括中国在内的24个国家进口逆变器、变压器、储能系统及其他大宗电力设备。",
+    "semantic": {
+      "actors": [
+        "美国总统唐纳德·特朗普"
+      ],
+      "action": "禁止进口",
+      "objects": [
+        "变压器",
+        "电池储能系统及其他大宗电力设备",
+        "逆变器"
+      ],
+      "stage": "ANNOUNCED",
+      "modality": "FACT",
+      "time": {
+        "raw": "just seen",
+        "start_at": null,
+        "end_at": null,
+        "precision": "MONTH"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": "认定相关进口对美国国家安全构成异常和特别威胁",
+      "method": "发布行政命令，禁止从24个国家进口相关大宗电力设备",
+      "metrics": [
+        {
+          "name": "受限来源国数量",
+          "value": "24",
+          "unit": "个",
+          "change": null,
+          "period": null
+        }
+      ],
+      "attribution": {
+        "reported_by": "Energy Storage News",
+        "claimed_by": "美国总统唐纳德·特朗普"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "energy_storage_news",
+    "source_name": "Energy Storage News",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://www.energy-storage.news/goldman-sachs-alternatives-cleanhill-partners-sell-pcs-manufacturer-epc-power-for-us4-4-billion/",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美国",
+      "进口禁令",
+      "逆变器",
+      "储能设备",
+      "中国"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-04T09:25:30Z",
+    "collected_at": "2026-09-06T03:43:56.11867Z"
+  },
+  "EVDecc39cbb-ca54-5ad4-b257-11b364fdaf65": {
+    "id": "EVDecc39cbb-ca54-5ad4-b257-11b364fdaf65",
+    "raw_evidence_id": "RAWc9a50ef4-f878-556c-8225-a2ecf4fa2a5a",
+    "title": "周末要闻汇总：事关人工智能、算力设施等 七部门最新部署",
+    "summary": "美国与伊朗相互袭击油轮，美伊冲突对航运和能源供应的风险上升。",
+    "semantic": {
+      "actors": [
+        "伊朗",
+        "美国"
+      ],
+      "action": "相互袭击",
+      "objects": [
+        "油轮"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "周末",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "伊朗",
+        "美国"
+      ],
+      "reason": null,
+      "method": null,
+      "metrics": [],
+      "attribution": {
+        "reported_by": "东方财富",
+        "claimed_by": null
+      }
+    },
+    "categories": [
+      {
+        "id": "EVCc18ddddb-14bc-5496-99ea-963ee2c25597",
+        "code": "EVENT_BRIEF",
+        "name": "事件快讯",
+        "description": "简短报告已经发生或正在发生的事件，核心目的是说明发生了什么。"
+      }
+    ],
+    "source_id": "eastmoney_fastnews",
+    "source_name": "东方财富",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://finance.eastmoney.com/a/202609063866073991.html",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "美伊冲突",
+      "油轮",
+      "伊朗军方"
+    ],
+    "is_split": true,
+    "published_at": "2026-09-06T06:00:19Z",
+    "collected_at": "2026-09-06T06:04:19.475283Z"
+  },
+  "EVDf9bff26a-955f-5e29-84aa-55876d20669c": {
+    "id": "EVDf9bff26a-955f-5e29-84aa-55876d20669c",
+    "raw_evidence_id": "RAWfaa276be-601f-5db0-a6df-ef1910ccda7f",
+    "title": "China’s Grip on Erbium and Yttrium Could Choke Data-Center Growth",
+    "summary": "受新建数据中心电力需求推动，美国燃烧涡轮需求升至历史最高水平，而钇供应不稳定已影响相关涂层厂商。",
+    "semantic": {
+      "actors": [
+        "美国燃烧涡轮市场"
+      ],
+      "action": "升至历史最高水平",
+      "objects": [
+        "燃烧涡轮需求"
+      ],
+      "stage": "OCCURRED",
+      "modality": "FACT",
+      "time": {
+        "raw": "目前",
+        "start_at": null,
+        "end_at": null,
+        "precision": "UNKNOWN"
+      },
+      "jurisdictions": [
+        "美国"
+      ],
+      "reason": "新建数据中心，尤其是用于人工智能训练、推理和云计算的超大规模设施，需要新增电力供应",
+      "method": null,
+      "metrics": [],
+      "attribution": {
+        "reported_by": "IEEE Spectrum",
+        "claimed_by": "Riston Rocchio-Heller"
+      }
+    },
+    "categories": [
+      {
+        "id": "EVC5b12ffce-178d-56ed-a54f-c01696c486f4",
+        "code": "IN_DEPTH_REPORT",
+        "name": "专题/深度报道",
+        "description": "围绕一个专题进行长篇、多角度调查、梳理或深度报道。"
+      }
+    ],
+    "source_id": "ieee_spectrum_semiconductors",
+    "source_name": "IEEE Spectrum Semiconductor",
+    "source_level": "L3_MEDIA",
+    "source_url": "https://spectrum.ieee.org/rare-earth-shortage",
+    "is_original": true,
+    "quoted_source_name": null,
+    "keywords": [
+      "燃气轮机",
+      "数据中心",
+      "钇供应",
+      "美国"
+    ],
+    "is_split": true,
+    "published_at": "2026-08-26T13:00:01Z",
+    "collected_at": "2026-09-06T03:35:41.000246Z"
+  }
+}

@@ -1,0 +1,1332 @@
+[
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g1",
+    "chain": "g1-2-chain",
+    "entity_id": "CND190c144e-c966-5967-9b5b-57a271c013da",
+    "name": "炼厂原油进料",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "通道流量下降 → 对应来源到货受扰 → 库存和替代采购不足时原油进料稳定性下降"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g1",
+    "chain": "g1-2-chain",
+    "entity_id": "CND2e474204-e21c-5381-9cdf-61d062345240",
+    "name": "炼油化工",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "原油进料受扰 → 开工或原料成本承压 → 产品顺价与减产损失共同决定炼化利润"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g1",
+    "chain": "g1-2-chain",
+    "entity_id": "CND6fdc55cd-0bda-56d5-9e05-45b35ed9f3be",
+    "name": "直馏石脑油",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "原油进料受扰 → 炼厂原料成本及加工安排变化 → 直馏石脑油成本与可供量分化"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g1",
+    "chain": "g1-2-chain",
+    "entity_id": "CNDcd7b9895-4da3-5374-a2dd-7a282c15ab0e",
+    "name": "石脑油加氢处理服务",
+    "decision": "excluded",
+    "reason": "未确认具体进料品质、处理路线与业务收费，原油扰动不能单独决定加氢处理量或收益。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g1",
+    "chain": "g1-2-chain",
+    "entity_id": "CND981d4194-3b6c-57f1-8a36-cb6c6af7a528",
+    "name": "乙烯蒸汽裂解服务",
+    "decision": "excluded",
+    "reason": "本故事线缺少裂解原料路线、成本传递和产品调价依据，暂不将通道扰动推到该加工服务。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g1",
+    "chain": "g1-2-chain",
+    "entity_id": "CNDaadec9aa-7160-5145-b346-7729ee3dcbf4",
+    "name": "乙烯及裂解联产品",
+    "decision": "excluded",
+    "reason": "未拆分联产品结构、终端需求及调价能力，不能以原料压力确定产品净影响。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g1",
+    "chain": "g1-3-chain",
+    "entity_id": "CND6a033813-6f91-5f25-8867-24a3bebb5edb",
+    "name": "航运服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "遇险与通行约束 → 改道、等待及保险费用变化 → 航运交付与净收益分化"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g1",
+    "chain": "g1-3-chain",
+    "entity_id": "CND5cd40277-fad4-5cdc-a5cb-e4946bd8e552",
+    "name": "跨境物流",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "航道约束 → 海运绕行或等待 → 使用相关海运段的跨境物流交付周期拉长"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g1",
+    "chain": "g1-3-chain",
+    "entity_id": "CND21b523d1-39d0-5c58-8cdb-5298825ad582",
+    "name": "港口运营",
+    "decision": "excluded",
+    "reason": "未明确受扰的具体港口及其吞吐量、靠泊或收费变化；不能将航线风险外推所有港口。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g1",
+    "chain": "g1-3-chain",
+    "entity_id": "CND9b739b16-92a3-55b0-8e6f-4de8c03a42f0",
+    "name": "商用运输船舶",
+    "decision": "excluded",
+    "reason": "未有新增造船、购船或船队更新依据，运营航线受扰不等于船舶产品需求变化。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g2",
+    "chain": "g2-1-chain",
+    "entity_id": "CND6a033813-6f91-5f25-8867-24a3bebb5edb",
+    "name": "航运服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "商船受击与交火风险 → 承运、保险和航线调整 → 相关航运服务交付与成本承压"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g2",
+    "chain": "g2-1-chain",
+    "entity_id": "CND5cd40277-fad4-5cdc-a5cb-e4946bd8e552",
+    "name": "跨境物流",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "商业船舶受击风险 → 承运安排变化 → 相关跨境物流履约波动"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g2",
+    "chain": "g2-1-chain",
+    "entity_id": "CND21b523d1-39d0-5c58-8cdb-5298825ad582",
+    "name": "港口运营",
+    "decision": "excluded",
+    "reason": "未明确受扰的具体港口及其吞吐量、靠泊或收费变化；不能将航线风险外推所有港口。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g2",
+    "chain": "g2-1-chain",
+    "entity_id": "CND9b739b16-92a3-55b0-8e6f-4de8c03a42f0",
+    "name": "商用运输船舶",
+    "decision": "excluded",
+    "reason": "未有新增造船、购船或船队更新依据，运营航线受扰不等于船舶产品需求变化。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g3",
+    "chain": "g3-1-chain",
+    "entity_id": "CND590758ed-67f9-533c-8221-b81712a71668",
+    "name": "稀土分离氧化物",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "出口许可及发货约束 → 指定氧化物可交付销量受限 → 销量与议价能力变化不必同向"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g3",
+    "chain": "g3-1-chain",
+    "entity_id": "CNDafbf1596-2d6a-5140-a95e-3ff98187a07a",
+    "name": "稀土溶剂萃取分离服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "指定品种订单交付受限 → 分离排产随目的地订单调整 → 利用率与服务收入方向待验证"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g3",
+    "chain": "g3-1-chain",
+    "entity_id": "CND5cdb05d8-4b70-547e-b59c-984d47e9878b",
+    "name": "混合稀土溶液",
+    "decision": "excluded",
+    "reason": "限制与交付证据集中在钇产品；未确认该中间品中钇的占比、对应出口合同与传导敞口。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g3",
+    "chain": "g3-1-chain",
+    "entity_id": "CND69b64d2c-2e9b-5ae4-a7a1-4d3cdb8a5073",
+    "name": "稀土分解浸出服务",
+    "decision": "excluded",
+    "reason": "未提供钇相关原料处理合同和工作量，不能由出口政策直接确定该加工服务方向。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g3",
+    "chain": "g3-1-chain",
+    "entity_id": "CNDe6a6d0ff-7fa3-5751-970b-14b037672cb7",
+    "name": "稀土精矿",
+    "decision": "excluded",
+    "reason": "未确认精矿组成、销售合同及地域暴露，不把特定钇产品的交付约束扩成全部原矿供需变化。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g4",
+    "chain": "g4-1-chain",
+    "entity_id": "CNDa62e53bf-6ecb-56e6-8059-db9dd281252f",
+    "name": "商业银行支付结算服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "特定银行网络受制裁 → 对应交易审查与支付路径受限 → 相关结算周期及合规成本可能增加"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g4",
+    "chain": "g4-1-chain",
+    "entity_id": "CND41d13c03-1a71-516b-912d-1e150df9f758",
+    "name": "客户存款",
+    "decision": "excluded",
+    "reason": "本故事线的制裁范围尚未证明涉及存款迁移或存款定价。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g4",
+    "chain": "g4-1-chain",
+    "entity_id": "CNDad3c71d9-9f92-563a-a57b-ec9414d42c96",
+    "name": "商业银行信贷服务",
+    "decision": "excluded",
+    "reason": "制裁对象及结算限制尚未形成特定信贷敞口与授信变化证据。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g4",
+    "chain": "g4-1-chain",
+    "entity_id": "CND81c18348-c09b-54d5-882b-d8869b512419",
+    "name": "银行核心业务系统",
+    "decision": "excluded",
+    "reason": "资金或制裁事件未对应新的系统采购、改造或服务收入，缺少该技术节点传导依据。"
+  },
+  {
+    "kind": "geopolitical_stories",
+    "unit": "g4",
+    "chain": "g4-1-chain",
+    "entity_id": "CND5fdf5c57-6e95-5e1a-8044-acfbb3b9b061",
+    "name": "征信与信用风险管理服务",
+    "decision": "excluded",
+    "reason": "没有对应征信服务采购或工作量变化，银行业务风险不等于该服务收入变化。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m1",
+    "chain": "m1-1-chain",
+    "entity_id": "CND41d13c03-1a71-516b-912d-1e150df9f758",
+    "name": "客户存款",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "不能预设快速降息 → 美元敏感存款按期限重定价 → 付息成本可能分化"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m1",
+    "chain": "m1-1-chain",
+    "entity_id": "CNDad3c71d9-9f92-563a-a57b-ec9414d42c96",
+    "name": "商业银行信贷服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "存贷款期限和重定价安排不同 → 资产收益与资金成本变化不同步 → 信贷净利差分化"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m1",
+    "chain": "m1-1-chain",
+    "entity_id": "CNDa62e53bf-6ecb-56e6-8059-db9dd281252f",
+    "name": "商业银行支付结算服务",
+    "decision": "excluded",
+    "reason": "利率分歧本身不足以确定支付结算业务量或收费变化。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m1",
+    "chain": "m1-1-chain",
+    "entity_id": "CND81c18348-c09b-54d5-882b-d8869b512419",
+    "name": "银行核心业务系统",
+    "decision": "excluded",
+    "reason": "资金或制裁事件未对应新的系统采购、改造或服务收入，缺少该技术节点传导依据。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m1",
+    "chain": "m1-1-chain",
+    "entity_id": "CND5fdf5c57-6e95-5e1a-8044-acfbb3b9b061",
+    "name": "征信与信用风险管理服务",
+    "decision": "excluded",
+    "reason": "没有对应征信服务采购或工作量变化，银行业务风险不等于该服务收入变化。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m2",
+    "chain": "m2-1-chain",
+    "entity_id": "CND190c144e-c966-5967-9b5b-57a271c013da",
+    "name": "炼厂原油进料",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "国际油价上涨 → 若进入采购合同结算 → 原油进料实际成本随库存及套保覆盖变化"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m2",
+    "chain": "m2-1-chain",
+    "entity_id": "CND2e474204-e21c-5381-9cdf-61d062345240",
+    "name": "炼油化工",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "进料成本增加 → 产品顺价与套保抵消程度不同 → 炼化加工毛利可能分化"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m2",
+    "chain": "m2-1-chain",
+    "entity_id": "CND6fdc55cd-0bda-56d5-9e05-45b35ed9f3be",
+    "name": "直馏石脑油",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "进口能源价格压力 → 炼厂进料成本 → 直馏石脑油成本传递"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m2",
+    "chain": "m2-1-chain",
+    "entity_id": "CND981d4194-3b6c-57f1-8a36-cb6c6af7a528",
+    "name": "乙烯蒸汽裂解服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "原油及石脑油成本传递 → 石脑油路线裂解原料成本提高 → 裂解价差取决于产品调价"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m2",
+    "chain": "m2-1-chain",
+    "entity_id": "CNDcd7b9895-4da3-5374-a2dd-7a282c15ab0e",
+    "name": "石脑油加氢处理服务",
+    "decision": "excluded",
+    "reason": "未确认具体进料品质、处理路线与业务收费，原油扰动不能单独决定加氢处理量或收益。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m2",
+    "chain": "m2-1-chain",
+    "entity_id": "CNDaadec9aa-7160-5145-b346-7729ee3dcbf4",
+    "name": "乙烯及裂解联产品",
+    "decision": "excluded",
+    "reason": "未拆分联产品结构、终端需求及调价能力，不能以原料压力确定产品净影响。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m2",
+    "chain": "m2-2-chain",
+    "entity_id": "CNDb3a4fb03-984e-5712-bcbb-4dda7055a44d",
+    "name": "管道天然气气源采购服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "能源价格压力 → 若气价变化进入进口采购合同 → 相关气源采购成本可能增加"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m2",
+    "chain": "m2-2-chain",
+    "entity_id": "CNDb6a0ce61-c928-5af0-bea7-ddc7d1aa9e6e",
+    "name": "城市燃气供应服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "采购成本增加 → 若终端顺价滞后 → 城燃供应购销价差可能收窄"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m2",
+    "chain": "m2-2-chain",
+    "entity_id": "CND39f827f2-5bf4-5339-9828-7de19bd451ff",
+    "name": "城市燃气调压计量服务",
+    "decision": "excluded",
+    "reason": "气源成本变化未证明调压计量工作量或服务价格变化。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m2",
+    "chain": "m2-2-chain",
+    "entity_id": "CNDfc3a71bb-05d2-5455-858d-ec181543e41b",
+    "name": "城市燃气接收储运服务",
+    "decision": "excluded",
+    "reason": "未确认本期吞吐变化、仓储利用率或服务合同，不将采购价格压力直接外推储运收入。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m2",
+    "chain": "m2-2-chain",
+    "entity_id": "CND3fba3245-86ac-53a5-98ab-59784f81c9b5",
+    "name": "城市燃气输配管网基础设施",
+    "decision": "excluded",
+    "reason": "缺少新增管网建设或改造安排，不能由进口气价变化推出资产投资需求。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m3",
+    "chain": "m3-1-chain",
+    "entity_id": "CND28f65eee-771f-5aa0-8e4e-6bf1a0e38c14",
+    "name": "住宅项目营销销售服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "购房资格放宽 → 有支付能力的潜在买家增加 → 适用住宅营销销售成交机会增加"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m3",
+    "chain": "m3-1-chain",
+    "entity_id": "CNDa73c948c-ca3d-5c57-9081-74c164114436",
+    "name": "住宅开发服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "新增成交兑现 → 房款实际回收 → 适用住宅开发现金回笼可能改善"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m3",
+    "chain": "m3-1-chain",
+    "entity_id": "CND65f9f20c-38d4-5db8-a1a4-76e95f67641e",
+    "name": "住宅工程施工服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "购买资格放宽 → 成交与回款可能改善 → 实际施工支付和工程推进"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m3",
+    "chain": "m3-1-chain",
+    "entity_id": "CNDa5524785-6871-52a1-a977-572cd4753ecf",
+    "name": "住宅项目融资服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "购房政策调整 → 成交回款改善的可能性 → 项目资金缺口及融资安排变化"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m3",
+    "chain": "m3-1-chain",
+    "entity_id": "CND025f4d5f-74dc-588d-befc-6195ee0bf695",
+    "name": "住宅开发用地使用权",
+    "decision": "excluded",
+    "reason": "购房资格调整未包含土地出让、供地或地价变化依据。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m3",
+    "chain": "m3-1-chain",
+    "entity_id": "CNDc85fc079-9bc2-5e8b-b364-7285223becae",
+    "name": "住宅项目规划设计服务",
+    "decision": "excluded",
+    "reason": "缺少新增项目规划设计委托，销售政策不等于设计订单。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m3",
+    "chain": "m3-2-chain",
+    "entity_id": "CND0068a811-9bd0-5c07-8ff7-c5444a34b14c",
+    "name": "房屋建设",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "更新政策协调安排 → 出资、审批与合同落实 → 适用房屋建设工作量可能增加"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m3",
+    "chain": "m3-2-chain",
+    "entity_id": "CND8619491b-0c80-5e1e-baa5-6db30892cea2",
+    "name": "建筑结构材料",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "旧房更新安排 → 结构改造施工落实 → 对应结构材料采购"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m3",
+    "chain": "m3-2-chain",
+    "entity_id": "CNDc82d7b59-fd94-59b0-8ffe-bb234dff3622",
+    "name": "建筑机电安装服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "旧房更新 → 具体机电改造清单与资金落实 → 机电安装工作量"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m3",
+    "chain": "m3-2-chain",
+    "entity_id": "CND0e32cd00-de1d-5404-ba45-65f9404aafd1",
+    "name": "工程勘察服务",
+    "decision": "excluded",
+    "reason": "尚无相关工程新增勘察合同或工作量，更新融资与施工安排不足以确定勘察需求。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m3",
+    "chain": "m3-2-chain",
+    "entity_id": "CNDe0fcf5c3-62e0-58b8-a128-76fac2b14351",
+    "name": "工程设计服务",
+    "decision": "excluded",
+    "reason": "未明确设计阶段与合同，不能从资金或施工线索推定新增设计订单。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m3",
+    "chain": "m3-2-chain",
+    "entity_id": "CNDbb4aa165-bfa8-579b-8f66-658b9c72ac82",
+    "name": "楼宇设备",
+    "decision": "excluded",
+    "reason": "未明确改造清单、设备品类与采购主体，设备需求方向缺乏产品落点。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m4",
+    "chain": "m4-1-chain",
+    "entity_id": "CND0068a811-9bd0-5c07-8ff7-c5444a34b14c",
+    "name": "房屋建设",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "对应项目获得贷款 → 资金进入施工并按进度支付 → 房屋建设工作量和回款可能改善"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m4",
+    "chain": "m4-1-chain",
+    "entity_id": "CND8619491b-0c80-5e1e-baa5-6db30892cea2",
+    "name": "建筑结构材料",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "融资到位 → 工程支付与开工 → 结构材料采购兑现"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m4",
+    "chain": "m4-1-chain",
+    "entity_id": "CNDc82d7b59-fd94-59b0-8ffe-bb234dff3622",
+    "name": "建筑机电安装服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "城市更新放款 → 项目执行及配套施工 → 机电安装服务需求"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m4",
+    "chain": "m4-1-chain",
+    "entity_id": "CND0e32cd00-de1d-5404-ba45-65f9404aafd1",
+    "name": "工程勘察服务",
+    "decision": "excluded",
+    "reason": "尚无相关工程新增勘察合同或工作量，更新融资与施工安排不足以确定勘察需求。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m4",
+    "chain": "m4-1-chain",
+    "entity_id": "CNDe0fcf5c3-62e0-58b8-a128-76fac2b14351",
+    "name": "工程设计服务",
+    "decision": "excluded",
+    "reason": "未明确设计阶段与合同，不能从资金或施工线索推定新增设计订单。"
+  },
+  {
+    "kind": "macroeconomic_stories",
+    "unit": "m4",
+    "chain": "m4-1-chain",
+    "entity_id": "CNDbb4aa165-bfa8-579b-8f66-658b9c72ac82",
+    "name": "楼宇设备",
+    "decision": "excluded",
+    "reason": "未明确改造清单、设备品类与采购主体，设备需求方向缺乏产品落点。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c1",
+    "chain": "c1-a1",
+    "entity_id": "CND7e522813-b6e7-5674-ac93-a71bd85a0d4b",
+    "name": "影视动漫制作",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "标准短剧报价下行、产能涌入 → 影视动漫制作中的同质化业务单位收入承压；定制报价仍高，说明影响不均。；视频模型低成本预览和工具集成 → 可能降低迭代试错成本并扩散制作能力 → AI视频服务的交付效率改善，也可能进一步增强标准制作的价格竞争。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c1",
+    "chain": "c1-a1",
+    "entity_id": "CND4ff562b8-2eb9-5e2c-9daf-aab56c3fd650",
+    "name": "AI视频生成服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "视频模型低成本预览和工具集成 → 可能降低迭代试错成本并扩散制作能力 → AI视频服务的交付效率改善，也可能进一步增强标准制作的价格竞争。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c1",
+    "chain": "c1-a1",
+    "entity_id": "CNDc6d6e262-e694-5404-9bc2-869161297d3b",
+    "name": "视频生成基础模型",
+    "decision": "excluded",
+    "reason": "标准制作报价下跌未提供该特定基础模型的调用量、授权费或成本变化。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c1",
+    "chain": "c1-a1",
+    "entity_id": "CND76591307-e438-5070-ba24-748bc9a67fe5",
+    "name": "算力供给",
+    "decision": "excluded",
+    "reason": "本单元的模型能力或制作报价变化没有提供实际算力采购、利用率或收费变化。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c1",
+    "chain": "c1-a1",
+    "entity_id": "CNDd902bf9b-2d4b-581e-a7a7-2eb0560b81e7",
+    "name": "AI语料",
+    "decision": "excluded",
+    "reason": "未给出语料新增采购与授权变化，不将视频业务竞争直接外推语料收入。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c1",
+    "chain": "c1-a2",
+    "entity_id": "CND6607ab82-4f97-5aa1-b820-28ab08036ccf",
+    "name": "生成式AI应用服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "视频能力上线、软件集成和游戏原型效率案例 → 降低部分使用门槛与人工修正成本 → 可能增加可服务场景，但未证明外部付费收入。；短剧报价下降表明下游竞争激烈 → 模型与应用供应商能否取得增量收入取决于付费量增长能否超过降价和效率提升减少的调用。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c1",
+    "chain": "c1-a2",
+    "entity_id": "CND3ac17980-ea30-5d38-afb0-59e667ccf63e",
+    "name": "生成式AI基础模型",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "视频能力上线、软件集成和游戏原型效率案例 → 降低部分使用门槛与人工修正成本 → 可能增加可服务场景，但未证明外部付费收入。；短剧报价下降表明下游竞争激烈 → 模型与应用供应商能否取得增量收入取决于付费量增长能否超过降价和效率提升减少的调用。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c1",
+    "chain": "c1-a2",
+    "entity_id": "CND304c264a-7d7d-5bde-9e15-1d3a9ddf8d7a",
+    "name": "模型训练服务",
+    "decision": "excluded",
+    "reason": "视频模型能力及制作报价不能证明新增训练服务订单或训练工作量。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c1",
+    "chain": "c1-a2",
+    "entity_id": "CND76591307-e438-5070-ba24-748bc9a67fe5",
+    "name": "算力供给",
+    "decision": "excluded",
+    "reason": "本单元的模型能力或制作报价变化没有提供实际算力采购、利用率或收费变化。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c1",
+    "chain": "c1-a2",
+    "entity_id": "CND97e66e44-c75e-5a9b-9138-6ddbada1cede",
+    "name": "模型训练数据集",
+    "decision": "excluded",
+    "reason": "没有具体训练数据采购、许可或需求变化依据。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c2",
+    "chain": "c2-n1",
+    "entity_id": "CNDa4a9e7d7-0bd7-5d5b-990d-ced538108380",
+    "name": "油气钻完井服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "山西增产规划、雪佛龙投资计划 → 对应生产井与开发工程需求可能增加 → 钻完井服务机会；两地项目和产品各自独立。；LNG出口受扰提供供给风险线索，宏观油价上涨和进口账单估算提供成本线索 → 国内替代气开发或部分油田投资的经济动机可能增强 → 但只有预期售价能覆盖开发成本并持续，才可能转成追加开发。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c2",
+    "chain": "c2-n1",
+    "entity_id": "CNDd4012131-d248-5fd4-b26b-33072964a03e",
+    "name": "油气开采",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "山西增产规划、雪佛龙投资计划 → 对应生产井与开发工程需求可能增加 → 钻完井服务机会；两地项目和产品各自独立。；LNG出口受扰提供供给风险线索，宏观油价上涨和进口账单估算提供成本线索 → 国内替代气开发或部分油田投资的经济动机可能增强 → 但只有预期售价能覆盖开发成本并持续，才可能转成追加开发。；委内瑞拉特许经营及美方控制安排说明当地资源开发制度变化 → 对所在国开发环境提供背景；不能证明雪佛龙取得同一油田或相同权益。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c2",
+    "chain": "c2-n1",
+    "entity_id": "CND170004eb-9b32-5bd6-b40e-ef613ff30d83",
+    "name": "商品原油",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "雪佛龙委内瑞拉投资及原油增产目标 → 实际投产与商业出货 → 对应商品原油远期供给"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c2",
+    "chain": "c2-n1",
+    "entity_id": "CND54ab7359-30a0-5f6a-908a-b810dd134100",
+    "name": "油气勘探评价服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "已披露开发计划 → 对应项目评价与预算落实 → 勘探评价服务需求"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c2",
+    "chain": "c2-n1",
+    "entity_id": "CND8adc4e5f-b4c1-56a5-95da-4db35499bc4d",
+    "name": "具备产能的油气生产井",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "开发投入 → 钻完井与验收 → 可投产生产井增加"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c2",
+    "chain": "c2-n1",
+    "entity_id": "CND628952a7-defc-5e76-a84a-e8f5ae0ab7b9",
+    "name": "油气集输与初步处理服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "生产井落地 → 实际产出与设施接入 → 集输处理工作量"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c2",
+    "chain": "c2-n2",
+    "entity_id": "CNDb3a4fb03-984e-5712-bcbb-4dda7055a44d",
+    "name": "管道天然气气源采购服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "卡塔尔LNG出口受扰 → 可交付进口补充气可能收紧；全球能源账单增加提供价格背景 → 若反映到采购合同，气源采购成本可能上升 → 顺价滞后时供应服务价差承压。；山西天然气增产规划 → 若投产并接入相应管网，可扩大部分国内采购选择 → 有望缓冲进口敞口，但晚于当前供给扰动。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c2",
+    "chain": "c2-n2",
+    "entity_id": "CNDb6a0ce61-c928-5af0-bea7-ddc7d1aa9e6e",
+    "name": "城市燃气供应服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "卡塔尔LNG出口受扰 → 可交付进口补充气可能收紧；全球能源账单增加提供价格背景 → 若反映到采购合同，气源采购成本可能上升 → 顺价滞后时供应服务价差承压。；山西天然气增产规划 → 若投产并接入相应管网，可扩大部分国内采购选择 → 有望缓冲进口敞口，但晚于当前供给扰动。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c2",
+    "chain": "c2-n2",
+    "entity_id": "CND39f827f2-5bf4-5339-9828-7de19bd451ff",
+    "name": "城市燃气调压计量服务",
+    "decision": "excluded",
+    "reason": "气源成本变化未证明调压计量工作量或服务价格变化。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c2",
+    "chain": "c2-n2",
+    "entity_id": "CNDfc3a71bb-05d2-5455-858d-ec181543e41b",
+    "name": "城市燃气接收储运服务",
+    "decision": "excluded",
+    "reason": "未确认本期吞吐变化、仓储利用率或服务合同，不将采购价格压力直接外推储运收入。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c2",
+    "chain": "c2-n2",
+    "entity_id": "CND3fba3245-86ac-53a5-98ab-59784f81c9b5",
+    "name": "城市燃气输配管网基础设施",
+    "decision": "excluded",
+    "reason": "缺少新增管网建设或改造安排，不能由进口气价变化推出资产投资需求。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s1",
+    "entity_id": "CND4a9c6f2c-528b-55bf-b79b-512eaca5afb8",
+    "name": "储能锂离子电芯",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "特定314Ah电芯降价可能降低系统成本，同时储能套利价差压缩提醒运营回报并非随设备量增长 → 系统售价、利润和买方投资意愿仍可能分化。 德国储能稳网案例提示用途不止套利，但未给出辅助服务收入，不能量化抵消价差压缩。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s1",
+    "entity_id": "CNDe1b02ca0-1fe2-5c30-8218-8a404a6dc0c8",
+    "name": "锂电储能系统",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "项目开工、产品投产和多年供货协议 → 系统交付需求及可用产品增加；未来产能目标和投运日期仍须兑现。；美国设备进口限制报道直接涉及储能系统；印度配储和构网型草案一方面带来潜在需求，另一方面增加技术配置要求 → 有适用资质的系统获得机会，受限供应商可能承担改造与交付摩擦。；利率决定与就业/政治表态显示不能预设融资成本下降 → 对依赖美元债务的项目，若利率未按预期下降，融资成本与回报门槛可能延后采购或压低系统报价。；特定314Ah电芯降价可能降低系统成本，同时储能套利价差压缩提醒运营回报并非随设备量增长 → 系统售价、利润和买方投资意愿仍可能分化。 德国储能稳网案例提示用途不止套利，但未给出辅助服务收入，不能量化抵消价差压缩。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s1",
+    "entity_id": "CND15b6b535-fd70-5390-a46f-4add2fb6dd4c",
+    "name": "储能变流器（PCS）",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "印度技术草案 → 储能系统配置要求 → PCS 构网型能力与认证需求"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s1",
+    "entity_id": "CND56349579-11f4-5420-b6d5-d880afb4c931",
+    "name": "储能热管理系统",
+    "decision": "excluded",
+    "reason": "项目容量及产品发布未明确热管理配置变化或供应合同，不外推该子系统需求增量。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s1",
+    "entity_id": "CND712991e3-a320-51b1-b8b9-6ead6945f1dd",
+    "name": "储能电池管理系统（BMS）",
+    "decision": "excluded",
+    "reason": "未确认BMS规格、供应关系和采购增量，系统级线索不足以确定该节点变化。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s2",
+    "entity_id": "CND15b6b535-fd70-5390-a46f-4add2fb6dd4c",
+    "name": "储能变流器（PCS）",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "美国逆变器及储能设备进口限制报道改变潜在准入；印度配储与全PCS构网型草案 → 有技术和市场资质的PCS供应更可能参与对应需求。；EPC Power新增名义产能提高潜在供给，买方对其增长和利润预测只反映交易方预期 → 即使需求增加，也需验证实际产出、利用率和毛利。；若美元融资条件未放松，相关储能项目的投资门槛可能继续约束采购节奏 → PCS订单与回款不能仅由技术草案推定。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s2",
+    "entity_id": "CND29b778b1-0f5c-5c88-9a49-550292b937e4",
+    "name": "电化学储能系统",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "美国逆变器及储能设备进口限制报道改变潜在准入；印度配储与全PCS构网型草案 → 有技术和市场资质的PCS供应更可能参与对应需求。；若美元融资条件未放松，相关储能项目的投资门槛可能继续约束采购节奏 → PCS订单与回款不能仅由技术草案推定。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s2",
+    "entity_id": "CND68f3c05c-f2b6-59e7-ae21-8dc4ec06bf18",
+    "name": "储能隔离变压器",
+    "decision": "excluded",
+    "reason": "构网型控制要求未直接证明隔离变压器规格、配置数量或订单变化。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s2",
+    "entity_id": "CNDbd5373b6-ce30-5f10-b80f-4a5fd695230e",
+    "name": "IGBT",
+    "decision": "excluded",
+    "reason": "构网型技术要求可能由控制和系统设计实现，缺少IGBT器件用量或采购变化。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s3",
+    "entity_id": "CNDd73cfee5-2a94-5379-a123-5cd243550134",
+    "name": "抽水蓄能电站基础设施",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "主体施工推进 → 后续机电交付需求可能增加 → 2030—2031年计划投产后才有运营贡献。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s3",
+    "entity_id": "CND0d4cb5ea-1136-5351-aa17-44d5c8c5c9ba",
+    "name": "可逆式水泵水轮机",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "主体施工推进 → 后续机电交付需求可能增加 → 2030—2031年计划投产后才有运营贡献。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s3",
+    "entity_id": "CND0498ab5b-592c-5191-8024-60be4855dcc1",
+    "name": "抽水蓄能发电运营服务",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "主体施工推进 → 后续机电交付需求可能增加 → 2030—2031年计划投产后才有运营贡献。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s3",
+    "entity_id": "CND3688a004-df42-51b4-b6e5-cc9d8d97b4d2",
+    "name": "发电电动机",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "抽蓄主体工程推进 → 机组设备采购阶段 → 发电电动机需求"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s3",
+    "entity_id": "CNDd1a97a9b-cd7d-5398-aed6-493beea21b11",
+    "name": "抽水蓄能上水库",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "主体建设推进 → 项目水库配套施工 → 上水库工程需求"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c3",
+    "chain": "c3-s3",
+    "entity_id": "CNDd06c8fb5-73f6-57d1-a083-a1b125a39d99",
+    "name": "抽水蓄能下水库",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "主体建设推进 → 上下库配套工程安排 → 下水库建设需求"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c4",
+    "chain": "c4-p1",
+    "entity_id": "CND5c375dd5-5749-544c-b82b-b7890c57788c",
+    "name": "晶硅光伏组件",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "美国既有组件产能及未来交付支持区域供应线索；新增电池产能是计划，非洲制造多面向美国 → 非洲发电增长不能直接吸收全部区域制造扩产。；报道点名逆变器等电力设备而非组件 → 只有美国项目的受限配套设备出现采购替换或延迟，才可能间接影响组件验收与排期。；对以美元融资的未来项目，利率路径不确定意味着不能预设融资成本下降 → 买方回报门槛可能影响组件采购节奏。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c4",
+    "chain": "c4-p1",
+    "entity_id": "CND735ddfb8-3aa9-589d-9739-6e1aea72e4f2",
+    "name": "晶硅光伏电池片",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "美国既有组件产能及未来交付支持区域供应线索；新增电池产能是计划，非洲制造多面向美国 → 非洲发电增长不能直接吸收全部区域制造扩产。；对以美元融资的未来项目，利率路径不确定意味着不能预设融资成本下降 → 买方回报门槛可能影响组件采购节奏。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c4",
+    "chain": "c4-p1",
+    "entity_id": "CNDa669d045-0969-5894-ba6c-61e92e74fd9b",
+    "name": "光伏级单晶硅片",
+    "decision": "excluded",
+    "reason": "未确认新增电池片产线的硅片规格与采购合同，跨地区组件线索不足以确定硅片需求。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c4",
+    "chain": "c4-p2",
+    "entity_id": "CND96da41b7-3fd4-5997-a4d0-bd7b5261effa",
+    "name": "并网光伏电站",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "印度历史新增装机、非洲未来发电预测和美国项目交付计划 → 支持各自地区的潜在项目规模；仅投产并网后才形成运营收入。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c4",
+    "chain": "c4-p2",
+    "entity_id": "CND8f506e1e-9209-5f30-b3c6-da8a5641868a",
+    "name": "光伏电站EPC建设服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "印度历史新增装机、非洲未来发电预测和美国项目交付计划 → 支持各自地区的潜在项目规模；仅投产并网后才形成运营收入。；澳洲安装成本未明显下降；印度配储与构网型草案可能提高初始投资 → 装机增长与项目回报不必同向。；美国项目若依赖受限逆变器等设备，可能承担替换与延迟；若同时有美元债务敞口，融资条件未放松将约束投资回报 → 不能由组件供应计划直接认定项目收益改善。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c4",
+    "chain": "c4-p2",
+    "entity_id": "CNDdd5ec77d-dced-52a2-81ff-ea62db308183",
+    "name": "光伏电站发电运营服务",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "印度历史新增装机、非洲未来发电预测和美国项目交付计划 → 支持各自地区的潜在项目规模；仅投产并网后才形成运营收入。；澳洲安装成本未明显下降；印度配储与构网型草案可能提高初始投资 → 装机增长与项目回报不必同向。；美国项目若依赖受限逆变器等设备，可能承担替换与延迟；若同时有美元债务敞口，融资条件未放松将约束投资回报 → 不能由组件供应计划直接认定项目收益改善。；印度能源栈试点与点对点交易演示 → 提供未来分布式电力结算模式的可能性；尚未证明大规模商业收入提升。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c4",
+    "chain": "c4-p2",
+    "entity_id": "CND5a75fd1b-32e9-5047-9fb3-d5122be65aaa",
+    "name": "光伏支架系统",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "新增项目预测 → 工程采购落实 → 对应支架需求"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c4",
+    "chain": "c4-p2",
+    "entity_id": "CND5c375dd5-5749-544c-b82b-b7890c57788c",
+    "name": "晶硅光伏组件",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "新增光伏项目 → 路线与采购确认 → 晶硅组件需求"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c4",
+    "chain": "c4-p2",
+    "entity_id": "CNDd3561638-9368-5804-9251-8b1f92ee5519",
+    "name": "光伏逆变器",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "新增电站 → 并网设备采购 → 逆变器需求受准入及配置约束"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c5",
+    "chain": "c5-ai1",
+    "entity_id": "CNDf3372638-9689-5e7b-b9a5-2686e4bc7f0b",
+    "name": "人形机器人",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "出货数量与全球份额 → 确认当期规模 → 缺少同期绝对量及库存数据，不外推需求增长"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c5",
+    "chain": "c5-ai1",
+    "entity_id": "CND1c960a74-a03c-5bcb-a95b-78b4be9ccc25",
+    "name": "人形机器人电机",
+    "decision": "excluded",
+    "reason": "现有整机出货水平不能确认需求增长，亦无电机配置及订单变化。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c5",
+    "chain": "c5-ai1",
+    "entity_id": "CND98eaf921-90c4-5365-8564-4bd66a79efdd",
+    "name": "人形机器人减速器",
+    "decision": "excluded",
+    "reason": "现有整机规模信号不足以推导减速器增量，缺少构型和采购依据。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c5",
+    "chain": "c5-ai1",
+    "entity_id": "CNDab0267cb-e427-543f-a253-f0fa746c88b2",
+    "name": "机器人控制计算平台",
+    "decision": "excluded",
+    "reason": "没有平台配置、采用率或采购变化，不能由整机份额直接推导。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c5",
+    "chain": "c5-ai1",
+    "entity_id": "CNDff465710-17b5-5fca-b089-d5b21c60f7f3",
+    "name": "人形机器人传感器",
+    "decision": "excluded",
+    "reason": "未提供传感器配置、用量或采购合同，整机规模不能单独证明节点方向。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c5",
+    "chain": "c5-ai2",
+    "entity_id": "CND5dbe8579-432a-5536-849b-b28281ae22d9",
+    "name": "AI芯片",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "特定GPU基准、专用ASIC及机架工程说明产品选择变化 → 采购结构可能分化；ASIC仍为工程样片、量产靠后，不能算当期有效供给，也不能用横向基准宣布全行业性价比提升。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c5",
+    "chain": "c5-ai2",
+    "entity_id": "CNDbffc24f7-ee58-5bab-83d9-91655dd7422a",
+    "name": "AI服务器",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "欧洲扩容目标、德国在建GPU项目、韩国部署承诺 → 服务器与数据中心建设需求更具体 → 完工通电并经调度后才转为算力供给。；特定GPU基准、专用ASIC及机架工程说明产品选择变化 → 采购结构可能分化；ASIC仍为工程样片、量产靠后，不能算当期有效供给，也不能用横向基准宣布全行业性价比提升。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c5",
+    "chain": "c5-ai2",
+    "entity_id": "CNDf040fe76-5a55-5fc9-b572-b2c28fab94c3",
+    "name": "数据中心",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "欧洲扩容目标、德国在建GPU项目、韩国部署承诺 → 服务器与数据中心建设需求更具体 → 完工通电并经调度后才转为算力供给。；钇未纳入暂停且输美减少，源证据还指出燃机涂层厂商受影响 → 若数据中心依赖相关燃机且材料短缺延迟交付，供电就绪可能推迟 → 数据中心建设需求不能直接等同有效算力。；小型核能合作、融资与部署目标，以及Aalo试验临界进展，提供未来数据中心供电替代的研究线索 → 但私人融资、许可和商业建设仍未落实，不能据此抵消当前燃机交付风险。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c5",
+    "chain": "c5-ai2",
+    "entity_id": "CND76591307-e438-5070-ba24-748bc9a67fe5",
+    "name": "算力供给",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "欧洲扩容目标、德国在建GPU项目、韩国部署承诺 → 服务器与数据中心建设需求更具体 → 完工通电并经调度后才转为算力供给。；钇未纳入暂停且输美减少，源证据还指出燃机涂层厂商受影响 → 若数据中心依赖相关燃机且材料短缺延迟交付，供电就绪可能推迟 → 数据中心建设需求不能直接等同有效算力。；特定GPU基准、专用ASIC及机架工程说明产品选择变化 → 采购结构可能分化；ASIC仍为工程样片、量产靠后，不能算当期有效供给，也不能用横向基准宣布全行业性价比提升。；小型核能合作、融资与部署目标，以及Aalo试验临界进展，提供未来数据中心供电替代的研究线索 → 但私人融资、许可和商业建设仍未落实，不能据此抵消当前燃机交付风险。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c5",
+    "chain": "c5-ai2",
+    "entity_id": "CNDe55e8b04-c72b-563b-b5f9-ec0527355911",
+    "name": "算力调度平台",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "数据中心建设及部署承诺 → 可用资源与客户负载兑现 → 算力调度需求"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c6",
+    "chain": "c6-r1",
+    "entity_id": "CND590758ed-67f9-533c-8221-b81712a71668",
+    "name": "稀土分离氧化物",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "钇许可与对美发货减少、部分品种暂停去留未定 → 指定氧化物交付和排产不确定；储备融资计划不等于可动用库存。；数据中心带动美国燃机需求，而钇涂层厂商供应受扰 → 说明相关钇需求并未因出口减少而消失，但需求紧迫不代表供方能合法交付或提升利润。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c6",
+    "chain": "c6-r1",
+    "entity_id": "CNDafbf1596-2d6a-5140-a95e-3ff98187a07a",
+    "name": "稀土溶剂萃取分离服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "钇许可与对美发货减少、部分品种暂停去留未定 → 指定氧化物交付和排产不确定；储备融资计划不等于可动用库存。；数据中心带动美国燃机需求，而钇涂层厂商供应受扰 → 说明相关钇需求并未因出口减少而消失，但需求紧迫不代表供方能合法交付或提升利润。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c6",
+    "chain": "c6-r1",
+    "entity_id": "CND5cdb05d8-4b70-547e-b59c-984d47e9878b",
+    "name": "混合稀土溶液",
+    "decision": "excluded",
+    "reason": "限制与交付证据集中在钇产品；未确认该中间品中钇的占比、对应出口合同与传导敞口。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c6",
+    "chain": "c6-r1",
+    "entity_id": "CND69b64d2c-2e9b-5ae4-a7a1-4d3cdb8a5073",
+    "name": "稀土分解浸出服务",
+    "decision": "excluded",
+    "reason": "未提供钇相关原料处理合同和工作量，不能由出口政策直接确定该加工服务方向。"
+  },
+  {
+    "kind": "concept_analyses",
+    "unit": "c6",
+    "chain": "c6-r1",
+    "entity_id": "CNDe6a6d0ff-7fa3-5751-970b-14b037672cb7",
+    "name": "稀土精矿",
+    "decision": "excluded",
+    "reason": "未确认精矿组成、销售合同及地域暴露，不把特定钇产品的交付约束扩成全部原矿供需变化。"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i1",
+    "chain": "new-chain-1",
+    "entity_id": "CND190c144e-c966-5967-9b5b-57a271c013da",
+    "name": "炼厂原油进料",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "俄罗斯来源原油进口增加 → 匹配炼厂的俄油进料可得性改善 → 炼化加工与副产品供给取决于原料替代和装置安排"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i1",
+    "chain": "new-chain-1",
+    "entity_id": "CND2e474204-e21c-5381-9cdf-61d062345240",
+    "name": "炼油化工",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "俄罗斯来源原油进口增加 → 匹配炼厂的俄油进料可得性改善 → 炼化加工与副产品供给取决于原料替代和装置安排"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i1",
+    "chain": "new-chain-1",
+    "entity_id": "CND6fdc55cd-0bda-56d5-9e05-45b35ed9f3be",
+    "name": "直馏石脑油",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "俄罗斯来源原油进口增加 → 匹配炼厂的俄油进料可得性改善 → 炼化加工与副产品供给取决于原料替代和装置安排"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i1",
+    "chain": "new-chain-1",
+    "entity_id": "CNDcd7b9895-4da3-5374-a2dd-7a282c15ab0e",
+    "name": "石脑油加氢处理服务",
+    "decision": "excluded",
+    "reason": "未确认具体进料品质、处理路线与业务收费，原油扰动不能单独决定加氢处理量或收益。"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i1",
+    "chain": "new-chain-1",
+    "entity_id": "CND981d4194-3b6c-57f1-8a36-cb6c6af7a528",
+    "name": "乙烯蒸汽裂解服务",
+    "decision": "excluded",
+    "reason": "本故事线缺少裂解原料路线、成本传递和产品调价依据，暂不将通道扰动推到该加工服务。"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i1",
+    "chain": "new-chain-1",
+    "entity_id": "CNDaadec9aa-7160-5145-b346-7729ee3dcbf4",
+    "name": "乙烯及裂解联产品",
+    "decision": "excluded",
+    "reason": "未拆分联产品结构、终端需求及调价能力，不能以原料压力确定产品净影响。"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i2",
+    "chain": "new-chain-2",
+    "entity_id": "CNDc10dc14c-fecd-5a8f-9e04-99af309150fc",
+    "name": "煤炭洗选",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "原煤实际产量下降 → 新增原煤供给减少 → 洗选、商品煤与运量取决于库存和进口替代"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i2",
+    "chain": "new-chain-2",
+    "entity_id": "CNDb66447a1-5bca-5723-8913-306b16fd3074",
+    "name": "煤炭开采",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "原煤实际产量下降 → 新增原煤供给减少 → 洗选、商品煤与运量取决于库存和进口替代"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i2",
+    "chain": "new-chain-2",
+    "entity_id": "CNDda6ccab5-e5b4-508d-b6e8-79333e0f089b",
+    "name": "原煤",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "原煤实际产量下降 → 新增原煤供给减少 → 洗选、商品煤与运量取决于库存和进口替代"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i2",
+    "chain": "new-chain-2",
+    "entity_id": "CNDc7ba8bf4-f65b-5f4b-9d3a-2ae55f0ef374",
+    "name": "铁路运输服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "原煤实际产量下降 → 新增原煤供给减少 → 洗选、商品煤与运量取决于库存和进口替代"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i2",
+    "chain": "new-chain-2",
+    "entity_id": "CND520efadc-42a6-5e43-ab2a-fcee3707eab3",
+    "name": "商品煤",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "原煤实际产量下降 → 新增原煤供给减少 → 洗选、商品煤与运量取决于库存和进口替代"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i2",
+    "chain": "new-chain-2",
+    "entity_id": "CND30608683-18e1-506c-b3ab-4f2a5907ef8e",
+    "name": "煤炭采掘设备",
+    "decision": "excluded",
+    "reason": "原煤产量下降未证明设备投资削减或更新需求，不能将产出直接等同资本开支。"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i3",
+    "chain": "new-chain-3",
+    "entity_id": "CNDafc64c30-6bb2-50e3-8f4a-83a37797691d",
+    "name": "航空运输服务",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "火山喷发 → 苏加诺—哈达机场暂停起降 → 对应航线航空运输能力下降"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i3",
+    "chain": "new-chain-3",
+    "entity_id": "CND2edbbc83-22f5-577b-996d-23c9f5cf6395",
+    "name": "机场运营",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "火山喷发 → 苏加诺—哈达机场暂停起降 → 对应航线航空运输能力下降"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i3",
+    "chain": "new-chain-3",
+    "entity_id": "CNDa3d542b4-2610-56a9-bbde-ed95b83bf966",
+    "name": "大飞机",
+    "decision": "excluded",
+    "reason": "短时机场停航未形成飞机新增采购或制造订单变化。"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i4",
+    "chain": "new-chain-4",
+    "entity_id": "CND6fe3bc94-b3d0-541c-aad6-e0bff38ac117",
+    "name": "火电设备安装调试服务",
+    "decision": "included",
+    "origin": "inferred",
+    "reason": "燃机示范项目验收 → 技术与工程体系进展 → 同路线设备及安装调试机会仍待订单兑现"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i4",
+    "chain": "new-chain-4",
+    "entity_id": "CND918816a1-2e61-5cb7-ab0b-e3e076d88462",
+    "name": "火电设备",
+    "decision": "included",
+    "origin": "direct",
+    "reason": "燃机示范项目验收 → 技术与工程体系进展 → 同路线设备及安装调试机会仍待订单兑现"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i4",
+    "chain": "new-chain-4",
+    "entity_id": "CNDd792d41f-e0c9-57cc-95b7-b34ae94d7ddb",
+    "name": "汽轮机",
+    "decision": "excluded",
+    "reason": "没有该燃机项目对汽轮机产品的具体配置和采购依据。"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i4",
+    "chain": "new-chain-4",
+    "entity_id": "CNDc103dfc6-d46a-598c-8a89-f1accefe1a23",
+    "name": "发电机",
+    "decision": "excluded",
+    "reason": "缺少同项目发电机采购与技术变化依据，不能仅凭组成关系赋值。"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i4",
+    "chain": "new-chain-4",
+    "entity_id": "CNDa7d7eda1-8f29-54e1-9e93-cc00097e7fe0",
+    "name": "电站锅炉",
+    "decision": "excluded",
+    "reason": "燃机技术进展不能外推锅炉技术、订单或需求变化。"
+  },
+  {
+    "kind": "industry_chain_analyses",
+    "unit": "i4",
+    "chain": "new-chain-4",
+    "entity_id": "CND0eeb138e-eb03-573b-81e7-6f3549b3f9ab",
+    "name": "烟气脱硝设备",
+    "decision": "excluded",
+    "reason": "没有新增环保配置、改造或采购依据。"
+  }
+]
