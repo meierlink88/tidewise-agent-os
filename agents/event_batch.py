@@ -56,7 +56,8 @@ def batch_agent(agent: Agent, step_id: str) -> Agent:
     result.tool_choice = None
     result.tool_call_limit = None
     result.output_schema = SCHEMAS[step_id]
-    result.parse_response = True
+    # Functions parse individual rows so one invalid item cannot abort an Agent Step.
+    result.parse_response = False
     result.use_json_mode = True
     result.structured_outputs = False
     result.retries = 0

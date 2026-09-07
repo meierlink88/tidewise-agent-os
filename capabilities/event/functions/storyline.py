@@ -6,6 +6,7 @@ from typing import Any
 
 from agno.run import RunContext
 from agno.workflow import StepInput, StepOutput
+from pydantic import ValidationError
 
 from capabilities.event.functions.extraction import (
     _batch,
@@ -28,6 +29,7 @@ from capabilities.event.internal.storage import (
     claim_event_batch,
     complete_batch,
     freeze_draft,
+    load_batch_checkpoint,
     load_draft,
     load_storyline_journal,
     release_event_batch_lease,
@@ -45,6 +47,8 @@ from capabilities.event.internal.storyline_models import (
     StorylineJournal,
 )
 from sematica.analysis.event.contracts import AnchorCandidate, CandidateSet, EventAnalysisInput
+from sematica.analysis.event.errors import PermanentEventAnalysisFailure
+from sematica.ingestion.episcode.event.adapters import PublicationRejected
 from sematica.ingestion.episcode.event.contracts import HistoricalEvent, event_time_anchor
 
 PAGE_SIZE = 64
@@ -394,6 +398,18 @@ def storyline_signal_pages_complete(iteration_outputs: list[StepOutput]) -> bool
 
 @release_on_failure
 async def publish_storyline_candidate(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    try:
+        return await _publish_storyline_candidate(step_input, run_context)
+    except (ValidationError, PublicationRejected, PermanentEventAnalysisFailure) as error:
+        journal = _journal(run_context)
+        state = _current(run_context, journal)
+        state.failure_reason = f"PUBLICATION_REJECTED:{type(error).__name__}"
+        state.done = True
+        _save(run_context, journal)
+        return StepOutput(content={"candidate_skipped": True, "reason": state.failure_reason})
+
+
+async def _publish_storyline_candidate(step_input: StepInput, run_context: RunContext) -> StepOutput:
     journal = _journal(run_context)
     state = _current(run_context, journal)
     if state.resolution is None or state.classification is None:
@@ -454,10 +470,14 @@ def finish_storyline_candidate(step_input: StepInput, run_context: RunContext) -
     state = _current(run_context, journal)
     if state.resolution is None:
         raise ValueError("cannot complete unresolved Event")
-    if is_publishable_storyline(step_input, run_context) and (
-        state.publication is None
-        or state.publication.graph_projection_status != "SUCCEEDED"
-        or len(state.signal_receipts) != len(state.proposals)
+    if (
+        not state.failure_reason
+        and is_publishable_storyline(step_input, run_context)
+        and (
+            state.publication is None
+            or state.publication.graph_projection_status != "SUCCEEDED"
+            or len(state.signal_receipts) != len(state.proposals)
+        )
     ):
         raise ValueError("cannot complete partial publication")
     state.done = True
@@ -476,18 +496,34 @@ def complete_storyline_batch(step_input: StepInput, run_context: RunContext) -> 
     batch = _batch(run_context)
     draft = load_draft(batch.batch_id)
     states = list(_journal(run_context).candidates.values())
-    ignored = [s for s in states if s.resolution and s.resolution.decision == "IGNORED"]
+    ignored = [s for s in states if not s.failure_reason and s.resolution and s.resolution.decision == "IGNORED"]
+    failed = [s for s in states if s.failure_reason]
+    extraction_rejections = [
+        r
+        for key in ("extract-parse-rejections", "extract-rejections")
+        for r in (load_batch_checkpoint(batch.batch_id, key) or {}).get("items", [])
+        if r.get("field") == "candidates" or r.get("reason") == "CANDIDATE_EVIDENCE_OUTSIDE_BATCH"
+    ]
+    expected = {e.id for e in batch.evidences}
+    failed_ids = expected & (
+        {eid for s in failed for eid in s.identity_request.candidate.evidence_ids}
+        | {eid for r in extraction_rejections for eid in r.get("evidence_ids", [])}
+    )
     result = EventExtractionResult(
         batch_id=batch.batch_id,
         evidence_ids=[e.id for e in batch.evidences],
-        candidate_count=len(draft.candidates),
-        no_event_count=len(draft.no_event),
-        published_event_ids=[s.publication.event_id for s in states if s.publication],
+        candidate_count=len(draft.candidates) + len(extraction_rejections),
+        no_event_count=sum(e.evidence_id not in failed_ids for e in draft.no_event),
+        published_event_ids=sorted(
+            {s.publication.event_id for s in states if s.publication and s.publication.event_id}
+        ),
         duplicate_event_count=sum(s.resolution is not None and s.resolution.decision == "SAME_EVENT" for s in states),
         ignored_candidate_count=len(ignored),
-        ignored_evidence_ids=sorted({eid for s in ignored for eid in s.identity_request.candidate.evidence_ids}),
-        failed_candidate_count=0,
-        failed_evidence_ids=[],
+        ignored_evidence_ids=sorted(
+            {eid for s in ignored for eid in s.identity_request.candidate.evidence_ids} - failed_ids
+        ),
+        failed_candidate_count=len(failed) + len(extraction_rejections),
+        failed_evidence_ids=sorted(failed_ids),
         signal_fact_uuids=sorted({uuid for s in states for uuid in s.signal_receipts.values()}),
     )
     complete_batch(batch, result)

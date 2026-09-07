@@ -108,6 +108,7 @@ class StorylineCandidateState(BaseModel):
     publication: EventPublicationRecord | None = None
     signal_receipts: dict[str, str] = Field(default_factory=dict)
     done: bool = False
+    failure_reason: str | None = None
 
 
 class StorylineJournal(BaseModel):
