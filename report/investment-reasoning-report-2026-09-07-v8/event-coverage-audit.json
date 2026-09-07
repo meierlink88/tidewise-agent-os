@@ -1,0 +1,3175 @@
+[
+  {
+    "event_id": "EVT5a1b8da1-5258-4d29-85fd-d8ae151f5aff",
+    "title": "中国AI短剧制作报价显著下降",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD00d82162-b4b5-5b51-90bb-0d6808e719d6"
+    ],
+    "signal_ids": [
+      "5882f2eb-90de-5ef0-a501-17b92746d4a7",
+      "220839b6-6c43-5446-aee0-633d827e60a9"
+    ],
+    "decision": "采用：C1.1,C1.2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "67fcde1ac8a687601647f045c09d7241673473f35c332aa025c442c0b333352d",
+        "candidate": "92c1d4a9582b9c457ec5447b51759a2a1ff60c307df8a3a38a1ff3b096c9fd25"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT33541908-4e22-4b4c-8e5e-27369bad8ac1",
+    "title": "印度能源栈演示点对点太阳能电力交易",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD0e1994ee-b1af-5333-83c4-690fcd12039e"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "969b866e9f2a6a6391b18eaa0e35e2c330dc26f8fbff8c311b871cb83395d08b",
+        "candidate": "0d50aeb8a8153e106c5a30cb2326bdc0012b8c631a58f8bb53f15fae7dc3ce27"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT6d2bd966-97cb-47bd-a78f-0eff36e57579",
+    "title": "中国和印度增加俄罗斯原油进口",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD0c49bb94-1e00-59ea-8ea4-ce4fb521a978"
+    ],
+    "signal_ids": [
+      "c49e3e5c-5dc7-5e6e-99bb-6c3507831cad"
+    ],
+    "decision": "数据缺口",
+    "reason": "相关链无Concept映射：炼油及石油化工产业链；不强行归组。",
+    "classification_provenance": [
+      {
+        "batch": "969b866e9f2a6a6391b18eaa0e35e2c330dc26f8fbff8c311b871cb83395d08b",
+        "candidate": "30dd3d1ecb7cf957f3b7bdbe01aeae9e734ffe2db21f04eedfc5889829fe2fbc"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT7611b53b-38e5-40df-a5f7-8df580d837c0",
+    "title": "超级油轮在霍尔木兹海峡南部触雷失航",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD09244b06-6aef-5ec2-a3d0-1df865a17780"
+    ],
+    "signal_ids": [
+      "b716b768-45a5-53ab-bf24-7f277758fda0"
+    ],
+    "decision": "采用：G1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "969b866e9f2a6a6391b18eaa0e35e2c330dc26f8fbff8c311b871cb83395d08b",
+        "candidate": "3c69ea08dfc42f83e44b4c0789a868a24e9ffc5e3efa6a252638b02cf419de54"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT5620faac-683e-4228-9bf5-65549aa93f6d",
+    "title": "Enspired储能组合协助稳定德国电网",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD0eba6120-b55d-5a62-bd52-3b1b082a34ee"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "969b866e9f2a6a6391b18eaa0e35e2c330dc26f8fbff8c311b871cb83395d08b",
+        "candidate": "5e40796b72ff6062161da3ed37eed71d9da4b559501e801dcf545afb439f7abe"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTd102347f-06d3-47ab-b3c6-5fd2ef463896",
+    "title": "欣旺达EVB 2026年7月在中国装机2.66 GWh",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD0a58d1b0-43a3-5c4e-8f50-1f200fd86539"
+    ],
+    "signal_ids": [
+      "56ddf622-0c20-54e0-93d0-7b15da482ddd"
+    ],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "969b866e9f2a6a6391b18eaa0e35e2c330dc26f8fbff8c311b871cb83395d08b",
+        "candidate": "741e97888e809bb90146942d45217d5bf7a5800bdb51adbdde7d35da75ed6665"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT0ab23b77-b213-4c4e-8270-555c5bc44e5c",
+    "title": "美军打击三艘伊朗原油运输船",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD0b8c93da-16c0-54b3-99d1-b4b4fc07030a"
+    ],
+    "signal_ids": [
+      "840c61ab-aa29-5f77-b723-06511fb14627",
+      "a676cca3-30d5-5fd1-9074-0ef8dcbcefec"
+    ],
+    "decision": "采用：G2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "969b866e9f2a6a6391b18eaa0e35e2c330dc26f8fbff8c311b871cb83395d08b",
+        "candidate": "bf0d6f1ef6a6c3e1f002b1941ecaa3e6bb48a9b1b65296bd8ecccd9cfd1478ef"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT67602a96-afea-4701-bec8-81d3b448dfe6",
+    "title": "Flex计划分拆云与电力基础设施业务上市",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD0a67095b-4ee9-54f7-adf5-b91d6d3b2a5f"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "969b866e9f2a6a6391b18eaa0e35e2c330dc26f8fbff8c311b871cb83395d08b",
+        "candidate": "cca41e77741277fdb9a07f26ba18c81cd62f070c370a6bba80866940e4584c0c"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTa4de9ba8-76c2-4b92-b866-c57952f0c599",
+    "title": "Equinor启动弗吉尼亚州四个电池储能项目建设",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD1575267d-9617-5620-8b31-8cf6b12bb7c0"
+    ],
+    "signal_ids": [
+      "5f8148bd-336f-5dcc-af88-92a17fbba00e"
+    ],
+    "decision": "采用：C3.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "05ca184b8d85a68d10454b57a257be5fbb42c6f37dbcf2ed7a31b1501f5f0ed4",
+        "candidate": "15be1e5c32e39ca1db3b398b4ca3aa91daac54f9a0c72d1a91da242ca000b3ba"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT45831994-a0ab-40a3-a7fa-d2fa57e9fb81",
+    "title": "美国陆军要求微型反应堆企业筹集私人投资",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD14e8fadb-cbb9-54a5-9c4d-ab1539c59128"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "05ca184b8d85a68d10454b57a257be5fbb42c6f37dbcf2ed7a31b1501f5f0ed4",
+        "candidate": "1fa754df4c5a7542363ca4cd5d0397ae70d17a7221f5c6d79a6b74c1ae81a321"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTf2127d7e-3972-403e-a656-17cefb081dd5",
+    "title": "理想汽车2026年8月交付37679辆",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD0fe4be28-6f5a-5146-ba7d-e8c0694b9af6"
+    ],
+    "signal_ids": [
+      "3468dd7c-11a1-54fc-b902-67ad32247f90"
+    ],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "05ca184b8d85a68d10454b57a257be5fbb42c6f37dbcf2ed7a31b1501f5f0ed4",
+        "candidate": "5303a7c914cf766cd9720b2324104177fe2cb0eaf8a6bc892d0f9141c2e22d68"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT272f08f7-d969-4a1f-b34e-b9ea73d5ae77",
+    "title": "英国智库提议设立太阳能债券计划",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD10a5a3e2-0a54-5e1a-bebe-6feff42955bc"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "05ca184b8d85a68d10454b57a257be5fbb42c6f37dbcf2ed7a31b1501f5f0ed4",
+        "candidate": "5b4a7cba6d9e0d315174c283db89a5f3e36878ceefac4329d93a8357ade9f326"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTb3cee085-cd92-4049-a1bf-86bfc01032e3",
+    "title": "特朗普政府宣布120亿美元关键材料储备计划",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD0ff81103-875b-57c1-85a7-ced2d450263c"
+    ],
+    "signal_ids": [],
+    "decision": "采用：G3",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "05ca184b8d85a68d10454b57a257be5fbb42c6f37dbcf2ed7a31b1501f5f0ed4",
+        "candidate": "8dd6da94cfb72edf548839847b3f983e6cff290bcea984b3bfa88ce6ff01f563"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTd135b685-1b9f-4e43-bda8-2affd3114f6f",
+    "title": "澳大利亚可再生能源署发布公用事业光伏成本评估",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD141b941f-7f71-5719-a8c3-8aee08c7cf06"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "05ca184b8d85a68d10454b57a257be5fbb42c6f37dbcf2ed7a31b1501f5f0ed4",
+        "candidate": "90b08dc4935f47f5118cf930e49761f7c3c75c7c6c123b384a0a9ff73a68822d"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT870811e4-341c-4b97-b700-dc5d7e7ab2cd",
+    "title": "美伊交火后国际油价上涨",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD125ee432-912f-5289-a5e1-b05d5b72ef3e"
+    ],
+    "signal_ids": [],
+    "decision": "采用：M2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "05ca184b8d85a68d10454b57a257be5fbb42c6f37dbcf2ed7a31b1501f5f0ed4",
+        "candidate": "b5edd06f0903a2ebd710528479362c43e45a0cca21eed2f5615010216668c611"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTc1bed7be-7442-4c8e-bf50-6c4241701384",
+    "title": "中国燃机创新发展示范项目通过国家能源局验收",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD11dd710a-6296-5bcb-ba61-3e7d4c160aa6"
+    ],
+    "signal_ids": [
+      "397cdddc-18ec-55a1-ae57-e56cf41bd291"
+    ],
+    "decision": "数据缺口",
+    "reason": "相关链无Concept映射：火力发电设备产业链；不强行归组。",
+    "classification_provenance": [
+      {
+        "batch": "05ca184b8d85a68d10454b57a257be5fbb42c6f37dbcf2ed7a31b1501f5f0ed4",
+        "candidate": "ef6f42b870578fcd0feb501b4dd0241db6cc20b9d2c91134674a0e6212a0770a"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT82353e02-e1f9-40e7-b70e-adaa517489d7",
+    "title": "特斯拉得州工厂开始生产Megapack 3",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD0ed8b665-10ae-5e74-bca1-168a439acfad"
+    ],
+    "signal_ids": [
+      "ba84946f-042d-51f2-bed9-2bf4eff70cb3"
+    ],
+    "decision": "采用：C3.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "05ca184b8d85a68d10454b57a257be5fbb42c6f37dbcf2ed7a31b1501f5f0ed4",
+        "candidate": "f0e1a3a8e866c0074041d704ecb4b318d50955da8df5c0493f7342d09b9c141a"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT2ee4b3cc-ba2b-4aa0-8cf9-b9ec85c8597b",
+    "title": "黎巴嫩真主党人员向以军发射无人机",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD18eefcd1-b5b8-5a2d-a7cb-e006b1c6110a"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "黎巴嫩真主党与以军行动，不自动外推为伊朗直接参战或广泛行业订单。",
+    "classification_provenance": [
+      {
+        "batch": "3c658b8058d4dbc58bb0b18ae65e9c3ef7764c4ddcf5af12d5c767c61a2b9341",
+        "candidate": "0256b558bf2c095ea4bfd28a6c735d5de0a98987f3d6cfb3ea63432009e8bef7"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTceefbce5-386b-4b15-889e-4b2c7a4dfe9b",
+    "title": "Alumis报告红斑狼疮中期试验未达终点",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD17e55e8b-0b54-506c-9ffc-67cf25ebbcca"
+    ],
+    "signal_ids": [
+      "b9326dd5-2b6e-5d23-b1b8-5ac8ca1e9b75"
+    ],
+    "decision": "数据缺口",
+    "reason": "相关链无Concept映射：创新药产业链；不强行归组。",
+    "classification_provenance": [
+      {
+        "batch": "3c658b8058d4dbc58bb0b18ae65e9c3ef7764c4ddcf5af12d5c767c61a2b9341",
+        "candidate": "04c0b8beaf51afa57164210a02e458235e8f1762f3fd32aeadafd90eb8337533"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTa62e6845-cbde-4300-bebe-934800776b84",
+    "title": "山西拟推进非常规天然气增产开发",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD1a74d115-d55c-544c-8e9b-984cfb12e910"
+    ],
+    "signal_ids": [
+      "37a8032e-265d-51e9-b44d-d992aa4df579"
+    ],
+    "decision": "采用：C2.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "3c658b8058d4dbc58bb0b18ae65e9c3ef7764c4ddcf5af12d5c767c61a2b9341",
+        "candidate": "54eb53a8fae653a54b798ebc673893de23b9e546dd78f73b031ce2e07983b0d7"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTa747a6ce-ac65-44e4-a575-e32ab1eaa88c",
+    "title": "美国陆军拟投入22亿美元部署微型核反应堆",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD188907b7-57ea-57cd-97a2-454ef34a37f2",
+      "EVD1cee9d79-7454-5f21-92f4-1431c2effcb9"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "3c658b8058d4dbc58bb0b18ae65e9c3ef7764c4ddcf5af12d5c767c61a2b9341",
+        "candidate": "59ecea1f8bcf9927fb6ce4f1a942e13c68c5ecf80c557926fcf38b8f3e51d4b8"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT788c400d-5a97-40e0-87b1-bf97bba2e960",
+    "title": "霍尔木兹海峡原油流量大幅下降",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD177d982d-d354-566f-ba9c-c35294fd2ea5",
+      "EVD1cb73c16-039d-587c-acb3-a09a4c1ed1fa"
+    ],
+    "signal_ids": [],
+    "decision": "采用：G1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "3c658b8058d4dbc58bb0b18ae65e9c3ef7764c4ddcf5af12d5c767c61a2b9341",
+        "candidate": "791bb1db081e502d6809f01db469f0c99dd897f03c085728e3c12ff2214b39e2"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTa4b8d1b7-ca4e-4c97-86f1-4971360ed95e",
+    "title": "雅加达苏加诺-哈达机场宣布暂停航班起降",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD1a3142f9-0171-5b80-b628-f35445aea492"
+    ],
+    "signal_ids": [
+      "dc846ee1-435e-596e-a236-9e4079e579f0",
+      "86792811-8a96-5e51-b68a-ad4c9c0f2f79"
+    ],
+    "decision": "数据缺口",
+    "reason": "相关链无Concept映射：航空运输服务产业链、机场运营服务产业链；不强行归组。",
+    "classification_provenance": [
+      {
+        "batch": "3c658b8058d4dbc58bb0b18ae65e9c3ef7764c4ddcf5af12d5c767c61a2b9341",
+        "candidate": "86bdd67e3772dd04fcb6000f90129ff5920d6aabad8a76c5e012da2d0ec42f04"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTb3baa2ab-fd01-4c6b-ab6e-b8365f0f14a2",
+    "title": "榆中县检查发现六家企业违规使用食品添加剂",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD19976d6a-1d2c-53fc-a0b5-9bb883fbce9e"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "地方食品添加剂违规案例，无全国行业需求或盈利推断依据。",
+    "classification_provenance": [
+      {
+        "batch": "3c658b8058d4dbc58bb0b18ae65e9c3ef7764c4ddcf5af12d5c767c61a2b9341",
+        "candidate": "ac669056029089ae2d0ddb6a0f2c49ae9a669eb9f6aebd159c9ef64fac00a758"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTd859dbc0-f8da-4c82-9c5f-53aea976a802",
+    "title": "印度拟强制新能源电站配置构网型控制",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD17a4e165-551e-50e7-907f-de10373ec9f8"
+    ],
+    "signal_ids": [
+      "16f9451b-a61a-561c-a695-9da03e0353a9",
+      "2810a07e-2a9e-5ec1-95e6-f9606dadb5d9"
+    ],
+    "decision": "采用：C3.2,C4.2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "3c658b8058d4dbc58bb0b18ae65e9c3ef7764c4ddcf5af12d5c767c61a2b9341",
+        "candidate": "e9d4141432125335fb3a7755a6960a6fed1b06d231d1532c6195b5fcacd1a0c0"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT3ccc5216-c5e6-465c-b25c-043099685e0c",
+    "title": "欣旺达拟在股权稀释后维持欣旺达动力控制权",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD181dd364-03d1-535b-ab5f-0ecbd5ab2450"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "3c658b8058d4dbc58bb0b18ae65e9c3ef7764c4ddcf5af12d5c767c61a2b9341",
+        "candidate": "fac4ed620d8336c24e9a5bfdc712b0eeae293eeb285d4b05dbf9c2f54057e9de"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT9d93fd9e-c35c-48be-92f3-3559ec4ee044",
+    "title": "Google DeepMind推出WeatherNext 3天气AI模型",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD2450e67b-c21a-5acb-b706-b63943b2c492"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "17bd3022d5c3cfe0085eafc4867a57412d55774ec3c6e7b1fe3dfe2876d643e7"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTfe2f5e0b-458a-448c-9028-3fe5c3e88503",
+    "title": "印度上一财年太阳能装机容量大幅增长",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD1ef72162-dbf8-5bde-a673-9eab87c12c6d"
+    ],
+    "signal_ids": [
+      "1700deef-3a9b-5a58-a53b-bee1c98693df"
+    ],
+    "decision": "采用：C4.2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "38b1755e1a9d0185c4f8b1be648d369b0132ee5f8c3552ae15c296aff24f174d"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTce8b3715-b3ca-4ca4-99ab-dc4b927f32a3",
+    "title": "澳大利亚电池储能系统压缩电价价差",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD24f3fcec-634f-50b5-8632-a3e0f0cbfa55"
+    ],
+    "signal_ids": [],
+    "decision": "采用：C3.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "5202a7e58a625ae420e0944613d45d5903d2ff36fc00454dd6c19d0c3bf2338d"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTfe03525d-34cc-4de4-bd37-02139bb9b1e3",
+    "title": "阿联酋将原油流向改至富查伊拉港",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD23254a7d-4301-568a-88e0-d4f1b9cde225"
+    ],
+    "signal_ids": [],
+    "decision": "采用：G1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "5b3b4efe8b24440bc8698278c6cdf206ce8fb169a3e165a6a5bccb047313ae09"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT363f00a0-3d3b-4b11-a3d6-6aaa09fd3dfb",
+    "title": "Google发布并上线Gemini视频生成模型",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD203a2cb8-22d4-535e-af9f-f4bc6545e709"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "5b65d27c5f24fa0960b71569731fc535d8d1806cb0e015f45defa9b2150a16ea"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT97a3cdee-c263-4878-bb83-d1cc9c13d6a9",
+    "title": "多家企业联合开展动力电池全生命周期安全测评攻关",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD24db7155-68a9-5562-bc0a-323e0859ffc8"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "5c9eadb8c228c2c855fb27ec3bbe71cddd7b7b598bff018401e531a839777063"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT508c39d8-7525-4819-a789-d41c8e8fe09d",
+    "title": "2026年上半年中国人形机器人出货量超4万台，全球占比97%",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD21332969-bf02-5d3b-9b5d-2300c573549d"
+    ],
+    "signal_ids": [
+      "e7e2e84e-03ca-50d3-ac83-6549cc1b0aa6"
+    ],
+    "decision": "采用：C5.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "93247281f5d6b5b83e591752d25b1251752ef0136ed165db35a1ae4b94d259d2"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT94afad51-8d66-4d47-b1c3-538321c64de2",
+    "title": "运城市发布地热开发利用成果",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD2634d210-0528-5399-bb77-242213e2484e"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "933cd2ea4c868e6ce0989f219632dbd633bc207d31c73de7490f0cb714d77d0b"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT2e80bd7a-a6f1-4055-bc27-21229a3281c0",
+    "title": "战争推高全球能源进口账单增加3300亿美元",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD2254b436-ca93-592b-ab3d-49b6b76d393d"
+    ],
+    "signal_ids": [],
+    "decision": "采用：M2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "c1221520b3bdf6f651a80a1f1bb6a4431f88ee19666b1287d92a3b81aed88b9b"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT13883caa-6d94-4d94-8273-39c68533c156",
+    "title": "SemiAnalysis与InferenceX发布开源AgentX 1.0基准",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD2488c6d8-d4f5-5f0e-9519-b6e2b0a3fb11"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "基准发布不直接代表已形成采购、收入或技术通用优势。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "c88b1a0bbaab530cf8ceedb6a6356f83eaa2b59451facbe92de32e6ea0d3b961"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTd575f0ef-587a-4aca-9e08-daeb13669e4b",
+    "title": "艾伯维依坦塔米格达到多发性骨髓瘤三期主要终点",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD1ed03af1-6911-5665-825c-1b4235e1949c"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "db6013e6de670c847e56637faa98f0987dabb3a91fbaae6958e8f390ad60b555"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT7efadaf2-e703-46ea-a019-7b76798a6ae1",
+    "title": "Neogenyx Fuels计划生产可再生天然气并减排",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD1f14103c-2495-5775-b22c-3312199b5b3c"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "dd16a117cbec627a80c0ad50e72ad3d387b10f20b6aec0889be683f169c9c05e"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT7e0e9e86-2cee-4db5-92a0-ef401f9e5aa1",
+    "title": "长泰机器人具身智能绕线机器人通过欧盟CE认证",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD20d12a05-cc46-567b-862d-fab2bd13ae3c"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "41361e00d19a7ec274a68ab16ae0d5f2c61378727e126fbb9d8ac9176e5baa1d",
+        "candidate": "f10d2bd5e7714bfb0d704cd02a917632dbd1af75184a1cbbf4e19b38982773e8"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTd1137b6d-623b-4fa6-9726-54ba509069c1",
+    "title": "韩国今年累计出口额超过去年全年创历史新高",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD27e31fbb-ddff-5bdb-b854-0caba68c3fde"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "486332aafde5fba3c1f75be4f51b70903ba6ddf23f009fcad4548416a52a68b9",
+        "candidate": "0f399817f100a3613705ea6c9bba0ef698d45d83e23c200d1048fa9afe77578f"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT9f881bcb-ef93-4587-8982-a57786c8406b",
+    "title": "全球能源进口支出较预期增加3300亿美元",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD2b86bc11-fd22-5b15-a088-573c03d9d587"
+    ],
+    "signal_ids": [],
+    "decision": "采用：M2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "486332aafde5fba3c1f75be4f51b70903ba6ddf23f009fcad4548416a52a68b9",
+        "candidate": "2ad8debe42179bedf4f10029af9cc8a919f10573f14bf9191bec9e1fbf147646"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT95e0702a-1533-4677-8808-8ed346608062",
+    "title": "美日韩签署小型模块化反应堆部署合作协议",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD27e4114c-96b2-5f5b-887e-458b29a5a547"
+    ],
+    "signal_ids": [
+      "542b6558-04f4-517c-bfaa-cb073554b177"
+    ],
+    "decision": "不单列结论",
+    "reason": "民用SMR合作不能解释为军事风险上升；现有核能发电链偏压水堆，缺少具体技术路线映射。",
+    "classification_provenance": [
+      {
+        "batch": "486332aafde5fba3c1f75be4f51b70903ba6ddf23f009fcad4548416a52a68b9",
+        "candidate": "5cbeb1ded415d0bb56dfc30a2492c12979a642ca34c49e2fb9069ee3e832afeb"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT2eb5749a-90c0-419a-ba1c-b30084c4f9eb",
+    "title": "沙特逆转东西向管道流向绕开霍尔木兹海峡",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD2997ae1b-a29c-5e0b-a53a-df961e8d67a2"
+    ],
+    "signal_ids": [
+      "c6717701-7ef1-55d3-87f2-87537e3f7a1d"
+    ],
+    "decision": "采用：G1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "486332aafde5fba3c1f75be4f51b70903ba6ddf23f009fcad4548416a52a68b9",
+        "candidate": "6443163a25227ab0dc1b76c121433741eefd57b625de60d0ce5d91ed68b1716e"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTa5959c68-4a15-41b2-9400-1711e3a20cbc",
+    "title": "Inox Clean Energy完成收购Boviet Solar",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD29cc719e-6d30-5970-bae1-c49899ae11a8"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "486332aafde5fba3c1f75be4f51b70903ba6ddf23f009fcad4548416a52a68b9",
+        "candidate": "668e49a8d38643d7743610b55457a02f924f6e5e4fbca2db7e583a28052e84ce"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT09fef275-f3cc-44a9-9742-e3f94ec482eb",
+    "title": "宁德时代下调314Ah磷酸铁锂电芯价格",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD27980646-8dd7-52cd-8a32-3de3f6ed0911"
+    ],
+    "signal_ids": [
+      "7eee0144-b380-5e61-91eb-a536057e3fa1"
+    ],
+    "decision": "采用：C3.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "486332aafde5fba3c1f75be4f51b70903ba6ddf23f009fcad4548416a52a68b9",
+        "candidate": "71f3406719337fa7c7a3296f04adbe8efd835892d4e6365972fa9f8fef4e8641"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT4a82ab9a-91cd-4453-88d0-081f6c9b85aa",
+    "title": "美国与伊朗相互实施军事打击",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD2dc3e4a8-b5b0-5f7f-924b-c025a8379c1d"
+    ],
+    "signal_ids": [
+      "4a48bcc8-1527-5ae8-88f1-4223984bcddc"
+    ],
+    "decision": "采用：G2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "486332aafde5fba3c1f75be4f51b70903ba6ddf23f009fcad4548416a52a68b9",
+        "candidate": "9ced897e672f5375528ef6cfef08783ae7f3044f1e3dd7ec66c9e28f19bef79c"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTb8fd10e0-6267-4085-b76c-bb19a1728008",
+    "title": "Boviet Solar计划新增3GW光伏电池年产能",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD2c032da7-cc4c-53c8-9010-b9e0052a8513"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "486332aafde5fba3c1f75be4f51b70903ba6ddf23f009fcad4548416a52a68b9",
+        "candidate": "e58817d5e0412271a237993e683ffb51ecc08d70d2d4828487f6af1183f185e5"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTb55ceba7-85ad-4703-b88b-be9851f5025f",
+    "title": "傲农生物及责任人拟被处罚",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD35069e41-f595-5911-910a-91e8b1bbffa8"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "615b881e24b752c400b58e4e6a0fe093d4adfd8825d671a953084d769ab7a03e",
+        "candidate": "0faa8b5e28caad2ae7900d3cd07f4e98899d7935cb0555e2a22979571fad5cc4"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT04a3bd76-8795-47dc-baf6-ab017ee24c02",
+    "title": "以色列国防军空袭黎巴嫩南部回应真主党无人机行动",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD2f5fc14d-e27a-5065-9b50-0d07f7939e11"
+    ],
+    "signal_ids": [
+      "d964989f-e5bd-5a13-9d80-8b3b6e8100d1"
+    ],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "615b881e24b752c400b58e4e6a0fe093d4adfd8825d671a953084d769ab7a03e",
+        "candidate": "13ebf9302d8941fa164ce6c97fe21c114be48cf58e71b212a4b8f1f091666ee0"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTf2fe9f70-4c70-4226-a0c4-441149641fac",
+    "title": "Aalo的临界试验反应堆实现临界运行",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD32205fd1-0319-5382-8d78-c9cfc50e2c31"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "615b881e24b752c400b58e4e6a0fe093d4adfd8825d671a953084d769ab7a03e",
+        "candidate": "1f70b5976b3fc94ec56b3ed7b1f20e10a0b9938ccc9f2debdf0a6ba343debf1f"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTd4007b9d-45d5-40b0-b19c-df4c1919ebd8",
+    "title": "印度中央电力管理局提议强制配建共址储能",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD33ef95a3-e365-5c55-a6bc-bf2343afd84d"
+    ],
+    "signal_ids": [],
+    "decision": "采用：C4.2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "615b881e24b752c400b58e4e6a0fe093d4adfd8825d671a953084d769ab7a03e",
+        "candidate": "3060accdbed6d0cd42a1e1ed840c3e79053a885f48f669707af71f719963a44b"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTea828a8c-b496-43c5-9c71-4f32bd5fc5a3",
+    "title": "特斯拉推出Megapack 3储能系统",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD34c9095c-bf55-55a1-a67b-50e533046329"
+    ],
+    "signal_ids": [
+      "82e63d6a-dde9-5f0e-9266-68352ab94cbf"
+    ],
+    "decision": "采用：C3.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "615b881e24b752c400b58e4e6a0fe093d4adfd8825d671a953084d769ab7a03e",
+        "candidate": "42e6a86ac17bcbad06edc48c104fb6e0cc52402ae14342cdf8301cb20425ae1e"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTcc37b7a5-9a9b-4134-b325-913147e4c868",
+    "title": "美联储7月会议维持利率不变但有异议",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD32c66d12-55f7-5d13-8e27-384af7017964"
+    ],
+    "signal_ids": [
+      "4e973b22-987c-5fd6-9e73-c6941d7e2525"
+    ],
+    "decision": "采用：M1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "615b881e24b752c400b58e4e6a0fe093d4adfd8825d671a953084d769ab7a03e",
+        "candidate": "5b9155a9db0997a9deb093003d3aeb81b5f45ee21765913c6619f6ef77eb44d6"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTefa87a69-e3da-4a37-9398-e99362b78b1b",
+    "title": "伊朗军方态度显示可能对美国实施更大规模打击",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD352289ab-c93b-5ea3-aca5-8cac7393f5aa"
+    ],
+    "signal_ids": [
+      "e50787a0-c95a-569c-ab54-c9d7cb47dd08"
+    ],
+    "decision": "采用：G2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "615b881e24b752c400b58e4e6a0fe093d4adfd8825d671a953084d769ab7a03e",
+        "candidate": "6245110534935a77d28c35d69909117deddcf1bd2bb7fcce480751600ab463aa"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT6e374043-5224-4719-86aa-0ac787b1ea53",
+    "title": "江西寻乌抽水蓄能电站主体工程进入全面建设阶段",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD32ff51bc-b8e1-5d6b-a1e9-97b5470d1520"
+    ],
+    "signal_ids": [
+      "8eecc2ea-a607-56e6-b779-f3f2cbaaf78a",
+      "a60c780e-0932-55e6-8703-07f4798badef"
+    ],
+    "decision": "采用：C3.3",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "615b881e24b752c400b58e4e6a0fe093d4adfd8825d671a953084d769ab7a03e",
+        "candidate": "772b03660c18aa63827863f12549567f74c5d036c5487a9c2292d5079b1f04c1"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTc9ac31b4-0fcf-494c-8ba8-93eb4e5bd513",
+    "title": "Playco使用GPT-6 Astra构建三个主题游戏原型",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD2ed90fa6-a8db-5a83-a3c9-8c6d946cdab4"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "615b881e24b752c400b58e4e6a0fe093d4adfd8825d671a953084d769ab7a03e",
+        "candidate": "96d14fab744f7c70921c7f86c7043494dfa918a690ab34b18ffa6e82cdf1c459"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT5e1e1681-d057-466f-a1b0-217593f76f6e",
+    "title": "海口市住建局印发楼市新政允许落户人员享受购房待遇",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD31f9e937-9f5b-58d1-a03b-87cfeeb11be6"
+    ],
+    "signal_ids": [
+      "c41f44be-7c34-5236-a659-3b5390d0acb1"
+    ],
+    "decision": "采用：M3",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "615b881e24b752c400b58e4e6a0fe093d4adfd8825d671a953084d769ab7a03e",
+        "candidate": "c7526fa211f535956b8fd57a6b285ae17a9ac2cba0be1be5b197e48daa1a5b19"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT053e913a-d52f-4e13-ad0b-5a9259d877bf",
+    "title": "中哈粮食交易平台正式上线运行",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD32e592e7-4a46-517a-ad93-498921fe7806"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "交易平台上线不等于粮食成交量或物流需求已增长。",
+    "classification_provenance": [
+      {
+        "batch": "615b881e24b752c400b58e4e6a0fe093d4adfd8825d671a953084d769ab7a03e",
+        "candidate": "cba7317ff66936fb51be83160c8abd7a27137c5a38d42ac89eb29fef01e6d802"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT48ce1343-0314-43b9-974a-51827f874956",
+    "title": "湖南省施行老旧住房自主更新支持政策",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD35e19465-a40a-5bf9-a3f4-da2b20d835fc"
+    ],
+    "signal_ids": [],
+    "decision": "采用：M3",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "4ce35429b252c4609b3fd85cb3a380c9abea62db271fb022e3f76b9ee46b2b50",
+        "candidate": "040264498349bde5c2a0fa5331a4bb258b8d483e326bc29264f81d9b80b0fa64"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT270d321f-3ddf-44c5-8264-940253221682",
+    "title": "江西寻乌抽水蓄能电站计划2030-2031年分阶段投产",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD364a8b92-a9f7-5e7c-a1e8-3f0a72f09b28"
+    ],
+    "signal_ids": [
+      "da51f30b-747f-5294-be3e-e4b2b50520d3"
+    ],
+    "decision": "采用：C3.3",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "4ce35429b252c4609b3fd85cb3a380c9abea62db271fb022e3f76b9ee46b2b50",
+        "candidate": "11c3fb60c5d9bc64d38d042be3d8a95096dd54fbce6b4f4c3960175d8f4fb7f9"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT347b5b22-9f47-4ff6-9412-f09a91344dc7",
+    "title": "英伟达B200在DeepSeek V4 Pro推理中成本效率领先AMD MI355X",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD3659f69f-954e-5166-8c10-b241a8d6957c"
+    ],
+    "signal_ids": [
+      "a71173f2-4c38-54e4-a75f-4dc98702c0b2"
+    ],
+    "decision": "不单列结论",
+    "reason": "单一工作负载硬件横向比较不能代表整个AI芯片价格性能时间趋势。",
+    "classification_provenance": [
+      {
+        "batch": "4ce35429b252c4609b3fd85cb3a380c9abea62db271fb022e3f76b9ee46b2b50",
+        "candidate": "139342f47a95c03726f0cfd3a86fb89dc670e1c673fd7ce14d63f49a66b97084"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTe7b9a0e4-df93-4ad5-86e8-363bfc79e025",
+    "title": "傲农生物完成信披违法违规自查整改",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD3a86c231-a616-5053-84cf-00a55cd28eef"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "4ce35429b252c4609b3fd85cb3a380c9abea62db271fb022e3f76b9ee46b2b50",
+        "candidate": "220aac2d58e7e52e61604abe4111ba51d279b4cd692b5ee55a486b3848116252"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTa7fa3b4a-2f2c-417d-9035-6bebaba2c0b8",
+    "title": "德国电信建设慕尼黑工业人工智能云",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD35b4787d-9cd6-5191-9409-45187b611e72"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "4ce35429b252c4609b3fd85cb3a380c9abea62db271fb022e3f76b9ee46b2b50",
+        "candidate": "2e78a910845daf753052f00b0982612c83eabae05804ecd9be9b5c72b3f7fb34"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT38d07cac-b18b-4dca-ad1d-0a3cf0da542e",
+    "title": "美国国防部战略资本办公室取得NABEP股权及石油供应控制权",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD3ce39261-2539-5aa0-b0c7-158a5060ca7f"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "股权、供应控制权与特许经营安排不能直接当产量或现金流；未做特定受益公司外推。",
+    "classification_provenance": [
+      {
+        "batch": "4ce35429b252c4609b3fd85cb3a380c9abea62db271fb022e3f76b9ee46b2b50",
+        "candidate": "36a8990f18d6704070da6740010dc5e533af4675aa8ba2751cac1095fe083223"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTb069f298-04d5-4934-851e-78ae208e1cf5",
+    "title": "黎巴嫩真主党向以军士兵发射无人机",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD35c27df3-cea7-5028-8aa5-1374c756e2b1"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "4ce35429b252c4609b3fd85cb3a380c9abea62db271fb022e3f76b9ee46b2b50",
+        "candidate": "6796c9208d8c568f465c1ce8e540a88ca0610cabdd8e31e9c16186237c0cfc7a"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTbf22334a-1e14-4cf9-97a7-1e0df8ab7ba9",
+    "title": "理想汽车在阿联酋正式上市理想L9并本地化适配",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD354f400d-4fac-5d5d-90e4-9afffc9dc84d"
+    ],
+    "signal_ids": [
+      "7be1ded6-eb3f-5b6a-ae53-982f0d7b43c9"
+    ],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "4ce35429b252c4609b3fd85cb3a380c9abea62db271fb022e3f76b9ee46b2b50",
+        "candidate": "b4532b1d09e2d91cd63f695989552d1ef031e49ea4ed54846cfb522f0fd1f150"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT69198d56-b0f3-428d-9805-881fb6016d48",
+    "title": "霍尔木兹海峡原油日流量因美以打击伊朗而大幅下降",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD39391805-2d32-5f66-a0e2-95a71d1693f5"
+    ],
+    "signal_ids": [
+      "a2ca1306-1c13-5e96-87c2-b810951ea0b9"
+    ],
+    "decision": "采用：G1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "4ce35429b252c4609b3fd85cb3a380c9abea62db271fb022e3f76b9ee46b2b50",
+        "candidate": "c27bdbe15bf99fe6b2be29f441b0ce330e32aa41af9079bf7b1964694faba42f"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTb14d8528-c2f2-47fb-a560-c55fcbe0b1d1",
+    "title": "Adobe尚未发布漏洞修复或安全指引",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD3c6e251b-7d28-500f-b6a1-05097320f3e9"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "4ce35429b252c4609b3fd85cb3a380c9abea62db271fb022e3f76b9ee46b2b50",
+        "candidate": "d6e70bebb00801af741b963e8c8408405f8fea3aba082ec317ab1e0b79b96363"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT4a679489-b42a-468a-b455-8267a68fa5bc",
+    "title": "Agile Space Industries过去12个月员工规模扩大",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD3bf0e879-214f-57ee-9671-e5b011c2e912"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "4ce35429b252c4609b3fd85cb3a380c9abea62db271fb022e3f76b9ee46b2b50",
+        "candidate": "eccad69dfaa0d1966b489f730e378d9dcb7937e1ec28242afcbfe149b646ecfa"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTbf0e71c7-80bf-495b-a5c5-ec4b394d7eb6",
+    "title": "理想汽车与欣旺达EVB宣布电池合作",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD42d00d0f-b78d-5937-90a8-b6981a2166c8"
+    ],
+    "signal_ids": [
+      "8170a60d-a4af-5792-a756-b8185d28c8b4"
+    ],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "a6a359ce1b5e2f0433339f4b7329d8c40044cadea36bf7a7fa07ef1a109e2c9d",
+        "candidate": "1931aa03e25930d94befb0312ad5d706870ffea429f545d4d18855604c15e750"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT7ef8e13b-16d4-4bdc-bea7-2f2f6f1fb13b",
+    "title": "伊朗革命卫队空军发射导弹打击美军军舰",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD3e4c3e22-2cf7-5c98-8cec-0e3de1313c1f"
+    ],
+    "signal_ids": [
+      "f5b8c3d7-0098-5c13-8532-56430062a60e"
+    ],
+    "decision": "采用：G2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "a6a359ce1b5e2f0433339f4b7329d8c40044cadea36bf7a7fa07ef1a109e2c9d",
+        "candidate": "301e26ca67081176f2a543c1902574f781005714001a13b994a4ffc1590aea70"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTc73d63e6-3b63-4069-9e2a-1f6c52808e27",
+    "title": "Neogenyx Fuels开工建设可再生天然气设施",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD456113dc-3127-5089-83a2-b3f1442d1a0d"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "a6a359ce1b5e2f0433339f4b7329d8c40044cadea36bf7a7fa07ef1a109e2c9d",
+        "candidate": "344ad9b1323088040ec1496959c2a99a53911411eb695aea631960c5c341b195"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTb74840e7-1d7d-43b0-87f5-6d1159705fa3",
+    "title": "中国持续落地房地产支持政策",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD407b8969-27e3-58d2-9c73-b296ffa2e64a"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "自媒体政策汇总缺少原始政策文本与适用范围，避免将40年贷款等概括直接作为政策事实。",
+    "classification_provenance": [
+      {
+        "batch": "a6a359ce1b5e2f0433339f4b7329d8c40044cadea36bf7a7fa07ef1a109e2c9d",
+        "candidate": "4b2251f29e3b3d8015e20d0793bae54403bed69575f2322b46f836bdc7ce4b83"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTaf93e53f-f41c-4f83-a3bc-261383c4490b",
+    "title": "印度电力部启动能源栈概念验证试点",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD419512fc-131a-5568-86e2-9b71c9837173"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "试点属于宏观分类，未依据常识改类；缺少可对应正式宏观故事线的实质变量变化。",
+    "classification_provenance": [
+      {
+        "batch": "a6a359ce1b5e2f0433339f4b7329d8c40044cadea36bf7a7fa07ef1a109e2c9d",
+        "candidate": "5a89d2f9fc35844699fa27432cc30f0eab236ed5497ed1d3e6a4c8fa24003446"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT5281d2e0-9f82-487c-aefe-c5fdeea2c273",
+    "title": "岚图汽车开启梦想家9高端MPV预售",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD3e945af5-c0a1-5f1f-add1-db0ebf41690f"
+    ],
+    "signal_ids": [
+      "bbfb9967-4b97-5e79-ae74-b695242a5e65"
+    ],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "a6a359ce1b5e2f0433339f4b7329d8c40044cadea36bf7a7fa07ef1a109e2c9d",
+        "candidate": "9ed23399ba87dd2114619a38212fd9d2ad0a3c35423add59ef77ab9f6ed72ce9"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT1dfaa212-d532-41a3-8da7-621884cfd73b",
+    "title": "伊朗革命卫队海军打击美军无人艇",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD4328ffb0-5a92-57ff-b01b-5beaa8ffbcac"
+    ],
+    "signal_ids": [
+      "b6d1a0bd-dbfb-505f-b6bc-246b06612a81",
+      "11d38465-f2ed-5d48-9443-f1867cd56578"
+    ],
+    "decision": "采用：G2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "a6a359ce1b5e2f0433339f4b7329d8c40044cadea36bf7a7fa07ef1a109e2c9d",
+        "candidate": "b5cb2880d56465ab86e2397c12c55995877514d3408bf56ae7c4036c0044b657"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT15ef95e6-d997-4717-81c8-45748ed9796f",
+    "title": "特朗普政府高级官员公开施压美联储避免加息并推动降息",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD4634deec-556b-5364-83e3-7ea042d0599b"
+    ],
+    "signal_ids": [
+      "896743b2-2c79-50e2-9c60-537f66d867fc"
+    ],
+    "decision": "采用：M1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "61988fda8473ec0df8a79deb894d53a8c54a1d5485d98022b6cbe7ada5511d54",
+        "candidate": "06cb356e621bdbdaf9be52c6ca17ec3be1d9dcf22b471acb699a9caa19e9ab2d"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT379e60e7-3943-45b7-9132-e6e805dfa06f",
+    "title": "全A两非二季度表观增速改善超预期",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD4ad79b75-4952-5427-ae7f-8da25d42c0d4"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "券商观点指出非经常损益和营收约束，不转成全市场盈利持续改善结论。",
+    "classification_provenance": [
+      {
+        "batch": "61988fda8473ec0df8a79deb894d53a8c54a1d5485d98022b6cbe7ada5511d54",
+        "candidate": "2fecbbfb9d9ac4741f12dca0a159a21124e52d0187c82515239c979784adf13a"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT497a9510-4809-4373-bcd7-5e73140e354a",
+    "title": "雪佛龙宣布70亿美元投资计划以提高委内瑞拉石油产量",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD4857addd-f54b-5a5e-863f-90a082ab34de"
+    ],
+    "signal_ids": [
+      "535218c8-6d18-5c85-a3a9-eeaaf4405a9c",
+      "91d09457-afba-582c-a90c-2ee41f752191"
+    ],
+    "decision": "采用：C2.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "61988fda8473ec0df8a79deb894d53a8c54a1d5485d98022b6cbe7ada5511d54",
+        "candidate": "6a409839bc9d3cb03bc1a125299c96bd596751c6eb24ece088da562e0f161118"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT4b669e3d-ca2e-43a5-a627-03adf9c8761b",
+    "title": "未识别攻击者利用漏洞入侵JetBrains Cadence并窃取数据",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD4cba4278-b6b4-56b0-a060-b1e00b56d68a"
+    ],
+    "signal_ids": [
+      "9d05b2f0-debb-50f5-ad92-cb9b338c8c5c"
+    ],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "61988fda8473ec0df8a79deb894d53a8c54a1d5485d98022b6cbe7ada5511d54",
+        "candidate": "89040741a61721339bff79b8847005d1190748f3bae74511c35dd7acbc08c0dd"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT7a51609e-03f5-4553-8435-59b14d00b404",
+    "title": "诺华与Ionis的pelacarsen三期试验未能降低重大心血管事件风险",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD46917294-9ffd-5276-9624-6dad78b59c59"
+    ],
+    "signal_ids": [
+      "3d5855ac-a9e9-567c-b323-699167fbd2c0"
+    ],
+    "decision": "数据缺口",
+    "reason": "相关链无Concept映射：创新药产业链；不强行归组。",
+    "classification_provenance": [
+      {
+        "batch": "61988fda8473ec0df8a79deb894d53a8c54a1d5485d98022b6cbe7ada5511d54",
+        "candidate": "a4e1c18847270b80ce09f3c467ed01c597c58a162da7ce54c001e3834b260500"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTc585295d-50b8-4094-99e3-4dc444b21636",
+    "title": "拉斯拉凡枢纽受损导致卡塔尔难以维持LNG出口",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD4d2e5ccd-f978-5436-a7ce-ef0b9a839fbe"
+    ],
+    "signal_ids": [],
+    "decision": "采用：G1,C2.2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "61988fda8473ec0df8a79deb894d53a8c54a1d5485d98022b6cbe7ada5511d54",
+        "candidate": "ca168af455f0b45de821d0dc666d76106a5491900e1d4cf6f63850c427e0e3b5"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTc4bac012-b8ab-410a-8ad5-0f38359f1988",
+    "title": "密歇根大学研究团队开发PFAS过滤材料",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD582b6b04-a7d3-52dd-95b2-a331151164ba"
+    ],
+    "signal_ids": [
+      "721c6eeb-4c89-5de5-ada4-9557bc6ceb0e"
+    ],
+    "decision": "不单列结论",
+    "reason": "材料研发不是已商业化，相关信号排除；未形成材料链订单结论。",
+    "classification_provenance": [
+      {
+        "batch": "e29437513b0a6bb1ed1b4887feebccfbb7725a89885aba6f07042274bd185b0e",
+        "candidate": "06d0beef199da7b051326e8ba2ed4dbbad93be5fa94d7914790ac86638ac8f38"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT6e521319-774a-4878-b419-2e7ec324e98c",
+    "title": "非洲光伏制造产能预计2026年增至3.5GW",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD52a7e296-9b2c-55ad-a64f-7599fcab0d37"
+    ],
+    "signal_ids": [
+      "7c60380e-b828-52b4-a431-f5ce36f1e3a6"
+    ],
+    "decision": "采用：C4.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "e29437513b0a6bb1ed1b4887feebccfbb7725a89885aba6f07042274bd185b0e",
+        "candidate": "10a3bab9823bca9aab24c71366f0a7010532745dbde8f5569dc3e08a5eeff2f1"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT19752c9d-8013-45f5-9fda-19b55837dfd1",
+    "title": "中国暂停部分稀土出口限制一年",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD567d653c-eceb-562e-b856-bc9401ee603a"
+    ],
+    "signal_ids": [],
+    "decision": "采用：G3,C6.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "e29437513b0a6bb1ed1b4887feebccfbb7725a89885aba6f07042274bd185b0e",
+        "candidate": "18bed184c4589a8ac65b3a398cc51488b8c252e2169f7fd7729dd00bd619aa35"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT3b14d41a-cd4f-432c-b3a4-c84978a61870",
+    "title": "委内瑞拉授予17个油田100年特许经营权",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD506e6f27-8b22-5f26-9e95-fa10575dc422"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "e29437513b0a6bb1ed1b4887feebccfbb7725a89885aba6f07042274bd185b0e",
+        "candidate": "60f4c45ae9f9c5e9b5f152821b2b08b2d774dd3f1b9c9f00b9c53eeaf29c3130"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT529482b1-0623-4465-ad7e-3793539f9c83",
+    "title": "美国行政命令指定陆军牵头军事核能项目并设定部署期限",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD52bad6aa-9939-51ad-84c9-0f1b067f46f9"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "军事微型反应堆部署目标与现有压水堆节点不等同，不强行画传导边。",
+    "classification_provenance": [
+      {
+        "batch": "e29437513b0a6bb1ed1b4887feebccfbb7725a89885aba6f07042274bd185b0e",
+        "candidate": "8f7314df4a54a82c108bfdbda4d2eee2ade2ab5ca10193517476c85ea8dca5f6"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT943917b3-eaff-4d34-a5b1-db245e329245",
+    "title": "EPC Power启用美国新工厂新增27GW产能",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD5a8cf714-5a40-503a-871f-6d43dfe106cf"
+    ],
+    "signal_ids": [
+      "562cce56-2893-55b1-8ccd-f287b523b161"
+    ],
+    "decision": "采用：C3.2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "28c8a0bef2b644ce6093e7cbe2e9f8710db2c5bc75fc839a6f98a8032e8a55d2",
+        "candidate": "0d3c08b910956ba38144900a9c9c4b8fe942570e45725b66206a4562caecd0ff"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTb19d2d24-5571-451c-b470-bc6828e61f26",
+    "title": "以色列击落真主党无人机",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD5cedcbe4-cc54-51c0-b8e2-7cb8e3bfa544"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "28c8a0bef2b644ce6093e7cbe2e9f8710db2c5bc75fc839a6f98a8032e8a55d2",
+        "candidate": "2319937d6ac012f7355957f161dd6d9af803d85cff8f6ec551ff52b8952c0866"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT8147d811-2359-47bd-a1af-f81ea91366df",
+    "title": "伊朗革命卫队称导弹袭击美军航母及驱逐舰",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD5b0c8815-97f2-513c-a493-82945964cadb"
+    ],
+    "signal_ids": [],
+    "decision": "采用：G2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "28c8a0bef2b644ce6093e7cbe2e9f8710db2c5bc75fc839a6f98a8032e8a55d2",
+        "candidate": "2dde81ba65c1739710ec7374614e5944fd2fa5dc29d9a73c3452b99a964b7a7b"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT5c5460d4-d8f5-4ce9-b298-d81030edb71b",
+    "title": "美国8月非农数据大超预期",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD5e3dc40d-564f-5f4e-ab50-6ea1a51e3210",
+      "EVD60c0fd46-ffe5-553b-8952-b63b5220cdb0"
+    ],
+    "signal_ids": [
+      "0aef0364-7e8d-5a43-b076-4838323e16d6"
+    ],
+    "decision": "采用：M1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "28c8a0bef2b644ce6093e7cbe2e9f8710db2c5bc75fc839a6f98a8032e8a55d2",
+        "candidate": "a63e0ede3abd377cd76658f0f281677f6f90538b3fa36b917986c88ab804654a"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTc9b493b5-c180-4713-b84b-92bf9f5bf626",
+    "title": "VMware vCenter漏洞被大规模主动利用",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD58e19394-8f74-5c6e-adcb-fa8754f1ef90"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "疑似攻击者归属及跨国漏洞利用不足以直接升级为国家间对抗结论。",
+    "classification_provenance": [
+      {
+        "batch": "28c8a0bef2b644ce6093e7cbe2e9f8710db2c5bc75fc839a6f98a8032e8a55d2",
+        "candidate": "aacd351fdd482581e745c218298f547a4d805f93d8b8b5648d1270e34ee78b44"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTc746f393-5221-45ef-8159-9904594a446e",
+    "title": "欧洲委员会更新AI大陆行动计划提升算力目标",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD5b83cab3-f215-5e03-b628-a8b18b3c734e"
+    ],
+    "signal_ids": [],
+    "decision": "采用：C5.2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "28c8a0bef2b644ce6093e7cbe2e9f8710db2c5bc75fc839a6f98a8032e8a55d2",
+        "candidate": "b2c1f991653016bffeca3c828215d710a06ce88a136e0cbaa97af01ccf107780"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTb30d4ca2-2495-404c-85b7-bdad7d81e416",
+    "title": "中国人民银行宣布开展买断式逆回购操作",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD68e4ec72-7a86-5d8f-8a97-ff14cda44fb3"
+    ],
+    "signal_ids": [
+      "bd32e192-31dc-54a9-8c06-4eb16691a993"
+    ],
+    "decision": "宏观流动性观察",
+    "reason": "采用操作安排本身，排除降准与同额净投放解读；缺少匹配的正式故事线。",
+    "classification_provenance": [
+      {
+        "batch": "dd5978a4bf59418d251a0356f5a38a87e520cff42609568d12631c5556c1156b",
+        "candidate": "2ede92a7d4b03475254ca608284179235cb76d4fa35d7971595d79014adf674c"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTedea307f-8386-4a05-b31a-1a13a28d3c2f",
+    "title": "财政部等认购农业银行A股定增募集资金目标1600亿元",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD791e71e0-95cb-5525-8d31-e1240bb35105"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "b35369c4a8a9d327e4c136f93ef71540d9435ae83f40a527ce8efa7b783281ac",
+        "candidate": "334d7f938ea27fedfd44f0d2eae395bba98c0070f0d1af05b3f77c2d81573c38"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT427b4148-0338-4663-847a-1078adfdfe6f",
+    "title": "西安咸阳国际机场2026年暑运货运量创历史新高",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD76db50f4-658c-5e5d-a86f-ced91dc92a37"
+    ],
+    "signal_ids": [
+      "01465dde-d344-5fac-a7f4-7cd628d2344e"
+    ],
+    "decision": "不单列结论",
+    "reason": "事件标题写货运，信号描述客流并错挂厦门空港；不输出公司判断。",
+    "classification_provenance": [
+      {
+        "batch": "b35369c4a8a9d327e4c136f93ef71540d9435ae83f40a527ce8efa7b783281ac",
+        "candidate": "c28457dfed7ec789890c8e32e8a81b0cb5a5b58b59c97d86e7f262187849239a"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTe37ad5f4-f339-4417-bc22-4ecf4fcf5e53",
+    "title": "GlobalWafers完成得州晶圆设施一期并获得2亿美元补助",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD81e10962-85fe-5fdb-a7d0-dbc03450999c"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "673cd331c222c8055efc6404642fe0e8dc9b4d9b55918a901be6bf47342bec11",
+        "candidate": "43b2d5ccb7c17c07b8c7c5a1034a948c0f0168867582733028a26f67516b47c4"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT4dd1f452-92cd-4f9a-9a8b-dd5027751c58",
+    "title": "蔚来第五代换电站开始支持三个品牌",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD86aa7f37-6a50-595b-88d0-3ebcf9749516"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "673cd331c222c8055efc6404642fe0e8dc9b4d9b55918a901be6bf47342bec11",
+        "candidate": "849a2f062e92eb534a6bca5599b8f2b5e5cb2fd5dc6843621d3a239430fe82c0"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTc56491cb-d688-4fa0-81d2-e25540417b6c",
+    "title": "Gartner预计2026年企业网络安全预算增加6%",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD7e9bf18b-363b-5eb0-bdae-380b525dcfdd"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "673cd331c222c8055efc6404642fe0e8dc9b4d9b55918a901be6bf47342bec11",
+        "candidate": "968796bc817cdd1ad91c44af4444916c65156b665eae4cbe76f5f90e8385c3e7"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT8ef144aa-44f2-46fb-88cd-510efd2cb1af",
+    "title": "Sansec建议Magento商店临时停用GraphQL并轮换凭证",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD82bb1225-2a50-57ac-a7cb-8a4726a716b2"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "673cd331c222c8055efc6404642fe0e8dc9b4d9b55918a901be6bf47342bec11",
+        "candidate": "b99cecd2d85c2abc5833905a57cc447c2f3cb42ec24e7fb952bae11333f5d302"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTcb12bc2c-3463-49ed-b141-a7a4a980b06c",
+    "title": "Ultragenyx计划实施新一轮重组",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD8599288d-98c4-5ce6-ba2c-73be5425bf39"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "673cd331c222c8055efc6404642fe0e8dc9b4d9b55918a901be6bf47342bec11",
+        "candidate": "e96a5d3c2c0c0a1ac7578b3648f159cd27125bf4ae34fb970af14249d87463ce"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT80b2b388-a296-4b14-8583-48e537400c77",
+    "title": "国际标准《地热术语》首次在中国宣传推介",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD8b4aed95-9b52-5043-93d4-7def6db36e0c"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "bfdf97cba34d64f4d6d1e61882ae9f841389c86d36af6c27a6496067266b8e1f",
+        "candidate": "24cf502ace3c834fc21306441cf574c8737005057d9e4b3ac98366a668c4504e"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT3e12d5bc-9766-4674-b467-59204373c68c",
+    "title": "乌军对别尔哥罗德州发动102次攻势",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD8b8b4bf9-a11f-58c9-a8a3-c939d483f1f2"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "bfdf97cba34d64f4d6d1e61882ae9f841389c86d36af6c27a6496067266b8e1f",
+        "candidate": "7f359e230fd147bc5c1b9ba12fc85c33227a577e1bb84a1b0c5dc34100079a97"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT4fd9dc96-1e3e-4b85-8847-c6ecfb860818",
+    "title": "美国商务部调整芯片法案研发资金投向",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD895e4c7d-9fd7-5c5c-aa49-dfd14659f64b"
+    ],
+    "signal_ids": [
+      "e7c92eff-d11f-588e-9758-f78431e5f43c"
+    ],
+    "decision": "不单列结论",
+    "reason": "研发拨款是资金安排，不能直接形成出口管制风险上升。",
+    "classification_provenance": [
+      {
+        "batch": "bfdf97cba34d64f4d6d1e61882ae9f841389c86d36af6c27a6496067266b8e1f",
+        "candidate": "85ca097972094d397deb113961f0d0301fbb687bee9184f308d517a9ce258eb0"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT54a101c7-5534-4033-887a-5cc137171316",
+    "title": "中国预计11月决定稀土暂停措施去留",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVD8cf1d628-bb69-5d5d-ae0c-66bad94a0fd0"
+    ],
+    "signal_ids": [
+      "aa18ebda-2211-55cf-aa3b-d4c8b898521d"
+    ],
+    "decision": "采用：G3,C6.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "bfdf97cba34d64f4d6d1e61882ae9f841389c86d36af6c27a6496067266b8e1f",
+        "candidate": "aa62543de7b0a90c516341b40f0a26258762c3580a9ea158e04ecb17169b1788"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT9d870572-4edf-4a35-a9d9-29d180045501",
+    "title": "七部门就人工智能和算力设施作出最新部署",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVD87fa2adc-4145-5fcf-952b-ff22f5e94026",
+      "EVD8fcc8f45-8b79-5d84-904a-ba7f58c0a4eb"
+    ],
+    "signal_ids": [
+      "b70389b2-301b-52c8-860b-362d58ca7323"
+    ],
+    "decision": "不单列结论",
+    "reason": "只有七部门部署概括，无政策细则和力度比较；不输出支持力度上升结论。",
+    "classification_provenance": [
+      {
+        "batch": "bfdf97cba34d64f4d6d1e61882ae9f841389c86d36af6c27a6496067266b8e1f",
+        "candidate": "d81ac0ec79965d754e7a85d1a91f74ccf6a48c685976014074b04b971f551b6f"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTa8cdbc5c-9928-4714-9c8f-cb05c5e57366",
+    "title": "SK集团与Naver承诺部署英伟达Rubin算力",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD8dbf83bb-6796-5cb2-b38a-b841b33bcb4e"
+    ],
+    "signal_ids": [
+      "061c243b-8e23-5c90-8640-1bbfe266035a"
+    ],
+    "decision": "采用：C5.2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "bfdf97cba34d64f4d6d1e61882ae9f841389c86d36af6c27a6496067266b8e1f",
+        "candidate": "f02354c76854676f0d6586ba142e6913a7f349c71059f9ed71bf0afa205fadeb"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT769a8bb2-7013-4870-a7d5-18093fdf50bb",
+    "title": "研究预计2026年非洲新增光伏年发电量23TWh可覆盖年均用电增长",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD919523ff-5fc0-5b3b-a25c-12527cc35b60"
+    ],
+    "signal_ids": [
+      "9f0ca7d8-e525-5199-9d5a-07593993653a"
+    ],
+    "decision": "采用：C4.2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "b2ba98a58d044d4c3cc9dde18bbf26c0e471782cad1255075f4541ffe421e937",
+        "candidate": "0c4d09feaf4ac4eb62203f6d57946fa59170e9bba494349b8c875d74fe63e922"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTf96978f8-bad0-4227-81c6-dc246fee39e0",
+    "title": "欣旺达EVB公布2026年上半年经营业绩：营收155.3亿元，净亏损3.24亿元",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD91324d2a-9685-5ddd-8ad3-59184600986c"
+    ],
+    "signal_ids": [
+      "8e9d30e0-5cdf-51e2-a794-515cafd2e402"
+    ],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "b2ba98a58d044d4c3cc9dde18bbf26c0e471782cad1255075f4541ffe421e937",
+        "candidate": "2f95b43b1afc0190316faf86f8283908a0cea21ae0ced5719389d816c026d054"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTa5c1441d-7da3-4904-8f15-c4fe935a41d7",
+    "title": "Inox Solar Americas计划从2027年起交付约767MW光伏组件",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD9791e7d3-b651-5f76-830c-1c93b10a7a7e"
+    ],
+    "signal_ids": [],
+    "decision": "采用：C4.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "b2ba98a58d044d4c3cc9dde18bbf26c0e471782cad1255075f4541ffe421e937",
+        "candidate": "71a6f364c5e3aa4afd4da2f9d0ef7500c45fc0b6198cebc911f255aedf84a24b"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT251643db-8fd6-4cb9-8ea1-5f68e252bb3d",
+    "title": "义铠精密加速转向高端散热解决方案",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD98e9800c-0c3b-5e45-9539-d55365cf7fb3"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "b2ba98a58d044d4c3cc9dde18bbf26c0e471782cad1255075f4541ffe421e937",
+        "candidate": "7a84418b01120576247bdc0c80502f86c255946ad14e2e78c537519460294d05"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTae1597ed-3242-46f3-b8ea-2c20529fcb74",
+    "title": "GAO预计多数芯片法案制造项目将在2028年前完成",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD9499113f-31cb-5c19-a3a9-0615ac617d54"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "b2ba98a58d044d4c3cc9dde18bbf26c0e471782cad1255075f4541ffe421e937",
+        "candidate": "b384ed00c84fb2f4155d93dbe8afd95ee3ac298907786c36815bec5b4ad26e0d"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT936327d3-c361-43e0-a824-a3dc800d1c00",
+    "title": "OpenAI Jalapeño B0芯片进入晶圆厂制造",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVD949be8cd-15d4-5a0a-963b-701bc6b500c4"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "芯片进入制造环节不等于量产、良率或正式供应商订单，未核验实际链锚点。",
+    "classification_provenance": [
+      {
+        "batch": "b2ba98a58d044d4c3cc9dde18bbf26c0e471782cad1255075f4541ffe421e937",
+        "candidate": "b8cea6409e5b33a2ec349267ef427db17200043a976b7272a2cf9f18f0d57d0e"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTf8578502-248b-490f-bc85-65b0b96d54bf",
+    "title": "长江存储和长鑫科技今年推进首次公开募股",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD9a668a45-d0fa-5765-b89f-ad67915e0e81"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "b2ba98a58d044d4c3cc9dde18bbf26c0e471782cad1255075f4541ffe421e937",
+        "candidate": "eb169358331a9a8bdd4fa6f6987d681456e492298104764cb7fd7ddfc119f7bc"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTb58766c7-2b2a-46ec-8dc3-a60d11199560",
+    "title": "标普道琼斯宣布将耐克剔除出标普100指数",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD992aeef3-7985-54a3-a807-ef200ed0bda4",
+      "EVD99623d15-f0db-5f2e-b392-05e1d9bd0272"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "b2ba98a58d044d4c3cc9dde18bbf26c0e471782cad1255075f4541ffe421e937",
+        "candidate": "f56c955f19db721b503eff3c220351bd39f1287291078a806207904421a8f85c"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT0c647a0e-5c62-421c-bee2-7cabba69d834",
+    "title": "欧盟反对改变加沙人口结构或领土状况",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVDa32cedb7-02d3-5149-9cbe-83ea70b9b99c"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "2683751fa717c6e2da300cfebc623b3b6e2f6b25e63ad1468999f67ee3383532",
+        "candidate": "409a5aab2c72bb0b9bd25ea96d4f1df623fe9e0e3c762e99d70d6d6b1ffbdc36"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT39ea895a-c3be-4e55-92e3-2a32ff7b9a86",
+    "title": "日本政府紧急寻找替代能源供应",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVDa0eb8d3d-ebd8-5672-84a4-4974a3645c9d"
+    ],
+    "signal_ids": [
+      "e6a33fe9-6ed3-5231-8c1f-46a392aafe94",
+      "e5ee61d4-44b3-580d-a7b8-a9cbdace02e7"
+    ],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "2683751fa717c6e2da300cfebc623b3b6e2f6b25e63ad1468999f67ee3383532",
+        "candidate": "6da33bb541e15bceaac234e759961e2e8aa61faf68dbbd5346a9b9191582faec"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT2556d6b4-c033-4c27-a483-0d6a34560611",
+    "title": "Ultragenyx公布Angelman综合征药物临床试验失败",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVD9f9f9dff-3700-53e0-8bdc-641b4acb1829"
+    ],
+    "signal_ids": [
+      "efa519b6-bd01-514a-924f-e9f81d3ca38e"
+    ],
+    "decision": "数据缺口",
+    "reason": "相关链无Concept映射：创新药产业链；不强行归组。",
+    "classification_provenance": [
+      {
+        "batch": "2683751fa717c6e2da300cfebc623b3b6e2f6b25e63ad1468999f67ee3383532",
+        "candidate": "751f5945bbc1eb15f586453ea41a5fbd64a95b066e3a5b28be993574d7fdbb61"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT981966a9-b881-42f9-8df9-48121ea43ae7",
+    "title": "美国海军清除霍尔木兹海峡航道爆炸物",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVDa5fc21a0-b087-5a6b-8d84-67548a8464a8"
+    ],
+    "signal_ids": [
+      "4b2e1fb9-d87b-5496-983d-04ffd1b05ae9",
+      "53edd802-58fe-58b3-a5b9-9121b46f20da"
+    ],
+    "decision": "采用：G1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "2683751fa717c6e2da300cfebc623b3b6e2f6b25e63ad1468999f67ee3383532",
+        "candidate": "b24a6e68e3eea9a057f47166dde8ab268c71cff179193644cbd91a7e0c620469"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTae514b38-889e-42df-98bb-da928093d544",
+    "title": "中国空军将参加第二届埃及航展",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVDa3ca5a21-2871-5d9d-96fd-5ff5295dce33"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "2683751fa717c6e2da300cfebc623b3b6e2f6b25e63ad1468999f67ee3383532",
+        "candidate": "e1ea8768bc262655107fff2a0b5ff951318087dd8bc06a39e1305edb759a39aa"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT00dd35f3-db27-4bb8-853d-0b5114404555",
+    "title": "太原论坛发布全球首个地热术语标准",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVDa8f58eb3-2d5f-5391-a46b-cc94404e9ede"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "a41e56873c1520b05fe502a685a50b6a29f46dbdd016821dd13d1c1867c3fcd0",
+        "candidate": "4f53832dfa062c481a01d5aac4ef47c94e7cfff5d8db2ac1a644639355f1cc5e"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTaed0a9c2-fd8c-485b-8d7d-8ce4fb5c35a6",
+    "title": "Equinor计划2027年初在弗吉尼亚州运营储能项目",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDa8937789-809e-584d-b911-01d50774fc11"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "a41e56873c1520b05fe502a685a50b6a29f46dbdd016821dd13d1c1867c3fcd0",
+        "candidate": "597191a060b2f77893cba71924682e342da1449828dfd0cecbeecfdc1f6b90d3"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTc9d322ca-20ca-459a-aa59-0cf4b9029b8a",
+    "title": "商务部披露1-7月境外人员在华消费增长27.8%",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVDa80561f7-b659-5e94-bbab-9e80f5a437ea"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "a41e56873c1520b05fe502a685a50b6a29f46dbdd016821dd13d1c1867c3fcd0",
+        "candidate": "ff40847464612cee2eda4e85c36257fdab91e684673ae798fbcada9467533629"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT3f34ffd5-72f9-4104-abf5-d486ec4dae7f",
+    "title": "SK Telecom宣布建设2GW的DSX AI工厂",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDb318a847-1249-557c-a746-e95102531f7f"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "816e7c56ced22e87e4d98caeb078cdab1a64b7b93b1140913e2bff6370e83acf",
+        "candidate": "00457e8fb0922eeb6abd6ac1b5e730c1aaa9e441b2a4aded35e2bbacd9519ad2"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTe71af9be-99f1-413b-8d9b-cc873feb9f30",
+    "title": "阿布扎比国家石油公司计划扩大通往富查伊拉港的原油管道容量",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVDb4ce74d5-ef0b-5e02-be50-e9914abd0ab7"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "816e7c56ced22e87e4d98caeb078cdab1a64b7b93b1140913e2bff6370e83acf",
+        "candidate": "0f0c5b27df29659f2f7fe10c4965ad78f05b18dabd6f1efe91fe2832dc7ad76d"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTe93a7b69-5ae4-4aa2-9ba9-a119d7473e5e",
+    "title": "伊朗伊斯兰革命卫队称两艘受损美军军舰撤离冲突地区",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVDb646d98a-9ee0-5b6a-85c3-a0076fa111aa"
+    ],
+    "signal_ids": [],
+    "decision": "采用：G2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "816e7c56ced22e87e4d98caeb078cdab1a64b7b93b1140913e2bff6370e83acf",
+        "candidate": "177a0ca6cb4f13dd82d09a5fe68711098df53afb3c8ff42cb7be2bc7664bbfda"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT48883f4c-a06f-4f35-93a9-667faa38407d",
+    "title": "TechWorks将英国芯片产业团体整合至UKSIA框架",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVDb6721dd7-4f39-5255-b420-0f3a9904f5d7"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "816e7c56ced22e87e4d98caeb078cdab1a64b7b93b1140913e2bff6370e83acf",
+        "candidate": "1b6ed1921eca24dd106a79f7778826e437b3de9e08f373f936b1772b4ac0c2c5"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTa3335b6c-581e-4b20-8228-032574edd2d8",
+    "title": "理想汽车计划2026年下半年起在更多车型搭载自研电池",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDb06fd5b1-3054-592c-96db-75c54444e6af"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "816e7c56ced22e87e4d98caeb078cdab1a64b7b93b1140913e2bff6370e83acf",
+        "candidate": "79cda41aa1a0eabdc84cd7819138b2158c4d487edec265adbfd48926e3b9140a"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT5bf18c72-f197-4cfa-90cc-d7eb78d52991",
+    "title": "俄方在过去24小时于别尔哥罗德州拦截107架乌军无人机",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVDb10b4a04-e454-5474-aef5-37763bdaff75"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "816e7c56ced22e87e4d98caeb078cdab1a64b7b93b1140913e2bff6370e83acf",
+        "candidate": "830d83b7e2af9a5964a5f9fb120ffce68fdc1ed80bd4599b84ecacbbaf99f327"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT8047e77c-432f-46d5-9ef7-6c20c2f5c370",
+    "title": "Tscan Therapeutics今年前六个月录得5900万美元净亏损",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDc57ad52a-4feb-5ff2-9677-3011099d2755"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "7b31bd721604b25348e0c1096e22f6e4ac9251626bff26f3c73ca3423dd2726e",
+        "candidate": "1e45fb7743b30f42b1bf4e35f743d528cb058c878edc1942eed84386079b9121"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTfd149f96-9803-4753-a9ea-c4e9a4fa5c4d",
+    "title": "2026年3-4月中国批准氧化钇输美且对美钇发货量同比下降约75%",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVDbb70c579-896a-5469-9202-495f8bd58b91"
+    ],
+    "signal_ids": [
+      "50271d54-3f84-51d8-9e13-fd85f70fdef1"
+    ],
+    "decision": "采用：G3,C6.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "7b31bd721604b25348e0c1096e22f6e4ac9251626bff26f3c73ca3423dd2726e",
+        "candidate": "5920ea55e4df3b0a10bb1a352d23bd54680514ce8f30e74cdc10aab52b54c150"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTe93bb332-8231-44b1-82c5-9f9f9d5e1a41",
+    "title": "理想汽车计划认购欣旺达动力新增股份以成为其第二大股东",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDc01796e3-6330-549d-9500-37ab210ee22c"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "7b31bd721604b25348e0c1096e22f6e4ac9251626bff26f3c73ca3423dd2726e",
+        "candidate": "99878712cab8c9d97d5456c5feaecf7f71481e2919d0ba23e2593433a112a420"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT89a1ba7c-20f7-4a49-9db0-e9d2811a0eb0",
+    "title": "OpenAI于2026年6月发布与Broadcom合作的Jalapeño自研ASIC项目",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDc5850188-a8e8-5106-b109-ec3dfca5aaa0"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "7b31bd721604b25348e0c1096e22f6e4ac9251626bff26f3c73ca3423dd2726e",
+        "candidate": "b63ba3da0be5234e1033bd11f38e0726b5b806e9e103b1b485b1e3b8526f7430"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT9ca04bc6-dfb2-4b4b-83cc-5695bb86ea67",
+    "title": "OpenAI与Celestica合作设计Jalapeño机架级系统",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDc0155b15-b9fe-5095-880d-8903814b401b"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "7b31bd721604b25348e0c1096e22f6e4ac9251626bff26f3c73ca3423dd2726e",
+        "candidate": "bc65bac6fff53b26be4571413c53f72059f56d0afa99e9850ee8376db4a5bc53"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTa98b9864-4406-423d-99c5-1ab6241fbcfd",
+    "title": "印度政府宣布建设印度能源栈",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVDc8f0f17a-a5cf-5e95-ad9f-7aea3c1da1ec"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "e198edc92020fd137c644df47d2c2424f58cd5d2ccddd47cff0ecce825b1e9b1",
+        "candidate": "15354afd00d611f45a82253a67d336e091d3e5baaa21086453d9108dae22c9bb"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT8d73d2be-693b-4c2f-9712-c210310b7222",
+    "title": "美的集团、五粮液、工业富联实施股份回购",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDcce9cadd-cc18-5612-b12a-19a8f2db8d89"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "e198edc92020fd137c644df47d2c2424f58cd5d2ccddd47cff0ecce825b1e9b1",
+        "candidate": "ac6d5db55dc6797e863b897e8df1694cc71d321bb0c337361fc54fdb2608abd1"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT0b3327f7-7edc-4b41-95ef-f13fe034b70a",
+    "title": "Adobe将Gemini Omni Flash集成到Firefly",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDcaf71077-ee98-54cd-b953-c51b72912b6c"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "e198edc92020fd137c644df47d2c2424f58cd5d2ccddd47cff0ecce825b1e9b1",
+        "candidate": "c760d6bde838948906771c739777c45d293de7a6b8ecd4f19e12269d9113f45e"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTc037a8d3-260a-461b-a72a-5495db4ee12e",
+    "title": "2026年医保谈判正式启动并新增商业保险创新药协商通道",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVDcdd016f7-7de0-5de2-ad20-77c7abccbb30"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "自媒体医保谈判与商保通道线索，缺少官方原始文本；创新药链也无概念映射。",
+    "classification_provenance": [
+      {
+        "batch": "cf67721cd68567c6f6847ee5058cfc2e718af995c21a525d176456e1a3f5bc61",
+        "candidate": "44d9110ec97a8d826815acbec29ed21d31e42fb90700821ec95450514bd57cea"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT810ba4f2-8baf-4cf8-8062-3fc6c7608493",
+    "title": "中国农业银行拟募资不超过1600亿元补充资本",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDd43d8070-629c-51a6-92cb-a86a337612b1"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "cf67721cd68567c6f6847ee5058cfc2e718af995c21a525d176456e1a3f5bc61",
+        "candidate": "7247c2cb6736809e1473f0f62046646d83b3d7c0ffcd6d54608cd8ba4f987622"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT0af50505-6c42-4101-9094-63c26f33eb5f",
+    "title": "威马汽车旗下销售公司8辆库存车被拍卖成交",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDd2560abf-83e4-5b5b-9afa-08737d4e006f"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "cf67721cd68567c6f6847ee5058cfc2e718af995c21a525d176456e1a3f5bc61",
+        "candidate": "7996f4ba3571c8046571843420e3c25ccb29f6379fe82fd63b4632306c36834a"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT28320f90-c4f5-4f2a-adca-775cf8c4dac3",
+    "title": "以色列部长计划驱逐186万巴勒斯坦人出加沙",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVDd64efae5-a8c0-57ea-b5cf-c06842868fef"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "cf67721cd68567c6f6847ee5058cfc2e718af995c21a525d176456e1a3f5bc61",
+        "candidate": "848fc57ecb7020dee364b687b6d8a6695a1e12a25c72280e9dc840d82e791536"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT8555e432-a6cc-4519-8212-cba7ecc544de",
+    "title": "OpenAI计划2027年逐步扩大Jalapeño芯片量产",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDcf7ff967-864d-54a1-9bab-55b84c30b8be"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "cf67721cd68567c6f6847ee5058cfc2e718af995c21a525d176456e1a3f5bc61",
+        "candidate": "d917e181be23693bc5496f95c411ed7a81aa8234bee2da18d69d17cdd807f18b"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTf60b8377-747b-4d55-84a5-6d0332e841f4",
+    "title": "中国7月原煤产量同比下降10.1%",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVDd5be2061-7b80-5147-86ea-b40089890ff0"
+    ],
+    "signal_ids": [
+      "1ad75737-6efc-5a7d-be93-5dbd74569583"
+    ],
+    "decision": "数据缺口",
+    "reason": "相关链无Concept映射：煤炭开采产业链；不强行归组。",
+    "classification_provenance": [
+      {
+        "batch": "cf67721cd68567c6f6847ee5058cfc2e718af995c21a525d176456e1a3f5bc61",
+        "candidate": "e551617052be89056b6fe3bc7969a9d964c1b46e3db0ac8354a0e3a8b18d6a0a"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT41023d19-292f-41f6-b687-40d60f75c466",
+    "title": "中国投放8000亿元新型政策性金融工具",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVDd1734845-d463-5e57-9beb-419ea2e5cdc0"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "8000亿元工具来自自媒体政策汇总，缺少原始投放证据，不作为宏观财政主结论。",
+    "classification_provenance": [
+      {
+        "batch": "cf67721cd68567c6f6847ee5058cfc2e718af995c21a525d176456e1a3f5bc61",
+        "candidate": "fdedc8d44cba7ceb12dc3ae7c530533747c15c259889af65573065cd531bd782"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTd6ae94a7-322e-42fc-8640-e453618bc3d8",
+    "title": "Broadcom发布安全更新修复VMware Workstation和Fusion中的两个高危漏洞",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDd69dff8a-f6c4-57b0-8e72-2d06348c363f"
+    ],
+    "signal_ids": [
+      "f54759df-2879-5507-aad6-f2a4ee1ce348"
+    ],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "c23b34672b73217d0ae9d7855deaf1d35e94ffa0bcf1ee7905e5e754649c08ba",
+        "candidate": "2f79441e4f5d31c83338dd4254f9d6f170c373143ab6316cbac18238589f025d"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT367946b1-2468-428c-ab7b-fe162311d235",
+    "title": "国脉聚能aFRC聚变能源研发基地在北京经开区落成启用",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDd65eda4e-c6e3-5dcd-bd0b-09a2ecc4352f"
+    ],
+    "signal_ids": [
+      "5c133711-1a33-5a48-b04e-5a0f50e7ced1"
+    ],
+    "decision": "不单列结论",
+    "reason": "国脉聚能与国脉科技主体关系未证实，基地启用不能认定成熟度跃迁。",
+    "classification_provenance": [
+      {
+        "batch": "c23b34672b73217d0ae9d7855deaf1d35e94ffa0bcf1ee7905e5e754649c08ba",
+        "candidate": "3d4a734f72f506d8aab3615df5161b5020ffff57ea52ed6403a5fa0de353f2f1"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVTac45ebbf-3924-47d2-9aac-10e1337a111b",
+    "title": "中国工商银行宣布拟募资不超过1000亿元补充资本",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDdbaaa0b4-d4ad-50c5-b6f8-ce99b9ff5966"
+    ],
+    "signal_ids": [
+      "f381a0fb-2ced-5769-b818-4e95638c2f0d"
+    ],
+    "decision": "不单列结论",
+    "reason": "A股资本补充不是债务杠杆上升，信号排除；公司事件不得进入宏观独立层。",
+    "classification_provenance": [
+      {
+        "batch": "c23b34672b73217d0ae9d7855deaf1d35e94ffa0bcf1ee7905e5e754649c08ba",
+        "candidate": "79eb0a32d3cdd598ef390ab00e3b20554e25cd33c87ced853d1bc5b098196ce5"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT52204a21-edd4-4611-8430-dde6f2156f5b",
+    "title": "Climb Bio计划推进CLYM116至II期临床试验",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDdceedae0-4732-54a3-afc4-8179657a79a6"
+    ],
+    "signal_ids": [
+      "e8ec7978-47da-580e-a38e-3c77aaa9a1dc"
+    ],
+    "decision": "不单列结论",
+    "reason": "未来临床计划不等于成功上市；创新药链无概念，未对行业商业化作统一方向。",
+    "classification_provenance": [
+      {
+        "batch": "c23b34672b73217d0ae9d7855deaf1d35e94ffa0bcf1ee7905e5e754649c08ba",
+        "candidate": "ad60f5fcf71f5a6756d483602579458cc237c9bfb94ce58fcd2fa1d4c39bed38"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTa6c5bb36-2c37-4d1f-845e-dde5850495fc",
+    "title": "特斯拉计划使德州Brookshire工厂具备50GWh Megapack 3年产能",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDdcdf81cf-8d0c-584a-b30c-9adb622844a3"
+    ],
+    "signal_ids": [
+      "bc32bb07-a2dc-5a98-b363-2eeaefd8c8a7"
+    ],
+    "decision": "采用：C3.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "c23b34672b73217d0ae9d7855deaf1d35e94ffa0bcf1ee7905e5e754649c08ba",
+        "candidate": "b7f15bca18d072a1471907bdfc5389358955dd20ab8ea4d36f83df42b882e754"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT24e61a5b-10e5-41cf-89e2-b3c73e00aad3",
+    "title": "美国FDA批准Ionis的Zanvastro用于Alexander病",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDdd2487da-ca85-5f3b-9c7c-34007e7b6978"
+    ],
+    "signal_ids": [
+      "28ee8b89-25c1-5e68-9a66-e536145a8a91"
+    ],
+    "decision": "不单列结论",
+    "reason": "具体药物获批不能推广至全部创新药；创新药和核酸药物链缺少概念映射。",
+    "classification_provenance": [
+      {
+        "batch": "c23b34672b73217d0ae9d7855deaf1d35e94ffa0bcf1ee7905e5e754649c08ba",
+        "candidate": "c7642dd72c3051a54f064f5e0f33a64f125e80700efdffb6b954bfeea086d227"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTae7e1ac6-d44c-4163-acfd-39e50bf47e4b",
+    "title": "美国政府宣布到2050年将核电产量增至四倍的目标",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVDd67abdd5-92a7-5bfb-9fbc-d35aa6f9924e"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "2050年核能目标遥远、涵盖多技术，不能强行落实到现有压水堆链节点。",
+    "classification_provenance": [
+      {
+        "batch": "c23b34672b73217d0ae9d7855deaf1d35e94ffa0bcf1ee7905e5e754649c08ba",
+        "candidate": "c9d4a9e1c5eb6ebea4b371514757ccf16c363cc9bdb42a7a411b401803db69a0"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT5a9a61cb-2ff8-4977-af98-a3dcbdfb7623",
+    "title": "生物科技公司NeuShen获得超过8000万美元融资",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDd7a03692-95af-55b6-957c-634d327c0309"
+    ],
+    "signal_ids": [
+      "a41806ec-ffcf-55f1-98c1-e51d304c5e2f"
+    ],
+    "decision": "不单列结论",
+    "reason": "融资主体错挂且金额不证明融资成本变化。",
+    "classification_provenance": [
+      {
+        "batch": "c23b34672b73217d0ae9d7855deaf1d35e94ffa0bcf1ee7905e5e754649c08ba",
+        "candidate": "da33ea1b84bef0f54822789b6601c61de54ec0259321890e14655c05fbe2f80f"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT236debe0-bf2d-4eef-9870-8fb24f659ea4",
+    "title": "壳牌出售Sonnen虚拟电厂平台",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDe221198e-704b-5736-96b2-8f6386010fc7"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "ccf7e0ce1badeadc1620d56ecca135b5c0fdf8c9441a30644828bce90cc70b1c",
+        "candidate": "2ae6c2e5d338d9d42db1cd9f65e5221055544eafe87bcd8bd0bb51d4d07c414f"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT719d1008-5d7d-408d-9c3c-2fba884d1413",
+    "title": "Flex预计EPC Power实现高增长与高利润率",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDdd89d9e2-93ea-507e-b27c-d70dee075e51"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "ccf7e0ce1badeadc1620d56ecca135b5c0fdf8c9441a30644828bce90cc70b1c",
+        "candidate": "32314e55cb438adc83ae0dc2fce36666b1feeddee6de2575611ec048bf8e9e6c"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT30a54824-c366-4dff-81c3-635d0502561a",
+    "title": "Flex等达成收购EPC Power协议",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDe2af899c-4218-5ecf-9c24-9d3d9a5b7bcc"
+    ],
+    "signal_ids": [
+      "2e244126-5704-5943-b747-a1cbd56b72cc",
+      "d78f13c6-c498-5bae-afd5-69c9952dcace"
+    ],
+    "decision": "不单列结论",
+    "reason": "收购协议与资本开支方向不是同一指标，相关两个信号排除。",
+    "classification_provenance": [
+      {
+        "batch": "ccf7e0ce1badeadc1620d56ecca135b5c0fdf8c9441a30644828bce90cc70b1c",
+        "candidate": "36737e9d3f4535f3478d2b7fdf1348adfd07a64e016843d357965ab4b3b81fb2"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT237514db-03f5-4a7e-88c0-451ce1732f30",
+    "title": "美国制裁土耳其投资银行及其子公司",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVDe1923077-6943-57a2-87a4-703c95af7de1"
+    ],
+    "signal_ids": [],
+    "decision": "采用：G4",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "ccf7e0ce1badeadc1620d56ecca135b5c0fdf8c9441a30644828bce90cc70b1c",
+        "candidate": "63e55f966509247a83b48bc8397c6816402451170cb7acba2fbbb8c7d29916b1"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT85b26b9f-3596-4fef-872b-509828d23f53",
+    "title": "特斯拉与NatPower签署储能供应协议",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDdd64abbf-446c-5e52-b187-95dfcf3f4226"
+    ],
+    "signal_ids": [
+      "a7557f4a-2f79-548f-9bd4-122c797086c9"
+    ],
+    "decision": "采用：C3.1",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "ccf7e0ce1badeadc1620d56ecca135b5c0fdf8c9441a30644828bce90cc70b1c",
+        "candidate": "7b5610276df7ca09992594c6f821c5e403165b6f91b74a29b7484b09cdd1ddd4"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT5a7b8653-c3b4-4ca4-9b81-e0fb3241d0d6",
+    "title": "Ionis计划在美国上市Zanvastro",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDe369953a-44fb-5faa-b6f4-a9c0933c6c89"
+    ],
+    "signal_ids": [
+      "fc8b7a4e-f762-55ea-bd9b-545fa03e7b3c"
+    ],
+    "decision": "不单列结论",
+    "reason": "具体药物未来上市供应尚需兑现；无概念的创新药链不强行归类。",
+    "classification_provenance": [
+      {
+        "batch": "ccf7e0ce1badeadc1620d56ecca135b5c0fdf8c9441a30644828bce90cc70b1c",
+        "candidate": "8e9c86eb8303a0097ed1c4470d3c7eec936c7c9e798009caaf3c3cc0f97de9c3"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT67924b29-ded6-414e-8988-558adb9bd186",
+    "title": "河南银行机构授信城市更新与城中村改造项目",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVDded666d8-c847-5b19-8c27-3c7541779be5"
+    ],
+    "signal_ids": [],
+    "decision": "采用：M4",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "ccf7e0ce1badeadc1620d56ecca135b5c0fdf8c9441a30644828bce90cc70b1c",
+        "candidate": "c012424e0d9022b93de57a9d0ea14e5892a0789d0db23a91b70eb222e3087635"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTd0936e9c-639f-4dd0-b4c9-3ca175211343",
+    "title": "河南省银行机构对城市更新和城中村改造项目提供授信",
+    "class": "MACRO_ECONOMIC",
+    "evidence_ids": [
+      "EVDded666d8-c847-5b19-8c27-3c7541779be5"
+    ],
+    "signal_ids": [],
+    "decision": "采用：M4",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "ccf7e0ce1badeadc1620d56ecca135b5c0fdf8c9441a30644828bce90cc70b1c",
+        "candidate": "f741d0d1fcb52c31c2a179eb587d4bcc70fc63bb2732fb6739ff0d3fbf082c9e"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT463038d8-57bc-4f9f-b2fe-002e82fb0de7",
+    "title": "中国银行旗下AIC目前持有长江存储0.61%股权",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDed92353d-b023-5898-8453-93a2584320e2"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "AIC已有持股非新增资本流入，也不推导存储芯片产量。",
+    "classification_provenance": [
+      {
+        "batch": "32c7c3d81b35a525fe226f80d4a1744b8389d306bc5ad2ff15093cee18709421",
+        "candidate": "2e02f789a05f12d106cf83d2bdaeb9607a7f5cd7228540e9c4f9ffccfbd764b3"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT23cffcb7-f20d-4947-a5cd-528dce9b3c78",
+    "title": "美国总统发布行政命令禁止从24国进口大宗电力设备",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVDecba0a46-6fa1-5a13-8ed9-1ddfa0835cf7"
+    ],
+    "signal_ids": [
+      "7f7400f4-d832-5c97-818f-9c0ac95aa8b9"
+    ],
+    "decision": "采用：C3.2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "32c7c3d81b35a525fe226f80d4a1744b8389d306bc5ad2ff15093cee18709421",
+        "candidate": "70db1d6d1f37c253ecb4d37451a6b1249479a4dff07047646aa9b49dddf915f8"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTa0fa0ba2-d862-4008-a586-4dc51eec4fce",
+    "title": "ISC Konstanz预计全球晶硅光伏制造设备市场2036年前超2500亿美元",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVDea481565-9dc9-5f7f-baef-e5691c2749b5"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "32c7c3d81b35a525fe226f80d4a1744b8389d306bc5ad2ff15093cee18709421",
+        "candidate": "74311b7f1c78cf45397e34c3996dafb9fc47e5d4c75138cb1fd7e690fa3ca962"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT9556b2f8-5b93-4fd1-b9dd-9c31c4812b0b",
+    "title": "美国与伊朗相互袭击油轮加剧航运风险",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVDecc39cbb-ca54-5ad4-b257-11b364fdaf65"
+    ],
+    "signal_ids": [
+      "a9e57cd8-a2be-5771-b49e-6d05fa664f55"
+    ],
+    "decision": "采用：G2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "32c7c3d81b35a525fe226f80d4a1744b8389d306bc5ad2ff15093cee18709421",
+        "candidate": "b5366cf0305c683a091238ff94d570b873959d52f7efc49e8a8b6adf33d92cdc"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVTdb65bce7-5167-414d-9544-0cba5c8f7ccb",
+    "title": "韩国宣布投资9190亿美元建设AI数据中心容量",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDe6750eb8-c6f4-51fc-b220-24bb8876c612"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "9190亿美元金额异常且尚无独立核验，已有较具体部署承诺用于算力链，未使用该金额。",
+    "classification_provenance": [
+      {
+        "batch": "32c7c3d81b35a525fe226f80d4a1744b8389d306bc5ad2ff15093cee18709421",
+        "candidate": "d2603420bd9a89b017c0598b7d07565d1fc772b52695796f98aa3940c780e83d"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  },
+  {
+    "event_id": "EVT0b4e57a3-1942-4669-bfa5-1658e8a4a45f",
+    "title": "伊朗革命卫队向两艘美国海军军舰发射弹道导弹",
+    "class": "GEOPOLITICAL",
+    "evidence_ids": [
+      "EVDec03f9a3-a91d-5bd7-b798-f22ea9bc9f9a"
+    ],
+    "signal_ids": [
+      "d91f3461-223f-5441-827a-ee900e3f60b4"
+    ],
+    "decision": "采用：G2",
+    "reason": "仅在对应结论的产品、地域、时间、归因和条件内采用；不把原Event/Signal自动视为已核实事实。",
+    "classification_provenance": [
+      {
+        "batch": "32c7c3d81b35a525fe226f80d4a1744b8389d306bc5ad2ff15093cee18709421",
+        "candidate": "db4f86f36e46ac64517fcda3a595cf230c3f5f8aba2034c6cf8455d42927e18a"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT03e17fe5-173b-4d25-9ac6-73e5c581f910",
+    "title": "美国燃烧涡轮需求升至历史最高水平",
+    "class": "INDUSTRY_CHAIN",
+    "evidence_ids": [
+      "EVDf9bff26a-955f-5e29-84aa-55876d20669c"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "美国燃机需求及涂层瓶颈相关，但火力发电设备链无概念；不把钇自动传播到所有装备。",
+    "classification_provenance": [
+      {
+        "batch": "2256b9feb9ebd5e4be2146c5b583683a2a9847994b3e8c39b792820092488c4e",
+        "candidate": "88c67605c1d58b826c7bd0d6584f65858891e36c8b99a65e542547dd86c2df6a"
+      }
+    ],
+    "v8_usage": "used_in_judgment"
+  },
+  {
+    "event_id": "EVT6dbab2f4-f02f-48a0-be38-f5f0be3faa9e",
+    "title": "神玑科技开始向第三方授权技术",
+    "class": "COMPANY",
+    "evidence_ids": [
+      "EVDf5369ba7-a5e6-5fff-aaa9-55fc70bf20be"
+    ],
+    "signal_ids": [],
+    "decision": "不单列结论",
+    "reason": "事件已筛选，但缺少足以支撑本次正式故事线或具体链结论的增量证据；保留原事实及模态，不凭名称、主体同业或结构关系自动扩散。",
+    "classification_provenance": [
+      {
+        "batch": "2256b9feb9ebd5e4be2146c5b583683a2a9847994b3e8c39b792820092488c4e",
+        "candidate": "d55a8bad3d6b3b15d0dbeaec4592d49885e51e017f1feb5930719ad79b86bcab"
+      }
+    ],
+    "v8_usage": "reviewed_no_additional_supported_anchor"
+  }
+]
