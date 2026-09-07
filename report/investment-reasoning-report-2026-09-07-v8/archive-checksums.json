@@ -11,7 +11,7 @@
   "report.html": "1144b140e9634abf2b8200825ea63e3aa6ce1472a47e75aaf660e3e819ad3f5f",
   "signal-coverage-audit.json": "4f3649267fc3b40981fd21a6f0bc257bdf3c814cdd50a7dc17a39e807bde0f28",
   "event-coverage-audit.json": "a4af5324f53132313a0b4911dbde6401bc39013a14f6e408acaf59cdf40ba1bf",
-  "scripts/build_v8.py": "1dd66ce35d4c5b4ec8925db2da0bb0a209151bd67c2adc7a076900ca1f69d399",
-  "scripts/render_v8.py": "b609613eae3c8a66e77f2c0fd116287a170a86b5e0b748a83456e3efc0bbaa88",
-  "scripts/validate_v8.py": "9ed9e6f1045975aa6f96b2f11d7098869fbb0bd06b011f8164a5c21ad9292fbe"
+  "scripts/build_v8.py.txt": "1dd66ce35d4c5b4ec8925db2da0bb0a209151bd67c2adc7a076900ca1f69d399",
+  "scripts/render_v8.py.txt": "b609613eae3c8a66e77f2c0fd116287a170a86b5e0b748a83456e3efc0bbaa88",
+  "scripts/validate_v8.py.txt": "9ed9e6f1045975aa6f96b2f11d7098869fbb0bd06b011f8164a5c21ad9292fbe"
 }
