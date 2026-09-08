@@ -41,6 +41,9 @@ jobs:
       - name: Validate (lint + type)
         run: uv run bash scripts/validate.sh
 
+      - name: Verify pure collection V2 and isolated REST/MCP
+        run: python -m unittest discover -s tests -p 'test_collection_v2*.py' -v
+
       - name: Validate UAT deployment contracts
         run: |
           bash -n infra/uat/bootstrap-dgx.sh infra/uat/preflight.sh infra/uat/deploy-dependencies.sh infra/uat/deploy.sh infra/uat/collect-diagnostics.sh

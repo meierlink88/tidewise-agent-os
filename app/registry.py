@@ -41,6 +41,8 @@ from capabilities.collection.functions import (
     save_raw_evidence_filter_batch,
     validate_article_review,
 )
+from capabilities.collection_v2 import RawCollectionResultV2
+from capabilities.collection_v2.functions import collect_raw_v2, publish_raw_v2
 from capabilities.event import (
     AssociationDecision,
     BatchAssociationDecision,
@@ -206,6 +208,7 @@ registry = TidewiseRegistry(
         EvidenceReviewDraft,
         EvidenceReviewRequest,
         CollectionRequest,
+        RawCollectionResultV2,
         TitleCurationRequest,
         TitleCurationDraft,
         PreparedArtifactSet,
@@ -265,6 +268,8 @@ registry = TidewiseRegistry(
         validate_article_review,
         platform_identity,
         collect_raw_evidence,
+        collect_raw_v2,
+        publish_raw_v2,
         prepare_raw_evidence_filter_batch,
         publish_raw_evidence,
         raw_evidence_filter_complete,

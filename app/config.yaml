@@ -72,6 +72,11 @@ manifest:
     quick_prompts:
       - "采集全球范围最新发布、可能影响中国A股板块和产业链行情的政经事实资讯。"
 
+  raw-collection-v2:
+    description: "独立纯采集：按原查询采集、算法去重并归档 MinIO；不调用模型、不提炼 Evidence，手动运行。"
+    quick_prompts:
+      - "采集全球范围最新发布、可能影响中国A股板块和产业链行情的政经事实资讯。"
+
   evidence-extraction:
     description: "仅供历史材料维护：读取旧 Raw Manifest。新采集在 Raw Collection 内直接提取并发布 Evidence，不再独立调度。"
     quick_prompts:

@@ -38,6 +38,7 @@ from workflows.evidence_extraction import ensure_evidence_extraction_workflow
 from workflows.investment_reasoning import ensure_investment_reasoning_workflow, retire_investment_planner_agent
 from workflows.local_ping import local_ping
 from workflows.raw_collection import ensure_raw_collection_workflow, retire_collection_query_planner_agent
+from workflows.raw_collection_v2 import raw_collection_v2
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -170,7 +171,7 @@ agent_os = AgentOS(
     lifespan=lifespan,
     db=get_postgres_db(),
     agents=[tidewise_assistant],
-    workflows=[local_ping, deployment_check],
+    workflows=[local_ping, deployment_check, raw_collection_v2],
     interfaces=interfaces,
     registry=registry,
     config=str(Path(__file__).parent / "config.yaml"),
