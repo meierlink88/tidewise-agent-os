@@ -56,6 +56,19 @@ class ToolsTest(unittest.TestCase):
         }
         detail["variable_assessments"] = [group]
         self.assertTrue(validate_report(report, snapshot)["passed"])
+        from capabilities.report_reasoning.tools.render import render
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            write(root / "report.json", report)
+            write(root / "evidence.json", {i: {"summary": "source evidence"} for i in row["evidence_ids"]})
+            rendered = render(root / "report.json", root / "evidence.json", root / "html")
+            html = Path(rendered["html"]).read_text()
+            self.assertIn("综合方向", html)
+            self.assertIn(group["synthesis"], html)
+            self.assertIn(row["signal"], html)
+            self.assertIn("查看综合依据与原始信号", html)
+            self.assertEqual(read(root / "report.json"), report)
         conflicting = {**row, "signal_id": "other", "source_direction": "UP"}
         group["counter_signal_ids"] = ["other"]
         self.assertEqual(check_variables([row, conflicting], [group]), [])

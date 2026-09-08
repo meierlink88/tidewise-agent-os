@@ -2,6 +2,8 @@
 
 变量综合试验见 [VARIABLE-METHOD.md](VARIABLE-METHOD.md)。新增 `variable_assessments` 使用 `report-publication/v6-draft`，保留原始信号作为证据，由 Codex 定性解决冲突后再传导。CLI 同时校验 v5 和新草案；Data Service 当前 v5 不承诺接受新字段，不执行发布。
 
+HTML 是固定推理工序外的可选展示：`python -m capabilities.report_reasoning.tools.render --report /path/to/report.json --evidence-catalog /path/to/evidence-catalog.json --output /path/to/new-preview`。复用归档 v8 样式，默认显示变量综合判断，原始支持/冲突/不适用信号折叠展示；不会修改输入报告或生成分析结论。
+
 Codex Agent 是分析师，负责完整的数据查询决策、三次独立推理、修正和最终报告生成。AgentOS API 或本目录 CLI 是数据查询工具。本目录不启动 Codex、不调用模型、不编排分析、不自动生成或组装报告。产物为 `report-publication/v5` JSON；不发布 Data、不生成 HTML。
 
 执行入口：让当前 Codex Agent 阅读 [ANALYST.md](ANALYST.md)，随后由它使用工具完成工作。没有 `run-branch`、`assemble`、模型调用、自动修复循环或长时间全局锁。查询和校验失败会返回非零退出码，由分析师决定下一步。三路可以在独立 Codex 上下文中执行；跨上下文的安排属于 Codex 任务操作，不属于本 CLI。程序不会擅自创建新的 Agent。
