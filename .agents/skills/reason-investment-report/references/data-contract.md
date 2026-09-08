@@ -6,8 +6,9 @@
 
 当前实时 CLI 在 AgentOS 运行环境读取 Neo4j 和 Event journal，不是 HTTP 客户端。Event 来自 Episodic EVENT，分类和 Evidence 关联来自 journal，Evidence 内容来自批次 input.json；Signal 来自 SIGNAL_ON。实体只取真实 ID、名称与类型，结构只取关系，不把实体历史摘要带入本次事实输入。
 
-当前 `prepare --live` 筛选 `start <= Event.valid_at <= end`，end 不允许未来。它不支持按采集/入库时间取增量，不能仅凭更改参数名称实现。全量截至目前已知事实包含未来生效计划时，此筛选可能漏掉计划 Event；必须记录这一缺口并补齐能力后再宣称全量。旧导出里 Event 最早/最晚生效时间也不是报告分析窗口。
+数据 CLI 增加入库口径的代码见 PR #230；执行前核对目标 CLI 的 `prepare --help` 是否具有 `--time-field`。支持该版本时，可选 created_at（Neo4j Event 入图时间）或 valid_at（生效时间，默认），均为 start/end 闭区间，end 不允许未来。created_at 不是新闻发布时间或 Data Service 入库时间；关联信号仍按 Event 引用取齐。快照保留两种时间并记录 selection_time_field。旧版本缺少此参数时需先更新，不可退回生效时间筛选冒充入库时间。
 
+全量截至目前已入图事实应按 created_at 选择，以包含已知未来生效计划；当前仍无按采集时间或 Data Service 入库时间的筛选器。旧导出的最早/最晚生效时间不是报告分析窗口。
 用户未指定时间口径时先明确；可以并行核验环境及只读盘点，但不擅自冻结缩减后的正式范围。不能以减少报告篇幅为由缩小数据范围。
 
 ## 三路 Event 和 Fact Signal 集合
