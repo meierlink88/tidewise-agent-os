@@ -74,6 +74,10 @@ def render(report: Path, evidence_catalog: Path, output: Path) -> dict[str, str]
         + source[end:]
     )
     source = source.replace("三层投研报告 v8", "三层投研报告 · 变量综合版")
+    source = source.replace(
+        "直接：本实体有本层输入范围内可采用的变量信号。",
+        "直接：对本实体自身信号作综合判断，包括错挂、失效等情况下的未明确判断。",
+    )
     source = source.replace("固定输入重审 · 详情变量信号 · 直接与推理判断", "变量综合判断 → 基本面影响 → 关联锚点传导")
     source = source.replace(
         "沿用 v7 的 168 个 Event、77 条 Signal 和冻结实体图；未刷新来源、未发布。来源记载不等于已独立核实。",
