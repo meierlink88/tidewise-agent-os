@@ -17,6 +17,18 @@ Codex 完成证据阅读、变量综合、基本面分析、传导判断、报�
 
 当前变量综合产物是 `report-publication/v6-draft`；旧文档中的 v5 生成说明不适用于本模式。不把草案称为现有 Data Service 已支持的发布格式。
 
+## 必读方法与迁移合同
+
+本文件是入口，不是全部方法。开始对应工序前必须读取以下配套规则；每个独立分析上下文也须读取数据、推理、变量与报告四份文件，不依赖本任务聊天历史。
+
+- [取数合同](references/data-contract.md)：Event/Fact Signal 范围、来源闭包、多分类、分页、时间口径、图谱扩展及当前 CLI 限制。
+- [三路推理指南](references/reasoning.md)：地缘、宏观、产业与公司分别如何形成基本面结论。
+- [变量与传导](references/variables-and-transmission.md)：合并、冲突、适用性、直接/推理、方向、影响度和置信度。
+- [报告与文案合同](references/report-contract.md)：字段归属、总结详情一致、正式名称、类型、中文方向和呈现规则。
+- [执行与审阅](references/execution-and-review.md)：每道工序输入输出、独立性、恢复、验收及后续固定流程迁移边界。
+
+下文为执行摘要。详细规则不能跳过；旧 ANALYST.md 中关于 v5 或逐条信号展示的描述以变量综合合同及本 Skill 配套规则为准。数据来源查询与报告 JSON 形状仍以已实现 CLI 和 Schema 为技术真源，遇到不支持的业务口径应阻断并记录，不能声称已经支持。
+
 ## 1. 核验目标并冻结数据
 
 明确用户选择的环境、分析时间范围、截止时间，以及全量历史还是增量口径；不能从旧报告继承隐含时间范围。Event 的未来生效时间不等于采集时间或报告运行时间。实时 CLI 用 `--time-field created_at` 筛选 Event 入图时间，用 `--time-field valid_at` 筛选生效时间（默认）；记录 `selection_time_field`，不能静默换用另一口径。入图时间不是新闻发布时间或 Data Service 入库时间。
