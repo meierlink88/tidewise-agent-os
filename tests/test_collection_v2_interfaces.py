@@ -23,7 +23,7 @@ from test_collection_v2 import MemoryStore, StaticAdapter, candidate, channel
 
 from capabilities.collection import AdapterKey
 from capabilities.collection_v2.functions import collect_raw_v2, publish_raw_v2
-from workflows.raw_collection_v2 import raw_collection_v2
+from workflows.raw_collection_v2 import ensure_raw_collection_v2_workflow, raw_collection_v2
 
 
 class InterfaceTests(unittest.IsolatedAsyncioTestCase):
@@ -35,8 +35,17 @@ class InterfaceTests(unittest.IsolatedAsyncioTestCase):
             config["db"] = db.to_dict()
             workflow = Workflow.from_dict(config, db=db, registry=registry, strict=True)
             self.assertIsInstance(workflow.db, SqliteDb)
+            with (
+                patch("workflows.raw_collection_v2.get_postgres_db", return_value=db),
+                patch.object(raw_collection_v2, "db", db),
+            ):
+                first = ensure_raw_collection_v2_workflow(registry)
+                self.assertEqual(ensure_raw_collection_v2_workflow(registry), first)
+                workflow.name = "Operator collection name"
+                edited_version = workflow.save(db=db, stage="published")
+                self.assertEqual(ensure_raw_collection_v2_workflow(registry), edited_version)
             agent_os = AgentOS(
-                workflows=[workflow],
+                workflows=[],
                 db=db,
                 registry=registry,
                 mcp_server=True,
@@ -73,6 +82,12 @@ class InterfaceTests(unittest.IsolatedAsyncioTestCase):
                                 await task
                             await asyncio.sleep(0.01)
                     async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}", timeout=20) as client:
+                        listing = await client.get("/components", params={"component_type": "workflow"})
+                        listing.raise_for_status()
+                        rows = listing.json()["data"]
+                        component = next(item for item in rows if item["component_id"] == "raw-collection-v2")
+                        self.assertEqual(component["name"], "Operator collection name")
+                        self.assertEqual(component["current_version"], edited_version)
                         response = await client.post(
                             "/workflows/raw-collection-v2/runs", data={"message": "原查询", "stream": "false"}
                         )
