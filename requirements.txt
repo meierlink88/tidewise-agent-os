@@ -95,7 +95,7 @@ frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
-graphiti-core==0.29.3
+graphiti-core==0.30.1
     # via tidewise-agent-os (pyproject.toml)
 greenlet==3.5.5
     # via sqlalchemy
