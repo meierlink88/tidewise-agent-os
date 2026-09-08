@@ -16,7 +16,7 @@ QUERIES = {
     "entities": """MATCH (n:Entity {group_id:$group}) RETURN n.uuid AS uuid, labels(n) AS labels,
         coalesce(n.data_object_id,n.demo_catalog_key,n.policy_key) AS id,n.name AS name ORDER BY n.uuid""",
     "events": """MATCH (e:Episodic {group_id:$group}) WHERE e.episode_kind='EVENT'
-        AND e.valid_at >= datetime($start) AND e.valid_at <= datetime($end)
+        AND e[$time_field] >= datetime($start) AND e[$time_field] <= datetime($end)
         RETURN properties(e) AS data ORDER BY e.uuid""",
     "relations": """MATCH (a:Entity {group_id:$group})-[r:RELATES_TO {group_id:$group}]->(b:Entity {group_id:$group})
         WHERE r.name IN ['SIGNAL_ON','ChainNodeBelongsToIndustryChain','CompanyParticipatesInChainNode',
@@ -38,7 +38,9 @@ def journal_files(root: Path) -> dict[Path, bytes]:
     return result
 
 
-def export_live(event_root: Path, start: str, end: str) -> dict[str, Any]:
+def export_live(event_root: Path, start: str, end: str, time_field: str = "valid_at") -> dict[str, Any]:
+    if time_field not in {"valid_at", "created_at"}:
+        raise ValueError("time_field must be valid_at or created_at")
     lower, upper = (datetime.fromisoformat(v.replace("Z", "+00:00")) for v in (start, end))
     if lower.tzinfo is None or upper.tzinfo is None or lower >= upper:
         raise ValueError("live window requires timezone-aware start < end")
@@ -64,7 +66,10 @@ def export_live(event_root: Path, start: str, end: str) -> dict[str, Any]:
 
             def capture(tx):
                 return {
-                    name: [dict(row) for row in tx.run(query, group=GRAPHITI_GROUP_ID, start=start, end=end)]
+                    name: [
+                        dict(row)
+                        for row in tx.run(query, group=GRAPHITI_GROUP_ID, start=start, end=end, time_field=time_field)
+                    ]
                     for name, query in QUERIES.items()
                 }
 
@@ -93,4 +98,5 @@ def export_live(event_root: Path, start: str, end: str) -> dict[str, Any]:
         "retrieved_at": now(),
         "source_kind": "agentos_live_export",
         "requested_window": {"start": start, "end": end},
+        "selection_time_field": time_field,
     }

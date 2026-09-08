@@ -15,6 +15,8 @@ Codex Agent 是分析师，负责完整的数据查询决策、三次独立推�
 ```bash
 # 实时原始数据冻结：由分析师选择明确时间窗
 python -m capabilities.report_reasoning prepare --live --event-root /path/to/data/event --start 2026-09-01T00:00:00Z --end 2026-09-07T00:00:00Z --run /path/to/input-001
+# 按北京时间 9 月 8 日新增入图 Event 取数，包含这些 Event 的全部关联信号
+python -m capabilities.report_reasoning prepare --live --event-root /path/to/data/event --time-field created_at --start 2026-09-07T16:00:00Z --end 2026-09-08T10:51:23Z --run /path/to/input-created-001
 # 或历史原始数据回放：不可称为实时报告
 python -m capabilities.report_reasoning prepare --source /path/to/raw-export.json --run /path/to/input-001
 # 分页阅读本工序全部 Event、Signals、Evidence
@@ -46,3 +48,5 @@ python -m unittest capabilities.report_reasoning.internal.test_tools -v
 ## 本次整改验收
 
 使用 v8 同期原始快照逐页查询（每页 17 条），核对总数与唯一 ID：地缘 38 Event / 22 Signal / 39 Evidence；宏观 21 / 6 / 22；产业 168 / 77 / 172。此结果仅证明历史输入查询完整，不代表完成新的业务推理。原始 Event 的 valid_at 可含未来生效时间，其最小/最大值不能自动作为本次报告分析时间窗；分析师须明确报告统计口径。实时目标环境未验收。
+
+时间字段：`--time-field valid_at|created_at` 仅用于 `--live`，默认 `valid_at` 保持兼容。两端均包含，截止时间不能在未来。`created_at` 指 Neo4j Event 入图时间，不是新闻发布时间或 Data Service 入库时间；未来生效计划可按其已入图时间纳入。关联信号按 Event 引用取齐，不按 Signal 创建时间过滤。快照 Event 同时保留两种时间，manifest/query 返回 `selection_time_field`；历史导出无口径时标记 `unspecified`，不猜测。跨窗口 Signal 来源闭包仍须完整，不支持自动扩展输入。

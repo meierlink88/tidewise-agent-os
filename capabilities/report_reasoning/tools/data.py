@@ -19,17 +19,18 @@ def freeze(snapshot: dict[str, Any], run: Path) -> dict[str, Any]:
         "snapshot_hash": digest(snapshot),
         "source_kind": snapshot["source_kind"],
         "window": snapshot["window"],
+        "selection_time_field": snapshot.get("selection_time_field", "unspecified"),
     }
     write(run / "snapshot.json", snapshot)
     write(run / "manifest.json", manifest)
     return manifest
 
 
-def prepare_live(event_root: Path, start: str, end: str, run: Path) -> dict[str, Any]:
+def prepare_live(event_root: Path, start: str, end: str, run: Path, time_field: str = "valid_at") -> dict[str, Any]:
     from capabilities.report_reasoning.internal.live import export_live
     from capabilities.report_reasoning.internal.snapshot import normalize_export
 
-    return freeze(normalize_export(export_live(event_root, start, end)), run)
+    return freeze(normalize_export(export_live(event_root, start, end, time_field)), run)
 
 
 def load_snapshot(run: Path) -> dict[str, Any]:
@@ -82,6 +83,7 @@ def query(
     end = min(offset + limit, len(rows))
     return {
         "branch": branch,
+        "selection_time_field": snapshot.get("selection_time_field", "unspecified"),
         "resource": resource,
         "snapshot_hash": digest(snapshot),
         "total": len(rows),
