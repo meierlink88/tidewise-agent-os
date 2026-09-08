@@ -38,7 +38,7 @@ from workflows.evidence_extraction import ensure_evidence_extraction_workflow
 from workflows.investment_reasoning import ensure_investment_reasoning_workflow, retire_investment_planner_agent
 from workflows.local_ping import local_ping
 from workflows.raw_collection import ensure_raw_collection_workflow, retire_collection_query_planner_agent
-from workflows.raw_collection_v2 import raw_collection_v2
+from workflows.raw_collection_v2 import ensure_raw_collection_v2_workflow
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -108,6 +108,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     ensure_investment_report_writer_agent(registry)
     ensure_investment_reviewer_agent(registry)
     ensure_raw_collection_workflow(registry)
+    ensure_raw_collection_v2_workflow(registry)
     retire_collection_query_planner_agent()
     ensure_evidence_extraction_workflow(registry)
     ensure_event_extraction_workflow(registry)
@@ -171,7 +172,7 @@ agent_os = AgentOS(
     lifespan=lifespan,
     db=get_postgres_db(),
     agents=[tidewise_assistant],
-    workflows=[local_ping, deployment_check, raw_collection_v2],
+    workflows=[local_ping, deployment_check],
     interfaces=interfaces,
     registry=registry,
     config=str(Path(__file__).parent / "config.yaml"),

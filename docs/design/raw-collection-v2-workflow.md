@@ -2,9 +2,11 @@
 
 ## Scope
 
-`raw-collection-v2` is an additional code-owned Workflow in `workflows/raw_collection_v2.py`.
+`raw-collection-v2` is an additional Studio-managed Workflow in `workflows/raw_collection_v2.py`.
 Its business logic lives in `capabilities/collection_v2/{functions,internal}`. The existing Raw Collection,
 Evidence Extraction, Event Extraction, Investment Reasoning, Studio versions and Schedules are unchanged.
+Startup seeds its published component once and preserves subsequent Studio versions.
+It is not registered as a competing static Workflow, which would hide it from the Studio component list.
 V2 has no default Schedule. It can be invoked manually over REST/MCP or explicitly scheduled by an operator later.
 
 ```text
