@@ -313,7 +313,7 @@ class EventResolutionRecord(BaseModel):
     atomic: bool
     matched_event_ids: list[str]
     reason_codes: list[str] = Field(min_length=1)
-    summary: str = Field(min_length=1, max_length=500)
+    summary: str = Field(min_length=1)
 
     @model_validator(mode="after")
     def decision_is_consistent(self) -> "EventResolutionRecord":
