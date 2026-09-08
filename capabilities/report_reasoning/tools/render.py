@@ -75,6 +75,9 @@ def render(report: Path, evidence_catalog: Path, output: Path) -> dict[str, str]
         "['受影响锚点','判断来源','方向','结论']",
         "['受影响锚点','锚点类型','判断来源','方向','结论']",
     )
+    for name, level, label in (("m", 4, "宏观经济"), ("c", 3, "产业链"), ("n", 4, "产业链节点"), ("co", 4, "公司")):
+        heading = f"heading({level},{name}['name'],{name}['local_key']);"
+        source = source.replace(heading, heading + f"p('锚点类型：{label}','muted');")
     start, end = source.index("def signals(rows):"), source.index("def evidence(ids):")
     source = source[:start] + VARIABLE_VIEW + source[end:]
     source = source.replace("def heading(level,text,key=None):", UPSTREAM_NAMES + "def heading(level,text,key=None):")
