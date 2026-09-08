@@ -41,9 +41,8 @@ UAT_SMOKE_SERVICE_ACCOUNT_SCOPES = [
 # for this operator-level read instead of widening the workflow smoke account.
 UAT_SCHEDULE_PROBE_SERVICE_ACCOUNT_SCOPES = ["agent_os:admin"]
 
-EXPECTED_AGENT_MODEL_ID = "gpt-5.6-sol"
 RETIRED_AGENT_ID = "investment-planner"
-REQUIRED_GPT_AGENT_IDS = {
+REQUIRED_AGENT_IDS = {
     "tidewise-assistant",
     "title-curator",
     "evidence-extractor",
@@ -56,15 +55,6 @@ REQUIRED_GPT_AGENT_IDS = {
 }
 
 
-def _is_expected_agent_model(model: object) -> bool:
-    """Match the model summary shape returned by Agno's REST Agent list."""
-    return isinstance(model, dict) and (
-        model.get("name") == "OpenAIResponses"
-        and model.get("model") == EXPECTED_AGENT_MODEL_ID
-        and model.get("provider") == "OpenAI"
-    )
-
-
 async def _probe(token: str, schedule_token: str) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     async with httpx.AsyncClient(base_url=BASE_URL, headers=headers, timeout=20.0) as client:
@@ -72,7 +62,7 @@ async def _probe(token: str, schedule_token: str) -> None:
         workflows = (await client.get("/workflows")).raise_for_status().json()
         agent_ids = {item["id"] for item in agents}
         workflow_ids = {item["id"] for item in workflows}
-        required_agents = REQUIRED_GPT_AGENT_IDS
+        required_agents = REQUIRED_AGENT_IDS
         required_workflows = {
             "local-ping",
             "raw-collection",
@@ -90,31 +80,8 @@ async def _probe(token: str, schedule_token: str) -> None:
             raise RuntimeError(f"missing Agents: {sorted(required_agents - agent_ids)}")
         if RETIRED_AGENT_ID in agent_ids:
             raise RuntimeError(f"retired Agent is still active: {RETIRED_AGENT_ID}")
-        agents_by_id = {item["id"]: item for item in agents}
-        for agent_id in sorted(required_agents):
-            if not _is_expected_agent_model(agents_by_id[agent_id].get("model")):
-                raise RuntimeError(f"Agent {agent_id} is not using OpenAI {EXPECTED_AGENT_MODEL_ID}")
         if not required_workflows <= workflow_ids:
             raise RuntimeError(f"missing Workflows: {sorted(required_workflows - workflow_ids)}")
-
-        registry = (
-            (await client.get("/registry", params={"resource_type": "model", "limit": 100, "page": 1}))
-            .raise_for_status()
-            .json()
-        )
-        registered_models = {item["name"]: item for item in registry["data"]}
-        sol = registered_models.get(EXPECTED_AGENT_MODEL_ID)
-        if sol is None:
-            raise RuntimeError(f"registry is missing model: {EXPECTED_AGENT_MODEL_ID}")
-        sol_metadata = sol.get("metadata") or {}
-        if (
-            sol_metadata.get("class_path") != "agno.models.openai.responses.OpenAIResponses"
-            or sol_metadata.get("provider") != "OpenAI"
-            or sol_metadata.get("model_id") != EXPECTED_AGENT_MODEL_ID
-        ):
-            raise RuntimeError(f"registry model metadata is invalid: {EXPECTED_AGENT_MODEL_ID}")
-        if "deepseek-v4-flash" not in registered_models:
-            raise RuntimeError("registry is missing the Graphiti DeepSeek model")
 
         schedule_headers = {"Authorization": f"Bearer {schedule_token}"}
         schedules = (
@@ -165,19 +132,19 @@ async def _probe(token: str, schedule_token: str) -> None:
                 "run_agent",
                 {
                     "agent_id": "tidewise-assistant",
-                    "message": "Reply with exactly UAT_GPT_OK and nothing else.",
+                    "message": "Reply with exactly UAT_AGENT_OK and nothing else.",
                 },
                 read_timeout_seconds=timedelta(seconds=120),
             )
             if run_result.isError:
-                raise RuntimeError("GPT Agent smoke returned an MCP error")
+                raise RuntimeError("Agent smoke returned an MCP error")
             if not run_result.content or not isinstance(run_result.content[0], TextContent):
-                raise RuntimeError("GPT Agent smoke response is not text")
-            if run_result.content[0].text.strip() != "UAT_GPT_OK":
-                raise RuntimeError("GPT Agent smoke returned an unexpected response")
+                raise RuntimeError("Agent smoke response is not text")
+            if run_result.content[0].text.strip() != "UAT_AGENT_OK":
+                raise RuntimeError("Agent smoke returned an unexpected response")
             structured = run_result.structuredContent
             if not isinstance(structured, dict) or structured.get("status") != "COMPLETED":
-                raise RuntimeError("GPT Agent smoke did not complete")
+                raise RuntimeError("Agent smoke did not complete")
 
 
 async def main() -> None:

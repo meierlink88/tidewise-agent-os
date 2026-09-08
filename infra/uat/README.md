@@ -83,8 +83,9 @@ Secrets:
 - optional `MCP_CONNECT_SECRET`, `AGENTOS_MCP_SIGNING_KEY`
 
 No Data Service database or Data Service-owned object-storage variable/secret belongs in this environment.
-The published Agents use the registered `gpt-5.6-sol` Responses model with medium reasoning. DeepSeek remains configured
-for Graphiti's separate LLM adapter and is not the runtime model for those Agents.
+Agent model providers, model IDs and reasoning settings are owned by each environment. Deployment does not
+validate a fixed model assignment or require particular model registry entries. It still verifies that the
+configured assistant can complete an authenticated MCP request. Graphiti readiness remains a separate check.
 
 ## Fresh initialization and cutover
 
