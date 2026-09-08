@@ -1,0 +1,994 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tidewise:report-reasoning:publication-v5",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "report-publication/v5"
+    },
+    "report_type": {
+      "$ref": "#/$defs/coded_label"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "timezone": {
+      "const": "Asia/Shanghai"
+    },
+    "analysis_window": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "additionalProperties": false
+    },
+    "geopolitical_stories": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unit"
+      }
+    },
+    "macroeconomic_stories": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unit"
+      }
+    },
+    "concept_analyses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unit"
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "local_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^EVD[0-9a-f-]{36}$"
+            }
+          }
+        },
+        "required": [
+          "local_key",
+          "title",
+          "text",
+          "evidence_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "industry_chain_analyses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unit"
+      }
+    },
+    "company_analyses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/company"
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "report_type",
+    "generated_at",
+    "timezone",
+    "analysis_window",
+    "geopolitical_stories",
+    "macroeconomic_stories",
+    "concept_analyses",
+    "observations",
+    "limitations",
+    "industry_chain_analyses",
+    "company_analyses"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "coded_label": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "code",
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "claim": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "basis": {
+          "type": "string",
+          "enum": [
+            "source_fact",
+            "inference",
+            "hypothetical_buffer"
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^EVD[0-9a-f-]{36}$"
+          }
+        }
+      },
+      "required": [
+        "text",
+        "basis",
+        "evidence_ids"
+      ],
+      "additionalProperties": false
+    },
+    "objections": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "counterevidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/claim"
+          }
+        },
+        "buffers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/claim"
+          }
+        },
+        "counterevidence_status": {
+          "type": "string",
+          "enum": [
+            "identified",
+            "none_identified"
+          ]
+        },
+        "evidence_gaps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "scope_limits": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "summary",
+        "counterevidence",
+        "buffers",
+        "counterevidence_status",
+        "evidence_gaps",
+        "scope_limits"
+      ],
+      "additionalProperties": false
+    },
+    "window": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "relative",
+            "calendar",
+            "stage",
+            "mixed",
+            "not_applicable"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "end_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "description",
+        "start_at",
+        "end_at"
+      ],
+      "additionalProperties": false
+    },
+    "assessment": {
+      "type": "object",
+      "properties": {
+        "conclusion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "warming",
+            "cooling",
+            "diverging",
+            "pending"
+          ]
+        },
+        "conclusion_basis": {
+          "type": "string",
+          "enum": [
+            "reasoning_hypothesis",
+            "observation_only"
+          ]
+        },
+        "validation_status": {
+          "type": "string",
+          "enum": [
+            "pending_validation",
+            "insufficient_evidence"
+          ]
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "forecast_window": {
+          "$ref": "#/$defs/window"
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "follow_up": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "transmission_logic": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^EVD[0-9a-f-]{36}$"
+          }
+        }
+      },
+      "required": [
+        "conclusion",
+        "direction",
+        "conclusion_basis",
+        "validation_status",
+        "confidence",
+        "forecast_window",
+        "scope",
+        "conditions",
+        "follow_up",
+        "transmission_logic",
+        "evidence_ids"
+      ],
+      "additionalProperties": false
+    },
+    "node": {
+      "type": "object",
+      "properties": {
+        "local_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_id": {
+          "type": "string",
+          "pattern": "^CND[0-9a-f-]{36}$"
+        },
+        "node_local_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assessment": {
+          "$ref": "#/$defs/assessment"
+        },
+        "objections": {
+          "$ref": "#/$defs/objections"
+        },
+        "judgment_origin": {
+          "enum": [
+            "direct",
+            "inferred"
+          ]
+        },
+        "reasoning_sources": {
+          "$ref": "#/$defs/reasoning_sources"
+        },
+        "variable_signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signal"
+          }
+        }
+      },
+      "required": [
+        "local_key",
+        "source_id",
+        "node_local_key",
+        "name",
+        "assessment",
+        "objections",
+        "judgment_origin",
+        "reasoning_sources",
+        "variable_signals"
+      ],
+      "additionalProperties": false
+    },
+    "graph": {
+      "type": "object",
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "local_key": {
+                "type": "string",
+                "minLength": 1
+              },
+              "source_id": {
+                "type": "string",
+                "pattern": "^CND[0-9a-f-]{36}$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "local_key",
+              "source_id",
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from_node_local_key": {
+                "type": "string",
+                "minLength": 1
+              },
+              "to_node_local_key": {
+                "type": "string",
+                "minLength": 1
+              },
+              "relation_label": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "from_node_local_key",
+              "to_node_local_key",
+              "relation_label"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "scope": {
+          "const": "assessed_nodes_only"
+        }
+      },
+      "required": [
+        "nodes",
+        "edges",
+        "scope"
+      ],
+      "additionalProperties": false
+    },
+    "chain": {
+      "type": "object",
+      "properties": {
+        "local_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_id": {
+          "type": "string",
+          "pattern": "^ICH[0-9a-f-]{36}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assessment": {
+          "$ref": "#/$defs/assessment"
+        },
+        "reasoning_summary": {
+          "type": "object",
+          "properties": {
+            "logic": {
+              "type": "string",
+              "minLength": 1
+            },
+            "support": {
+              "$ref": "#/$defs/claim"
+            },
+            "objections": {
+              "$ref": "#/$defs/objections"
+            }
+          },
+          "required": [
+            "logic",
+            "support",
+            "objections"
+          ],
+          "additionalProperties": false
+        },
+        "graph": {
+          "$ref": "#/$defs/graph"
+        },
+        "affected_nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "empty_state": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "observation_only"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "follow_up": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "required": [
+                "code",
+                "reason",
+                "follow_up"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "judgment_origin": {
+          "enum": [
+            "direct",
+            "inferred"
+          ]
+        },
+        "reasoning_sources": {
+          "$ref": "#/$defs/reasoning_sources"
+        },
+        "variable_signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signal"
+          }
+        }
+      },
+      "required": [
+        "local_key",
+        "source_id",
+        "name",
+        "assessment",
+        "reasoning_summary",
+        "graph",
+        "affected_nodes",
+        "empty_state",
+        "judgment_origin",
+        "reasoning_sources",
+        "variable_signals"
+      ],
+      "additionalProperties": false
+    },
+    "macro": {
+      "type": "object",
+      "properties": {
+        "local_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_id": {
+          "type": "string",
+          "pattern": "^MEC[0-9a-f-]{36}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assessment": {
+          "$ref": "#/$defs/assessment"
+        },
+        "objections": {
+          "$ref": "#/$defs/objections"
+        },
+        "judgment_origin": {
+          "enum": [
+            "direct",
+            "inferred"
+          ]
+        },
+        "reasoning_sources": {
+          "$ref": "#/$defs/reasoning_sources"
+        },
+        "variable_signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signal"
+          }
+        }
+      },
+      "required": [
+        "local_key",
+        "source_id",
+        "name",
+        "assessment",
+        "objections",
+        "judgment_origin",
+        "reasoning_sources",
+        "variable_signals"
+      ],
+      "additionalProperties": false
+    },
+    "anchor_ref": {
+      "type": "object",
+      "properties": {
+        "target_type": {
+          "type": "string",
+          "enum": [
+            "macroeconomic_story",
+            "industry_chain",
+            "industry_chain_node"
+          ]
+        },
+        "local_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "chain_local_key": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "target_type",
+        "local_key",
+        "chain_local_key"
+      ],
+      "additionalProperties": false
+    },
+    "unit": {
+      "type": "object",
+      "properties": {
+        "local_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "conclusion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "transmission_logic": {
+              "type": "string",
+              "minLength": 1
+            },
+            "impact_assessment": {
+              "type": "object",
+              "properties": {
+                "level": {
+                  "type": "string",
+                  "enum": [
+                    "high",
+                    "medium",
+                    "low",
+                    "pending"
+                  ]
+                },
+                "rationale": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "evidence_ids": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^EVD[0-9a-f-]{36}$"
+                  }
+                }
+              },
+              "required": [
+                "level",
+                "rationale",
+                "evidence_ids"
+              ],
+              "additionalProperties": false
+            },
+            "affected_refs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/anchor_ref"
+              }
+            },
+            "evidence_ids": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^EVD[0-9a-f-]{36}$"
+              }
+            }
+          },
+          "required": [
+            "conclusion",
+            "transmission_logic",
+            "impact_assessment",
+            "affected_refs",
+            "evidence_ids"
+          ],
+          "additionalProperties": false
+        },
+        "detail": {
+          "type": "object",
+          "properties": {
+            "macro_impacts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/macro"
+              }
+            },
+            "industry_chains": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/chain"
+              }
+            },
+            "variable_signals": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/signal"
+              }
+            },
+            "companies": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/company"
+              }
+            }
+          },
+          "required": [
+            "macro_impacts",
+            "industry_chains",
+            "variable_signals",
+            "companies"
+          ],
+          "additionalProperties": false
+        },
+        "judgment_origin": {
+          "enum": [
+            "direct",
+            "inferred"
+          ]
+        },
+        "reasoning_sources": {
+          "$ref": "#/$defs/reasoning_sources"
+        }
+      },
+      "required": [
+        "local_key",
+        "source_id",
+        "title",
+        "summary",
+        "detail",
+        "judgment_origin",
+        "reasoning_sources"
+      ],
+      "additionalProperties": false
+    },
+    "signal": {
+      "type": "object",
+      "properties": {
+        "variable_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "variable_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signal_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_direction": {
+          "enum": [
+            "UP",
+            "DOWN",
+            "MIXED",
+            "STABLE",
+            "UNKNOWN"
+          ]
+        },
+        "adoption": {
+          "enum": [
+            "qualified",
+            "adopted"
+          ]
+        },
+        "qualification": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "variable_id",
+        "variable_name",
+        "signal_id",
+        "signal",
+        "source_direction",
+        "adoption",
+        "qualification",
+        "event_ids",
+        "evidence_ids"
+      ],
+      "additionalProperties": false
+    },
+    "reasoning_sources": {
+      "type": "object",
+      "properties": {
+        "signal_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "event_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "upstream_refs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "entity_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "local_key": {
+                "type": "string",
+                "minLength": 1
+              },
+              "mechanism": {
+                "type": "string",
+                "minLength": 1
+              },
+              "condition": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "entity_id",
+              "local_key"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "signal_ids",
+        "event_ids",
+        "upstream_refs"
+      ],
+      "additionalProperties": false
+    },
+    "company": {
+      "type": "object",
+      "properties": {
+        "local_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_id": {
+          "type": "string",
+          "pattern": "^COM[0-9a-f-]{36}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assessment": {
+          "$ref": "#/$defs/assessment"
+        },
+        "objections": {
+          "$ref": "#/$defs/objections"
+        },
+        "judgment_origin": {
+          "enum": [
+            "direct",
+            "inferred"
+          ]
+        },
+        "reasoning_sources": {
+          "$ref": "#/$defs/reasoning_sources"
+        },
+        "variable_signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signal"
+          }
+        }
+      },
+      "required": [
+        "local_key",
+        "source_id",
+        "name",
+        "assessment",
+        "objections",
+        "judgment_origin",
+        "reasoning_sources",
+        "variable_signals"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

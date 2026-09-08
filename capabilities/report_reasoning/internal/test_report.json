@@ -1,0 +1,73 @@
+{
+  "schema_version": "report-publication/v5",
+  "report_type": {
+    "code": "investment_reasoning",
+    "label": "投研推理报告"
+  },
+  "generated_at": "2026-09-08T05:00:00Z",
+  "timezone": "Asia/Shanghai",
+  "analysis_window": {
+    "start": "2026-09-01T00:00:00Z",
+    "end": "2026-09-02T00:00:00Z"
+  },
+  "observations": [],
+  "limitations": [],
+  "geopolitical_stories": [],
+  "macroeconomic_stories": [
+    {
+      "local_key": "m1",
+      "source_id": "MEC00000000-0000-0000-0000-000000000001",
+      "title": "融资成本下降影响",
+      "judgment_origin": "direct",
+      "reasoning_sources": {
+        "signal_ids": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "event_ids": [
+          "EVT00000000-0000-0000-0000-000000000001"
+        ],
+        "upstream_refs": []
+      },
+      "summary": {
+        "conclusion": "融资压力可能缓解",
+        "transmission_logic": "利率下降 → 融资成本可能改善",
+        "impact_assessment": {
+          "level": "medium",
+          "rationale": "局部融资改善",
+          "evidence_ids": [
+            "EVD00000000-0000-0000-0000-000000000001"
+          ]
+        },
+        "affected_refs": [],
+        "evidence_ids": [
+          "EVD00000000-0000-0000-0000-000000000001"
+        ]
+      },
+      "detail": {
+        "macro_impacts": [],
+        "industry_chains": [],
+        "variable_signals": [
+          {
+            "variable_id": "00000000-0000-0000-0000-000000000002",
+            "variable_name": "融资成本",
+            "signal_id": "00000000-0000-0000-0000-000000000001",
+            "signal": "融资成本下降",
+            "source_direction": "DOWN",
+            "adoption": "adopted",
+            "qualification": "来源支持",
+            "event_ids": [
+              "EVT00000000-0000-0000-0000-000000000001"
+            ],
+            "evidence_ids": [
+              "EVD00000000-0000-0000-0000-000000000001"
+            ]
+          }
+        ],
+        "companies": []
+      }
+    }
+  ],
+  "concept_analyses": [],
+  "industry_chain_analyses": [],
+  "company_analyses": []
+}
