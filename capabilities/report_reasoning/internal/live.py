@@ -20,7 +20,7 @@ QUERIES = {
         RETURN properties(e) AS data ORDER BY e.uuid""",
     "relations": """MATCH (a:Entity {group_id:$group})-[r:RELATES_TO {group_id:$group}]->(b:Entity {group_id:$group})
         WHERE r.name IN ['SIGNAL_ON','ChainNodeBelongsToIndustryChain','CompanyParticipatesInChainNode',
-                        'ChainNodeInputTo','ChainNodeIsComponentOf','ChainNodeDependsOn']
+                        'ChainNodeInputTo','ChainNodeIsComponentOf','ChainNodeDependsOn','IndustryChainMappedToConcept']
         RETURN a.uuid AS source,b.uuid AS target,
         r {.uuid,.name,.fact,.direction,.source_event_ids,.event_class,.assertion_modality,
            .valid_at,.invalid_at,.expected_end_latest} AS data ORDER BY r.uuid""",
