@@ -11,8 +11,11 @@ VARIABLE_VIEW = """def signals(rows, groups):
  if not rows:return
  heading(5,'变量综合判断')
  labels={'UP':'上升','DOWN':'下降','STABLE':'不变','MIXED':'分化','UNKNOWN':'未明确'}
+ def variable_label(g):
+  split=sum(x['variable_id']==g['variable_id'] for x in groups)>1
+  return g['variable_name']+('｜'+g['scope']+'｜'+g['timeframe'] if split else '')
  table(['变量','综合方向','综合判断'],[
-  (g['variable_name'],labels[g['direction']],g['synthesis']) for g in groups])
+  (variable_label(g),labels[g['direction']],g['synthesis']) for g in groups])
  lookup={x['signal_id']:x for x in rows}
  for g in groups:
   H.append('<details class="sources"><summary>'+esc(g['variable_name'])+'：查看综合依据与原始信号</summary>')
