@@ -9,8 +9,13 @@ from .contracts import BRANCHES
 from .storage import digest, read
 
 TOPOLOGY = {"ChainNodeInputTo": "投入", "ChainNodeIsComponentOf": "组成", "ChainNodeDependsOn": "依赖"}
-STRUCTURE = {*TOPOLOGY, "ChainNodeBelongsToIndustryChain", "CompanyParticipatesInChainNode"}
-ENTITY_TYPES = {"GeopoliticRivalry", "MacroEconomic", "IndustryChain", "ChainNode", "Company", "Variable"}
+STRUCTURE = {
+    *TOPOLOGY,
+    "ChainNodeBelongsToIndustryChain",
+    "CompanyParticipatesInChainNode",
+    "IndustryChainMappedToConcept",
+}
+ENTITY_TYPES = {"GeopoliticRivalry", "MacroEconomic", "IndustryChain", "ChainNode", "Company", "Variable", "Concept"}
 
 
 def import_export(path: Path) -> dict[str, Any]:
@@ -24,6 +29,8 @@ def normalize_export(raw: dict[str, Any]) -> dict[str, Any]:
     uuids = {}
     for item in raw["entities"]:
         kind = next((label for label in item["labels"] if label in ENTITY_TYPES), None)
+        if kind == "Concept" and not (item.get("id") or "").startswith("CON"):
+            continue  # Research/demo labels are not authoritative market Concept identities.
         if kind:
             identity = item.get("id") or item["uuid"]
             # Names and authoritative IDs are reusable. Graph summaries may contain historical Event facts.
@@ -73,11 +80,16 @@ def normalize_export(raw: dict[str, Any]) -> dict[str, Any]:
     signals, structure = [], []
     for relation in raw["relations"]:
         data = relation["data"]
+        if data["name"] == "IndustryChainMappedToConcept" and data.get("invalid_at"):
+            continue
         source, target = uuids.get(relation["source"]), uuids.get(relation["target"])
         if source is None or target is None:
-            if data["name"] == "SIGNAL_ON":
-                raise ValueError(f"Signal anchor missing from export: {data['uuid']}")
+            if data["name"] in {"SIGNAL_ON", "IndustryChainMappedToConcept"}:
+                raise ValueError(f"Signal or concept mapping endpoint missing from export: {data['uuid']}")
             continue
+        if data["name"] == "IndustryChainMappedToConcept":
+            if entities[source]["type"] != "IndustryChain" or entities[target]["type"] != "Concept":
+                raise ValueError("invalid IndustryChainMappedToConcept endpoint types")
         if data["name"] in STRUCTURE:
             structure.append({"source": source, "target": target, "type": data["name"], "id": data["uuid"]})
         if data["name"] != "SIGNAL_ON":
@@ -135,7 +147,7 @@ def branch_input(snapshot: dict[str, Any], branch: str) -> dict[str, Any]:
     catalog = [
         e
         for e in snapshot["entities"].values()
-        if e["type"] in {"GeopoliticRivalry", "MacroEconomic", "IndustryChain"} or e["id"] in signal_entities
+        if e["type"] in {"GeopoliticRivalry", "MacroEconomic", "IndustryChain", "Concept"} or e["id"] in signal_entities
     ]
     memberships = [r for r in snapshot["structure"] if r["source"] in signal_entities]
     return {

@@ -108,13 +108,18 @@ def render(report: Path, evidence_catalog: Path, output: Path) -> dict[str, str]
     source = source.replace("固定输入重审 · 详情变量信号 · 直接与推理判断", "变量综合判断 → 基本面影响 → 关联锚点传导")
     source = source.replace(
         "沿用 v7 的 168 个 Event、77 条 Signal 和冻结实体图；未刷新来源、未发布。来源记载不等于已独立核实。",
-        "2026 年 9 月 7 日全量冻结数据回放；三路独立推理。原始信号作为支持、冲突或不适用证据折叠展示。未发布。",
+        "按本报告分析窗口的冻结事件与信号执行三路独立推理；具体取数范围见范围与限制。原始信号作为支持、冲突或不适用证据折叠展示。",
     )
     source = source.replace(
         "以下公司有可采用的信号，但冻结图中的业务挂接不足以支持可靠的产业链传导。"
         "保留公司自身判断，不虚构产业链或 Concept。它们属于产业链层的公司输入，不另设第四个报告层级。",
         "公司变量先综合，再判断基本面影响。错挂、失效和口径异常保留原文并明确限定；公司属于产业分析范围。",
     )
+    if not data.get("company_analyses"):
+        source = source.replace('<a href="#companies">公司直接判断</a>', "")
+        start = source.index("heading(3,'公司直接判断','companies')")
+        end = source.index("heading(2,'补充观察')", start)
+        source = source[:start] + source[end:]
     # Execute only repository-owned template code. Report text is read as JSON and HTML-escaped by the template.
     exec(
         compile(source, str(template), "exec"),

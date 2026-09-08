@@ -40,15 +40,16 @@ def validate_report(report: dict[str, Any], snapshot: dict[str, Any]) -> dict[st
             "geopolitical_stories": ("geopolitics", "GeopoliticRivalry"),
             "macroeconomic_stories": ("macroeconomics", "MacroEconomic"),
             "industry_chain_analyses": ("industry", "IndustryChain"),
+            "concept_analyses": ("industry", "Concept"),
             "company_analyses": ("industry", "Company"),
         }
         entities = snapshot["entities"]
-        check(
-            not report["concept_analyses"],
-            "$.concept_analyses",
-            "Concept inference is outside this three-procedure contract",
-        )
         check(any(report[s] for s in sections), "$", "at least one judgment required")
+        check(
+            len({u["source_id"] for u in report["concept_analyses"]}) == len(report["concept_analyses"]),
+            "$.concept_analyses",
+            "one summary unit per Concept",
+        )
         for section, (branch, root_type) in sections.items():
             packet = branch_input(snapshot, branch)
             events = {e["id"]: e for e in packet["events"]}
@@ -57,6 +58,46 @@ def validate_report(report: dict[str, Any], snapshot: dict[str, Any]) -> dict[st
             for i, unit in enumerate(report[section]):
                 path = f"$.{section}[{i}]"
                 check(entities.get(unit["source_id"], {}).get("type") == root_type, path, f"root must be {root_type}")
+                if root_type == "IndustryChain":
+                    check(
+                        not any(
+                            r["type"] == "IndustryChainMappedToConcept" and r["source"] == unit["source_id"]
+                            for r in snapshot["structure"]
+                        ),
+                        path,
+                        "independent industry fallback requires no Concept mapping",
+                    )
+                    check(
+                        unit["title"] == entities.get(unit["source_id"], {}).get("name"),
+                        path,
+                        "industry title must match graph name",
+                    )
+                    chains = unit["detail"]["industry_chains"]
+                    check(
+                        len(chains) == 1 and chains[0]["source_id"] == unit["source_id"],
+                        path,
+                        "independent industry unit must contain its own chain",
+                    )
+                if root_type == "Concept":
+                    check(
+                        unit["title"] == entities.get(unit["source_id"], {}).get("name"),
+                        path,
+                        "Concept title must match graph name",
+                    )
+                    mappings = {
+                        (r["source"], r["target"])
+                        for r in snapshot["structure"]
+                        if r["type"] == "IndustryChainMappedToConcept"
+                    }
+                    chains = unit["detail"]["industry_chains"]
+                    check(bool(chains), path, "Concept must contain assessed industry chains")
+                    check(len({c["source_id"] for c in chains}) == len(chains), path, "duplicate chain in Concept")
+                    for chain in chains:
+                        check(
+                            (chain["source_id"], unit["source_id"]) in mappings,
+                            path,
+                            "chain not mapped to this Concept in graph",
+                        )
                 if branch != "geopolitics" and "detail" in unit:
                     check(
                         not unit["detail"]["macro_impacts"], path, "macro_impacts only belongs in geopolitical detail"
