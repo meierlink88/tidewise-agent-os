@@ -66,6 +66,11 @@ def render(report: Path, evidence_catalog: Path, output: Path) -> dict[str, str]
     template = Path(__file__).resolve().parents[3] / "report/v8/scripts/render_v8.py.txt"
     source = template.read_text()
     source = source.replace("html.escape(str(x))", "html.escape(display_text(x))")
+    source = source.replace(
+        "rows.append((t['name'],OR[t['judgment_origin']]",
+        "rows.append(('【'+{'macroeconomic_story':'宏观经济','industry_chain':'产业链',"
+        "'industry_chain_node':'产业链节点'}[a['target_type']]+'】'+t['name'],OR[t['judgment_origin']]",
+    )
     start, end = source.index("def signals(rows):"), source.index("def evidence(ids):")
     source = source[:start] + VARIABLE_VIEW + source[end:]
     source = source.replace("def heading(level,text,key=None):", UPSTREAM_NAMES + "def heading(level,text,key=None):")
