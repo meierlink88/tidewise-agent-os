@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 from capabilities.report_reasoning.internal.storage import digest, read, write
@@ -10,7 +11,7 @@ from capabilities.report_reasoning.internal.storage import digest, read, write
 VARIABLE_VIEW = """def signals(rows, groups):
  if not rows:return
  heading(5,'变量综合判断')
- labels={'UP':'上升','DOWN':'下降','STABLE':'不变','MIXED':'分化','UNKNOWN':'未明确'}
+ labels={'UP':'上升','DOWN':'下降','STABLE':'平稳','MIXED':'分化','UNKNOWN':'未明确'}
  def variable_label(g):
   split=sum(x['variable_id']==g['variable_id'] for x in groups)>1
   return g['variable_name']+('｜'+g['scope']+'｜'+g['timeframe'] if split else '')
@@ -45,6 +46,16 @@ judgment_names={x['local_key']:x.get('name',x.get('title',x['source_id']))
 """
 
 
+def display_text(value: object) -> str:
+    labels = {"up": "上升", "down": "下降", "stable": "平稳", "mixed": "分化", "unknown": "未明确", "unknow": "未明确"}
+    return re.sub(
+        r"(?<![A-Za-z0-9_-])(up|down|stable|mixed|unknown|unknow)(?![A-Za-z0-9_-])",
+        lambda match: labels[match.group().lower()],
+        str(value),
+        flags=re.IGNORECASE,
+    )
+
+
 def render(report: Path, evidence_catalog: Path, output: Path) -> dict[str, str]:
     data = read(report)
     if data.get("schema_version") != "report-publication/v6-draft":
@@ -54,6 +65,7 @@ def render(report: Path, evidence_catalog: Path, output: Path) -> dict[str, str]
     write(output / "evidence-catalog.json", read(evidence_catalog))
     template = Path(__file__).resolve().parents[3] / "report/v8/scripts/render_v8.py.txt"
     source = template.read_text()
+    source = source.replace("html.escape(str(x))", "html.escape(display_text(x))")
     start, end = source.index("def signals(rows):"), source.index("def evidence(ids):")
     source = source[:start] + VARIABLE_VIEW + source[end:]
     source = source.replace("def heading(level,text,key=None):", UPSTREAM_NAMES + "def heading(level,text,key=None):")
@@ -92,7 +104,12 @@ def render(report: Path, evidence_catalog: Path, output: Path) -> dict[str, str]
         "公司变量先综合，再判断基本面影响。错挂、失效和口径异常保留原文并明确限定；公司属于产业分析范围。",
     )
     # Execute only repository-owned template code. Report text is read as JSON and HTML-escaped by the template.
-    exec(compile(source, str(template), "exec"), {"__file__": str(output / "scripts/render_v8.py")})
+    exec(
+        compile(source, str(template), "exec"),
+        {"__file__": str(output / "scripts/render_v8.py"), "display_text": display_text},
+    )
+    markdown = output / "report.md"
+    markdown.write_text(display_text(markdown.read_text()))
     result = {"html": str((output / "report.html").resolve()), "source_report_hash": digest(data)}
     write(output / "render-metadata.json", {**result, "template": str(template), "data_changed": False})
     return result
