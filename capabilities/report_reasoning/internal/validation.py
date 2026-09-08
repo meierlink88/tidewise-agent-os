@@ -22,7 +22,10 @@ def objects(value: Any, path: str = "$") -> list[tuple[str, dict[str, Any]]]:
 
 
 def validate_report(report: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:
-    schema = read(Path(__file__).with_name("publication.schema.json"))
+    variable_version = report.get("schema_version") == "report-publication/v6-draft"
+    schema = read(
+        Path(__file__).with_name("variable-report.schema.json" if variable_version else "publication.schema.json")
+    )
     issues = [
         {"path": str(list(e.absolute_path)), "message": e.message}
         for e in Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(report)
@@ -98,6 +101,12 @@ def validate_report(report: dict[str, Any], snapshot: dict[str, Any]) -> dict[st
                         check("→" in obj["transmission_logic"], p, "causal logic must use arrows")
                     if "judgment_origin" in obj:
                         rows = obj.get("variable_signals", obj.get("detail", {}).get("variable_signals", []))
+                        if variable_version:
+                            groups = obj.get(
+                                "variable_assessments", obj.get("detail", {}).get("variable_assessments", [])
+                            )
+                            for error in check_variables(rows, groups):
+                                check(False, p + ".variable_assessments", error)
                         check(
                             obj["judgment_origin"] == ("direct" if rows else "inferred"),
                             p,
@@ -188,3 +197,38 @@ def validate_report(report: dict[str, Any], snapshot: dict[str, Any]) -> dict[st
         "data_service_validation": "not_performed",
         "publication": "not_performed",
     }
+
+
+def check_variables(rows: list[dict[str, Any]], groups: list[dict[str, Any]]) -> list[str]:
+    """Check evidence grouping, never decide a qualitative direction by counting signals."""
+    errors: list[str] = []
+    own = {r["signal_id"]: r for r in rows}
+    cited: list[str] = []
+    scopes: set[tuple[str, str, str]] = set()
+    keys: set[str] = set()
+    for group in groups:
+        if group["local_key"] in keys:
+            errors.append("duplicate variable assessment local_key")
+        keys.add(group["local_key"])
+        scope = (group["variable_id"], group["scope"].strip(), group["timeframe"].strip())
+        if scope in scopes:
+            errors.append("same variable and scope must be synthesized once")
+        scopes.add(scope)
+        refs = [s for k in ("support_signal_ids", "counter_signal_ids", "excluded_signal_ids") for s in group[k]]
+        if not refs or len(refs) != len(set(refs)):
+            errors.append("variable evidence groups must be nonempty and mutually exclusive")
+        cited.extend(refs)
+        evidences: set[str] = set()
+        for ref in refs:
+            row = own.get(ref)
+            if row is None:
+                errors.append("variable judgment references a non-owned Signal")
+                continue
+            if (group["variable_id"], group["variable_name"]) != (row["variable_id"], row["variable_name"]):
+                errors.append("variable identity differs from referenced Signal")
+            evidences.update(row["evidence_ids"])
+        if set(group["evidence_ids"]) != evidences:
+            errors.append("variable Evidence must match its support/counter/excluded Signal sources")
+    if set(cited) != set(own) or len(cited) != len(own):
+        errors.append("each own Signal must enter exactly one variable synthesis evidence group")
+    return errors

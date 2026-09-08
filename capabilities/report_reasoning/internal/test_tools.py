@@ -9,7 +9,7 @@ from capabilities.report_reasoning.tools.data import freeze, load_snapshot, quer
 
 from .live import export_live
 from .storage import read, write
-from .validation import validate_report
+from .validation import check_variables, validate_report
 
 
 def fixture():
@@ -35,6 +35,52 @@ def fixture():
 
 
 class ToolsTest(unittest.TestCase):
+    def test_variable_grouping_preserves_conflicting_evidence_without_voting(self):
+        report, snapshot = fixture()
+        report["schema_version"] = "report-publication/v6-draft"
+        detail = report["macroeconomic_stories"][0]["detail"]
+        row = detail["variable_signals"][0]
+        group = {
+            "local_key": "m1-variable",
+            "variable_id": row["variable_id"],
+            "variable_name": row["variable_name"],
+            "scope": "same market",
+            "timeframe": "current",
+            "direction": "DOWN",
+            "synthesis": "Qualitative judgment",
+            "conflict_resolution": "No vote",
+            "support_signal_ids": [row["signal_id"]],
+            "counter_signal_ids": [],
+            "excluded_signal_ids": [],
+            "evidence_ids": row["evidence_ids"],
+        }
+        detail["variable_assessments"] = [group]
+        self.assertTrue(validate_report(report, snapshot)["passed"])
+        conflicting = {**row, "signal_id": "other", "source_direction": "UP"}
+        group["counter_signal_ids"] = ["other"]
+        self.assertEqual(check_variables([row, conflicting], [group]), [])
+        group["support_signal_ids"].append("other")
+        self.assertTrue(check_variables([row, conflicting], [group]))
+
+    def test_variable_groups_reject_omission_wrong_variable_and_duplicate_scope(self):
+        report, _ = fixture()
+        row = report["macroeconomic_stories"][0]["detail"]["variable_signals"][0]
+        self.assertTrue(check_variables([row], []))
+        group = {
+            "local_key": "v",
+            "variable_id": "wrong",
+            "variable_name": row["variable_name"],
+            "scope": "scope",
+            "timeframe": "time",
+            "support_signal_ids": [row["signal_id"]],
+            "counter_signal_ids": [],
+            "excluded_signal_ids": [],
+            "evidence_ids": row["evidence_ids"],
+        }
+        self.assertTrue(check_variables([row], [group]))
+        group["variable_id"] = row["variable_id"]
+        self.assertTrue(check_variables([row], [group, {**group, "local_key": "v2"}]))
+
     def test_scopes_pagination_and_lookup(self):
         _, snapshot = fixture()
         with tempfile.TemporaryDirectory() as folder:
