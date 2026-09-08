@@ -43,6 +43,7 @@ def normalize_export(raw: dict[str, Any]) -> dict[str, Any]:
             "classes": [],
             "evidence_ids": [],
             "valid_at": data["valid_at"],
+            "created_at": data.get("created_at"),
         }
     evidences = {}
     for batch in raw["journals"]:
@@ -109,6 +110,7 @@ def normalize_export(raw: dict[str, Any]) -> dict[str, Any]:
     )
     return {
         "source_kind": raw.get("source_kind", "agentos_graph_journal_export"),
+        "selection_time_field": raw.get("selection_time_field", "unspecified"),
         "source_sha256": digest(raw),
         "observed_at": raw["retrieved_at"],
         "events": list(events.values()),

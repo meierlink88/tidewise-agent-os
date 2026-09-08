@@ -166,6 +166,23 @@ class ToolsTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "mixed-scope"):
                 query(run, "macroeconomics", "signals")
 
+    def test_created_at_scope_survives_freeze_and_query(self):
+        _, snapshot = fixture()
+        snapshot["selection_time_field"] = "created_at"
+        snapshot["events"][0].update(created_at="2026-09-08T01:00:00Z", valid_at="2030-01-01T00:00:00Z")
+        with tempfile.TemporaryDirectory() as folder:
+            run = Path(folder) / "input"
+            manifest = freeze(snapshot, run)
+            result = query(run, "macroeconomics", "events")
+            self.assertEqual(manifest["selection_time_field"], "created_at")
+            self.assertEqual(result["selection_time_field"], "created_at")
+            self.assertEqual(result["items"][0]["valid_at"], "2030-01-01T00:00:00Z")
+            self.assertEqual(result["items"][0]["created_at"], "2026-09-08T01:00:00Z")
+
+    def test_live_rejects_unknown_time_field_before_connecting(self):
+        with self.assertRaisesRegex(ValueError, "time_field"):
+            export_live(Path("/nonexistent"), "2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z", "published_at")
+
     def test_live_rejects_invalid_time_before_connecting(self):
         with self.assertRaises(ValueError):
             export_live(Path("/nonexistent"), "2026-09-01", "2026-09-02")

@@ -21,6 +21,7 @@ def main() -> int:
     p.add_argument("--event-root", type=Path)
     p.add_argument("--start")
     p.add_argument("--end")
+    p.add_argument("--time-field", choices=("valid_at", "created_at"), default=None)
     p.add_argument("--run", type=Path, required=True)
     q = commands.add_parser("query")
     q.add_argument("--run", type=Path, required=True)
@@ -40,8 +41,12 @@ def main() -> int:
             if args.live:
                 if not all((args.event_root, args.start, args.end)):
                     raise ValueError("--live requires --event-root, --start and --end")
-                result = data.prepare_live(args.event_root, args.start, args.end, args.run)
+                result = data.prepare_live(
+                    args.event_root, args.start, args.end, args.run, args.time_field or "valid_at"
+                )
             else:
+                if args.time_field is not None:
+                    raise ValueError("--time-field is only supported with --live; imported source keeps its own scope")
                 result = data.prepare(args.source, args.run)
         elif args.command == "query":
             result = data.query(args.run, args.branch, args.resource, args.identity, args.text, args.offset, args.limit)
