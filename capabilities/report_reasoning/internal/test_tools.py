@@ -254,6 +254,9 @@ class ToolsTest(unittest.TestCase):
             self.assertIn(group["synthesis"], html)
             self.assertIn(row["signal"], html)
             self.assertIn("查看综合依据与原始信号", html)
+            self.assertNotIn("公司直接判断", html)
+            self.assertNotIn('href="#companies"', html)
+            self.assertNotIn("2026 年 9 月 7 日全量冻结数据回放", html)
             self.assertEqual(read(root / "report.json"), report)
         conflicting = {**row, "signal_id": "other", "source_direction": "UP"}
         group["counter_signal_ids"] = ["other"]
