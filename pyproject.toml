@@ -8,7 +8,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "Tidewise" }]
 
 dependencies = [
-  "agno[os,mcp,slack,pgvector,psycopg]==3.0.1",
+  "agno[os,mcp,slack,pgvector,psycopg]==3.0.9",
   "graphiti-core==0.30.1",
   "httpx==0.28.1",
   "minio==7.2.20",

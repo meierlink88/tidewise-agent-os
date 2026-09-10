@@ -6,13 +6,13 @@ import asyncio
 import json
 import time
 import uuid
-from datetime import timedelta
 
 import httpx
+import httpx2
 from agno.db.schemas.service_accounts import ServiceAccount
 from agno.os.service_accounts import generate_token
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 from mcp.types import TextContent
 
 from app.schedules import (
@@ -113,7 +113,10 @@ async def _probe(token: str, schedule_token: str) -> None:
         if ping.json().get("status") != "COMPLETED":
             raise RuntimeError("local-ping did not complete")
 
-    async with streamablehttp_client(f"{BASE_URL}/mcp", headers=headers, timeout=20) as (read, write, _):
+    async with (
+        httpx2.AsyncClient(headers=headers, timeout=20) as mcp_client,
+        streamable_http_client(f"{BASE_URL}/mcp", http_client=mcp_client) as (read, write),
+    ):
         async with ClientSession(read, write) as session:
             await session.initialize()
             config_result = await session.call_tool("get_agentos_config", {})
@@ -134,15 +137,15 @@ async def _probe(token: str, schedule_token: str) -> None:
                     "agent_id": "tidewise-assistant",
                     "message": "Reply with exactly UAT_AGENT_OK and nothing else.",
                 },
-                read_timeout_seconds=timedelta(seconds=120),
+                read_timeout_seconds=120,
             )
-            if run_result.isError:
+            if run_result.is_error:
                 raise RuntimeError("Agent smoke returned an MCP error")
             if not run_result.content or not isinstance(run_result.content[0], TextContent):
                 raise RuntimeError("Agent smoke response is not text")
             if run_result.content[0].text.strip() != "UAT_AGENT_OK":
                 raise RuntimeError("Agent smoke returned an unexpected response")
-            structured = run_result.structuredContent
+            structured = run_result.structured_content
             if not isinstance(structured, dict) or structured.get("status") != "COMPLETED":
                 raise RuntimeError("Agent smoke did not complete")
 
