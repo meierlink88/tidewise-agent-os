@@ -96,7 +96,7 @@ class InterfaceTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(payload["content"]["archived"], 1)
                         self.assertEqual(payload["content"]["outcome"], "completed")
                         self.assertEqual(len(payload["step_results"]), 2)
-                    async with streamable_http_client(f"http://127.0.0.1:{port}/mcp") as (read, write, _):
+                    async with streamable_http_client(f"http://127.0.0.1:{port}/mcp") as (read, write):
                         async with ClientSession(read, write) as session:
                             await session.initialize()
                             config_result = await session.call_tool("get_agentos_config", {})
@@ -110,7 +110,7 @@ class InterfaceTests(unittest.IsolatedAsyncioTestCase):
                                     "message": "原查询",
                                 },
                             )
-                            self.assertFalse(result.isError, result)
+                            self.assertFalse(result.is_error, result)
                             assert isinstance(result.content[0], TextContent)
                             self.assertEqual(json.loads(result.content[0].text)["duplicates"], 1)
                     self.assertEqual(len(store.calls), 1)

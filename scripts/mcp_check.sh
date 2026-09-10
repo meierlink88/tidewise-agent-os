@@ -43,8 +43,9 @@ import json
 import sys
 import time
 
+import httpx2
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 
 ORANGE = "\033[38;5;208m"
 DIM = "\033[2m"
@@ -57,7 +58,10 @@ def step(text: str) -> None:
 
 
 async def run_check(headers: dict | None, auth_note: str) -> None:
-    async with streamablehttp_client("http://localhost:8000/mcp", headers=headers, timeout=180) as (read, write, _):
+    async with (
+        httpx2.AsyncClient(headers=headers, timeout=180) as client,
+        streamable_http_client("http://localhost:8000/mcp", http_client=client) as (read, write),
+    ):
         async with ClientSession(read, write) as session:
             await session.initialize()
             step(f"Handshake — {auth_note}")
