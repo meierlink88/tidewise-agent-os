@@ -5,7 +5,7 @@ Contract 23 exposes exactly four Steps and one Loop, with no Condition nodes:
 1. Evidence Collect — evidence_collect Function: acquire, retain originals, deduplicate article versions and enqueue.
 2. process_articles Loop:
    - Prepare Evidence Review — prepare_evidence_review Function: select one unreviewed article and its category catalog.
-   - Evidence Reviewer — direct Agent Step (title-curator, contract 13); the only LLM call.
+   - Evidence Reviewer — direct Agent Step (title-curator, contract 14); the only LLM call.
    - Evidence Publish — evidence_publish Function: save the review, isolate exclusions, validate/deduplicate and publish.
 
 The next article starts after the current one is excluded, published, reused or durably marked failed. Branches live in Functions.
@@ -13,13 +13,11 @@ There is no receipt-only Step, recovery Loop, hidden Agent call, or automatic pu
 
 The Agent returns only is_relevant plus extraction. Irrelevant means extraction=null;
 relevant means the unchanged EvidenceExtractionDraft. The Evidence prompt is reused from the existing seed file.
-Reviewer contract 13 sends EvidenceReviewDraft as native Responses text.format=json_schema with strict=true,
-not JSON-object mode. The prompt documents one output envelope and nullable-field rules. Pydantic and existing
-deterministic curation remain the final gate; refusal, truncation or invalid output is not repaired or published.
-Proxy support must be tested with the actual nested schema, not inferred from an HTTP 200 alone.
-Keep descriptions for referenced objects on the model definition: the verified proxy rejects description siblings
-beside a $ref. Agno's REST RunOutput serializer omits null values; inspect the typed/raw model response when checking
-nullable fields, rather than treating their omission in the REST display as a model-schema violation.
+Reviewer contract 14 uses the configured DeepSeek model (default deepseek-v4-flash) with thinking disabled,
+JSON-object mode and EvidenceReviewDraft parsing. Pydantic and deterministic curation remain the final gates;
+invalid output is not repaired or published. The model-only migration preserves the published contract-13 prompt.
+The 120-second transport timeout and existing retry policy are unchanged.
+Agno's REST RunOutput serializer may omit null fields; use typed/raw responses to audit nullable-field compliance.
 Prepare sends EvidenceReviewRequest: title, raw text, source name/URL and publication/collection timestamps plus
 the category vocabulary. Internal identities, hashes, storage paths and claim tokens never enter that input.
 The current run context owns article_key and the fenced claim. Evidence Publish binds the semantic draft into the

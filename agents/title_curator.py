@@ -6,24 +6,25 @@ from pathlib import Path
 
 from agno.agent import Agent
 from agno.db.base import ComponentType
-from agno.models.openai import OpenAIResponses
+from agno.models.deepseek import DeepSeek
 from agno.registry import Registry
 
-from app.settings import SOL_LOW_MODEL_ID, sol_low_model
+from app.settings import default_model
 from capabilities.evidence import EvidenceReviewDraft
 from db import get_postgres_db
 
 TITLE_CURATOR_AGENT_ID = "title-curator"
-TITLE_CURATOR_CONTRACT_VERSION = 13
+TITLE_CURATOR_CONTRACT_VERSION = 14
 TITLE_CURATOR_AGENT_NAME = "Evidence Reviewer"
 TITLE_CURATOR_SEED_SHA256_KEY = "article_review_seed_sha256"
 _SEED_PROMPT = Path(__file__).with_name("title_curator.seed.md")
 
 
-def filter_model() -> OpenAIResponses:
-    model = sol_low_model()
+def filter_model() -> DeepSeek:
+    model = default_model()
+    model.use_thinking = False
+    model.reasoning_effort = None
     model.timeout = 120
-    model.strict_output = True
     return model
 
 
@@ -54,9 +55,9 @@ def _configure(agent: Agent) -> Agent:
     agent.tools = []
     agent.retries = 0
     agent.output_schema = EvidenceReviewDraft
-    # Constrain generation with the existing draft schema; keep local business validation.
-    agent.structured_outputs = True
-    agent.use_json_mode = False
+    # DeepSeek uses JSON-object mode; Pydantic and business validation enforce the draft schema.
+    agent.structured_outputs = False
+    agent.use_json_mode = True
     agent.parse_response = True
     agent.add_datetime_to_context = False
     agent.add_history_to_context = False
@@ -100,19 +101,22 @@ def ensure_title_curator_agent(registry: Registry) -> int:
             dict(current.metadata or {}).get("title_curator_contract_version") == TITLE_CURATOR_CONTRACT_VERSION
             and dict(current.metadata or {}).get(TITLE_CURATOR_SEED_SHA256_KEY)
             == hashlib.sha256(_seed_instructions().encode()).hexdigest()
-            and isinstance(current.model, OpenAIResponses)
-            and current.model.id == SOL_LOW_MODEL_ID
+            and isinstance(current.model, DeepSeek)
+            and current.model.id == expected_model.id
             and current.model.name == expected_model.name
-            and current.model.reasoning_effort == "low"
+            and current.model.reasoning_effort is None
+            and current.model.use_thinking is False
+            and current.use_json_mode is True
+            and current.structured_outputs is False
             and dict(current.metadata or {}).get("raw_evidence_filter_reasoning_effort", "medium")
             == expected_model.reasoning_effort
-            and current.model.store is False
+            and current.model.base_url == expected_model.base_url
         ):
             return version
-        # An effort-only migration must not replace a Studio-maintained prompt.
+        # A model-only migration from contract 13 must preserve the Studio-maintained prompt.
         instructions = current.instructions
         same_contract = (
-            dict(current.metadata or {}).get("title_curator_contract_version") == TITLE_CURATOR_CONTRACT_VERSION
+            dict(current.metadata or {}).get("title_curator_contract_version") in (13, TITLE_CURATOR_CONTRACT_VERSION)
             and dict(current.metadata or {}).get(TITLE_CURATOR_SEED_SHA256_KEY)
             == hashlib.sha256(_seed_instructions().encode()).hexdigest()
         )
@@ -149,7 +153,7 @@ def load_title_curator_agent(registry: Registry) -> LoadedTitleCuratorAgent:
         raise ValueError("Title Curator published version could not be rehydrated")
     if not isinstance(agent.instructions, str) or not agent.instructions.strip():
         raise ValueError("Title Curator published instructions are empty")
-    # Keep Reviewer-specific transport settings on a fresh canonical low model.
+    # Keep Reviewer-specific transport settings on a fresh non-thinking DeepSeek model.
     agent.model = filter_model()
     agent.db = None
     return LoadedTitleCuratorAgent(
