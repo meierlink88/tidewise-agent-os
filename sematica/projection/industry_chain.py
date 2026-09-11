@@ -20,6 +20,7 @@ from sematica.ontology import (
     IndustryChainMappedToConcept,
     IndustryChainMappedToIndustry,
 )
+from sematica.ontology.entities.base import ShortName
 from sematica.ontology.enums import RecordStatus, ReviewStatus
 from sematica.projection.authoritative_writer import GROUP_ID, edge_uuid, node_uuid, write_projection
 from sematica.projection.runtime import ProjectionError, RuntimeConfig
@@ -50,6 +51,7 @@ class DataIndustryChainDTO(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: str
+    short_name: ShortName | None = None
     name: str = Field(min_length=1)
     aliases: list[str]
     scope: str = Field(min_length=1)
@@ -312,6 +314,7 @@ def build_plan(facts: IndustryChainFacts) -> IndustryChainPlan:
         try:
             attributes = IndustryChain(
                 data_object_id=chain.id,
+                short_name=chain.short_name,
                 aliases=chain.aliases,
                 scope=chain.scope,
                 target_output=chain.target_output,
@@ -327,6 +330,7 @@ def build_plan(facts: IndustryChainFacts) -> IndustryChainPlan:
             ).model_dump(mode="json", exclude_none=True)
         except ValidationError as exc:
             raise ProjectionError(f"IndustryChain {chain.id} violates ontology: {exc}") from None
+        attributes["short_name"] = chain.short_name
         nodes.append(
             EntityNode(
                 uuid=node_uuid(chain.id),
@@ -466,7 +470,7 @@ async def inspect_graph_state(graphiti: Graphiti) -> dict[str, object]:
         """
         MATCH (n:IndustryChain {group_id: $group_id})
         RETURN n.uuid AS uuid, n.data_object_id AS data_object_id, labels(n) AS labels,
-               size(n.name_embedding) AS embedding_dimension
+               n.short_name AS short_name, size(n.name_embedding) AS embedding_dimension
         ORDER BY data_object_id
         """,
         group_id=GROUP_ID,
@@ -542,6 +546,9 @@ def verify_state(plan: IndustryChainPlan, state: dict[str, object]) -> dict[str,
     problems: list[str] = []
     if actual_nodes != expected_nodes or len(nodes) != len(expected_nodes):
         problems.append("IndustryChain ID set differs from Data API")
+    planned_short_names = {node.attributes["data_object_id"]: node.attributes.get("short_name") for node in plan.nodes}
+    if any(record.get("short_name") != planned_short_names.get(record["data_object_id"]) for record in nodes):
+        problems.append("IndustryChain short names differ from Data snapshot")
     if any(set(record["labels"]) != {"Entity", "IndustryChain"} for record in nodes):
         problems.append("IndustryChain labels are not exclusive")
     if any(record["embedding_dimension"] != 1024 for record in nodes):
