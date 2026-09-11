@@ -4,13 +4,14 @@ from datetime import date, datetime
 
 from pydantic import Field
 
-from sematica.ontology.entities.base import TidewiseEntity, TidewiseEntityLink
+from sematica.ontology.entities.base import ShortName, TidewiseEntity, TidewiseEntityLink
 from sematica.ontology.enums import RecordStatus, ReviewStatus
 
 
 class IndustryChain(TidewiseEntity):
     """围绕目标产出与终端用途组织的有向投研产业链子图。"""
 
+    short_name: ShortName | None = Field(default=None, description="Data 权威展示简称；不替代正式名称或别名。")
     data_object_id: str | None = Field(
         default=None,
         pattern=r"^ICH[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",

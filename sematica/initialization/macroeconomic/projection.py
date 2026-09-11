@@ -11,7 +11,7 @@ from typing import Literal
 from graphiti_core.nodes import EntityNode
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from sematica.ontology.entities.base import NonBlankText
+from sematica.ontology.entities.base import NonBlankText, ShortName
 from sematica.ontology.entities.macro_economic import ID_SUFFIX, MacroEconomic, MacroEconomicTactic
 from sematica.projection.authoritative_writer import GROUP_ID, node_uuid
 from sematica.projection.runtime import ProjectionError
@@ -22,6 +22,7 @@ OWNER = "tidewise-agentos/macroeconomic-projection/v1"
 class Storyline(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     id: str = Field(pattern="^MEC" + ID_SUFFIX + "$")
+    short_name: ShortName | None = None
     name: NonBlankText = Field(max_length=100)
     macro_economics_domain_id: str = Field(pattern="^MCD" + ID_SUFFIX + "$")
     domain_code: str = Field(pattern=r"^[A-Z][A-Z0-9_]{0,49}$")
@@ -48,6 +49,7 @@ class Storyline(BaseModel):
     def ontology(self):
         return MacroEconomic(
             data_object_id=self.id,
+            short_name=self.short_name,
             core_proposition=self.core_proposition,
             domain_code=self.domain_code,
             domain_name=self.domain_name,
@@ -106,6 +108,7 @@ def build_plan(snapshot: Snapshot) -> list[EntityNode]:
             ]
         )
         attrs = item.ontology().model_dump(mode="json", exclude_none=True)
+        attrs["short_name"] = item.short_name
         attrs.update(
             {
                 "projection_owner": OWNER,
@@ -169,6 +172,7 @@ def matches(node: EntityNode, row: dict, dimension: int) -> bool:
         "group_id": node.group_id,
         **node.attributes,
     }
+    expected = {k: v for k, v in expected.items() if v is not None}
     props = dict(row["props"])
     props.pop("name_embedding", None)
     # Graphiti save_bulk also persists a labels property in addition to native labels.

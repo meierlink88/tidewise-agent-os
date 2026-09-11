@@ -5,7 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
-from sematica.ontology.entities.base import NonBlankText, TidewiseEntity
+from sematica.ontology.entities.base import NonBlankText, ShortName, TidewiseEntity
 
 ID_SUFFIX = r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 
@@ -20,6 +20,7 @@ class MacroEconomic(TidewiseEntity):
     Event 归类使用名称、领域与参考手段；命题描述对中国的影响，候选资产只用于匹配后研究。
     """
 
+    short_name: ShortName | None = Field(default=None, description="Data 权威展示简称；不替代正式名称或别名。")
     data_object_id: str | None = Field(default=None, pattern="^MEC" + ID_SUFFIX + "$")
     core_proposition: NonBlankText | None = None
     domain_code: NonBlankText | None = None

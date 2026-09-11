@@ -22,6 +22,7 @@ from sematica.ontology import (
     ChainNodeInputTo,
     ChainNodeIsComponentOf,
 )
+from sematica.ontology.entities.base import ShortName
 from sematica.ontology.enums import ContextualStage, ReviewStatus
 from sematica.projection.authoritative_writer import (
     GROUP_ID,
@@ -93,6 +94,7 @@ class DataChainNodeDTO(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: str = Field(pattern=r"^CND[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+    short_name: ShortName | None = None
     name: str = Field(min_length=1)
     aliases: list[str]
     definition: str | None
@@ -259,6 +261,7 @@ def build_plan(facts: ChainNodeFacts) -> ChainNodePlan:
         try:
             attributes = ChainNode(
                 data_object_id=node.id,
+                short_name=node.short_name,
                 aliases=node.aliases,
                 definition=node.definition,
                 review_status=node.review_status,
@@ -266,6 +269,7 @@ def build_plan(facts: ChainNodeFacts) -> ChainNodePlan:
             ).model_dump(mode="json", exclude_none=True)
         except ValidationError as exc:
             raise ProjectionError(f"ChainNode {node.id} violates ontology: {exc}") from None
+        attributes["short_name"] = node.short_name
         nodes.append(
             EntityNode(
                 uuid=node_uuid(node.id),
@@ -446,7 +450,7 @@ async def inspect_graph_state(graphiti: Graphiti) -> dict[str, list[dict[str, ob
         """
         MATCH (node:ChainNode {group_id: $group_id})
         RETURN node.uuid AS uuid, node.data_object_id AS data_object_id,
-               labels(node) AS labels, size(node.name_embedding) AS embedding_dimension
+               labels(node) AS labels, node.short_name AS short_name, size(node.name_embedding) AS embedding_dimension
         ORDER BY data_object_id
         """,
         group_id=GROUP_ID,
@@ -493,6 +497,9 @@ def verify_state(
 
     if actual_node_ids != expected_node_ids or len(nodes) != len(expected_node_ids):
         problems.append("ChainNode ID set differs from Data snapshot")
+    planned_short_names = {node.attributes["data_object_id"]: node.attributes.get("short_name") for node in plan.nodes}
+    if any(record.get("short_name") != planned_short_names.get(record["data_object_id"]) for record in nodes):
+        problems.append("ChainNode short names differ from Data snapshot")
     if any(set(record["labels"]) != {"Entity", "ChainNode"} for record in nodes):
         problems.append("ChainNode labels are not exclusive")
     if any(record["embedding_dimension"] != 1024 for record in nodes):

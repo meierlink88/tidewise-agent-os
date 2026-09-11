@@ -6,6 +6,7 @@ SELECT jsonb_build_object(
     'payload', jsonb_build_object(
         'id', node.id,
         'name', node.name,
+        'short_name', node.short_name,
         'aliases', to_jsonb(node.aliases),
         'definition', node.definition,
         'review_status', node.review_status,

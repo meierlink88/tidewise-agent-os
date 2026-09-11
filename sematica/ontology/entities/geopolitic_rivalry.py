@@ -5,7 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
-from sematica.ontology.entities.base import NonBlankText, TidewiseEntity
+from sematica.ontology.entities.base import NonBlankText, ShortName, TidewiseEntity
 
 ID_SUFFIX = r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 
@@ -20,6 +20,7 @@ class GeopoliticRivalry(TidewiseEntity):
     Event 归类使用名称、分类、命题、参与方与手段；主要传导、候选资产只用于匹配后研究。
     """
 
+    short_name: ShortName | None = Field(default=None, description="Data 权威展示简称；不替代正式名称或别名。")
     data_object_id: str | None = Field(default=None, pattern="^GPR" + ID_SUFFIX + "$")
     category: NonBlankText | None = None
     core_proposition: NonBlankText | None = None

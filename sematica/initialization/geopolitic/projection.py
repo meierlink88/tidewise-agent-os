@@ -11,7 +11,7 @@ from typing import Literal
 from graphiti_core.nodes import EntityNode
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from sematica.ontology.entities.base import NonBlankText
+from sematica.ontology.entities.base import NonBlankText, ShortName
 from sematica.ontology.entities.geopolitic_rivalry import ID_SUFFIX, GeopoliticRivalry, GeopoliticTactic
 from sematica.projection.authoritative_writer import GROUP_ID, node_uuid
 from sematica.projection.runtime import ProjectionError
@@ -22,6 +22,7 @@ OWNER = "tidewise-agentos/geopolitic-projection/v1"
 class Storyline(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     id: str = Field(pattern="^GPR" + ID_SUFFIX + "$")
+    short_name: ShortName | None = None
     name: NonBlankText = Field(max_length=100)
     category: NonBlankText = Field(max_length=100)
     geopolitic_domain_id: str = Field(pattern="^GPD" + ID_SUFFIX + "$")
@@ -51,6 +52,7 @@ class Storyline(BaseModel):
     def ontology(self):
         return GeopoliticRivalry(
             data_object_id=self.id,
+            short_name=self.short_name,
             category=self.category,
             core_proposition=self.core_proposition,
             core_actors=self.core_actors,
@@ -114,6 +116,7 @@ def build_plan(snapshot: Snapshot) -> list[EntityNode]:
             ]
         )
         attrs = item.ontology().model_dump(mode="json", exclude_none=True)
+        attrs["short_name"] = item.short_name
         attrs.update(
             {
                 "projection_owner": OWNER,
@@ -177,6 +180,7 @@ def matches(node: EntityNode, row: dict, dimension: int) -> bool:
         "group_id": node.group_id,
         **node.attributes,
     }
+    expected = {k: v for k, v in expected.items() if v is not None}
     props = dict(row["props"])
     props.pop("name_embedding", None)
     # Graphiti save_bulk also persists a labels property in addition to native labels.
