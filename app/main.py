@@ -8,7 +8,9 @@ from os import getenv
 from pathlib import Path
 
 from agno.os import AgentOS
+from agno.os.config import MCPServerConfig
 from agno.utils.log import log_info
+from fastapi import FastAPI
 
 from agents.event_association import ensure_event_association_agent
 from agents.event_extractor import ensure_event_extractor_agent
@@ -25,7 +27,13 @@ from agents.tidewise_assistant import tidewise_assistant
 from agents.title_curator import ensure_title_curator_agent
 from app.registry import registry
 from app.schedules import validate_schedules
-from capabilities.event import configure_event_workflow_runtime, create_local_event_workflow_runtime
+from app.story_queries import router as story_query_router
+from capabilities.event import (
+    configure_event_workflow_runtime,
+    create_local_event_workflow_runtime,
+    get_story_evidence,
+    query_story_events,
+)
 from capabilities.investment import (
     configure_investment_workflow_runtime,
     create_data_service_report_publisher,
@@ -161,13 +169,17 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
 # ---------------------------------------------------------------------------
 # Create AgentOS
 # ---------------------------------------------------------------------------
+research_base_app = FastAPI()
+research_base_app.include_router(story_query_router)
+
 agent_os = AgentOS(
+    base_app=research_base_app,
     name="Tidewise AgentOS",
     tracing=True,
     scheduler=True,
     scheduler_base_url=agentos_internal_url,
     authorization=runtime_env != "dev",
-    mcp_server=True,
+    mcp_server=MCPServerConfig(tools=[query_story_events, get_story_evidence]),
     mcp_auth=mcp_auth,
     lifespan=lifespan,
     db=get_postgres_db(),
