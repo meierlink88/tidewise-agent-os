@@ -17,7 +17,7 @@ def _invoke(fn, request: Request, **kwargs):
 
 
 @router.get("")
-def events(request: Request, story_id: str, research_date: str, after_event_id: str = "", limit: int = 1):
+def events(request: Request, story_id: str, research_date: str, after_event_id: str = "", limit: int = 100):
     return _invoke(
         query_story_events,
         request,

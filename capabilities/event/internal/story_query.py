@@ -112,12 +112,9 @@ def _provenance(event_ids: set[str]) -> tuple[dict[str, Any], dict[str, Any]]:
     return refs, evidence
 
 
-def query_events(story_id: str, research_date: str, after_event_id: str = "", limit: int = 1) -> dict[str, Any]:
-    if isinstance(limit, bool) or not 1 <= limit <= 5:
-        raise ValueError("limit must be between 1 and 5; use 1 to avoid tool truncation")
-    # Research workers impose a 10k-character result limit. Bound server pages
-    # regardless of the model requesting larger batches; preserve the cursor.
-    limit = 1
+def query_events(story_id: str, research_date: str, after_event_id: str = "", limit: int = 100) -> dict[str, Any]:
+    if isinstance(limit, bool) or not 1 <= limit <= 100:
+        raise ValueError("limit must be between 1 and 100")
     params = _params(story_id, research_date)
     story = _story(params)
     counts = _read(MATCH_EVENTS + " RETURN count(DISTINCT e) AS total", params)
@@ -176,8 +173,22 @@ def query_events(story_id: str, research_date: str, after_event_id: str = "", li
         "next_after_event_id": selected[-1]["event"]["domain_object_id"] if len(rows) > limit else None,
     }
 
-    if len(json.dumps(result, ensure_ascii=False)) > 8500:
-        raise ValueError("Event bundle exceeds the research result budget; cannot deliver complete content")
+    return fit_event_page(result)
+
+
+def fit_event_page(result: dict[str, Any], budget: int = 28_000) -> dict[str, Any]:
+    """Page at complete Event boundaries; reserve space for the consumer MCP envelope."""
+    while len(json.dumps(result, ensure_ascii=False)) > budget:
+        if len(result["events"]) <= 1:
+            raise ValueError("Single Event bundle exceeds result budget; cannot deliver complete content")
+        result["events"].pop()
+        ids = {event["id"] for event in result["events"]}
+        result["variable_signals"] = [
+            item
+            for item in result["variable_signals"]
+            if ids.intersection(item["signal"].get("source_event_ids") or [])
+        ]
+        result["next_after_event_id"] = result["events"][-1]["id"]
     return result
 
 

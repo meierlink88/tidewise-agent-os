@@ -1,7 +1,7 @@
 # Live storyline research queries (Issue #245)
 
 AgentOS owns read-only Event/Signal/Evidence queries. Research consumes MCP; it never receives DB credentials.
-`query_story_events(story_id, research_date, after_event_id="", limit=1)` accepts authoritative GPR business IDs.
+`query_story_events(story_id, research_date, after_event_id="", limit=100)` accepts authoritative GPR business IDs.
 Dates are Asia/Shanghai calendar days, selected by Event graph `created_at` in [00:00, next 00:00).
 This means newly inserted graph Events, not event occurrence, collection or association time. Late association
 of an older Event is intentionally not included. There is no snapshot, export package or historical expansion.
@@ -26,4 +26,4 @@ expansion, Evidence scope, authentication, REST and MCP schema/calls, then one n
 No scheduler, automatic publication or automatic Signal writeback is added. Rollback removes the tool registrations,
 router and research allowlists. Deploy provider before enabling consumer allowlists; missing MCP tools must fail preflight.
 
-The server caps requested pages at one Event and rejects bundles over 8,500 characters explicitly; it never returns a silently truncated success. Consumer must enable compact MCP JSON serialization.
+The server returns up to 100 complete Events and associated Signals per page, reducing the page at Event boundaries to fit 28,000 characters. A single oversized Event fails explicitly. The consumer grants only the two AgentOS tools 30,000 characters and enables compact MCP JSON serialization; other tools retain 10,000. This is not a guarantee that an arbitrary daily dataset always fits one page.

@@ -53,13 +53,49 @@ class StoryQueryTests(unittest.TestCase):
             patch.object(q, "_read", side_effect=reads) as read,
             patch.object(q, "_provenance", return_value=({"E1": {"evidence_ids": ["V1"]}}, {})),
         ):
-            result = q.query_events(STORY, DAY, limit=5)
+            result = q.query_events(STORY, DAY, limit=1)
         self.assertEqual(read.call_args_list[2].args[1]["limit"], 2)
         self.assertEqual(result["next_after_event_id"], "E1")
         self.assertEqual(len(result["events"]), 1)
         self.assertTrue(result["variable_signals"][0]["usable_as_complete_fact"])
         self.assertIn("e.created_at < datetime($end)", read.call_args_list[1].args[0])
         self.assertIn("e.domain_object_id > $after", read.call_args_list[2].args[0])
+
+    def test_default_page_returns_all_events_and_signals(self):
+        reads = [
+            [{"story": {}}],
+            [{"total": 2}],
+            [event("E1"), event("E2")],
+            [{"id": "E1"}, {"id": "E2"}],
+            [{"signal": {"uuid": "S1", "fact": "fact", "source_event_ids": ["E1", "E2"]}}],
+        ]
+        with (
+            patch.object(q, "_read", side_effect=reads),
+            patch.object(q, "_provenance", return_value=({"E1": {}, "E2": {}}, {})),
+        ):
+            result = q.query_events(STORY, DAY)
+        self.assertEqual(len(result["events"]), 2)
+        self.assertEqual(len(result["variable_signals"]), 1)
+        self.assertIsNone(result["next_after_event_id"])
+
+    def test_budget_pagination_keeps_whole_events_and_source_signals(self):
+        result = {
+            "events": [{"id": "E1", "summary": "a" * 600}, {"id": "E2", "summary": "b" * 600}],
+            "variable_signals": [
+                {"signal": {"uuid": "S1", "source_event_ids": ["E1"]}},
+                {"signal": {"uuid": "S2", "source_event_ids": ["E2"]}},
+            ],
+            "next_after_event_id": None,
+            "total": 2,
+        }
+        fitted = q.fit_event_page(result, budget=1000)
+        self.assertEqual([e["id"] for e in fitted["events"]], ["E1"])
+        self.assertEqual(fitted["next_after_event_id"], "E1")
+        self.assertEqual(fitted["variable_signals"][0]["signal"]["uuid"], "S1")
+        self.assertEqual(len(fitted["variable_signals"]), 1)
+        self.assertEqual(fitted["total"], 2)
+        with self.assertRaises(ValueError):
+            q.fit_event_page(fitted, budget=100)
 
     def test_mixed_source_signal_does_not_leak_historical_assertion(self):
         reads = [
@@ -163,12 +199,16 @@ class StoryQueryTests(unittest.TestCase):
         async def run():
             server = FastMCP("contract test")
             import inspect
+            from typing import Any, cast
 
+            # Two deployed 3.0.9 builds expose different private test-helper signatures.
+            # Production registration uses the stable public MCPServerConfig API.
+            register = cast(Any, _register_custom_tools)
             entries = [query_story_events, get_story_evidence]
             if "entries" in inspect.signature(_register_custom_tools).parameters:
-                _register_custom_tools(server, entries)
+                register(server, entries)
             else:
-                _register_custom_tools(server, MCPServerConfig(tools=entries))
+                register(server, MCPServerConfig(tools=entries))
             async with Client(server) as client:
                 tools = await client.list_tools()
                 self.assertEqual({t.name for t in tools}, {"query_story_events", "get_story_evidence"})

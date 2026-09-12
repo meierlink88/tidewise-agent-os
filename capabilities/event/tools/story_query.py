@@ -7,12 +7,13 @@ from capabilities.event.internal.story_query import query_events, query_evidence
 
 
 def query_story_events(
-    story_id: str, research_date: str, after_event_id: str = "", limit: int = 1, user_id: str | None = None
+    story_id: str, research_date: str, after_event_id: str = "", limit: int = 100, user_id: str | None = None
 ) -> dict[str, Any]:
     """Read live Events created on research_date (YYYY-MM-DD, Asia/Shanghai) linked to GPR story_id.
 
     Includes associated variable signals and Evidence IDs. No historical expansion or snapshot.
-    Call with next_after_event_id until null. Server caps each page at one Event to avoid truncation.
+    Call with next_after_event_id until null. Default limit=100; server fits complete Events
+    and Signals within 28,000 characters.
     Signals missing source Events are marked unusable; publication/provenance gaps are explicit.
     """
     _authorize(user_id)
