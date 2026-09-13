@@ -8,7 +8,7 @@ candidate_images="${CANDIDATE_IMAGES:?CANDIDATE_IMAGES is required}"
 candidate_compose="${COMPOSE_FILE:?COMPOSE_FILE is required}"
 release_sha="${RELEASE_SHA:?RELEASE_SHA is required}"
 external_url="${AGENTOS_EXTERNAL_URL:?AGENTOS_EXTERNAL_URL is required}"
-stage_only="${STAGE_ONLY:-false}"
+stage_only="${STAGE_ONLY:-true}"
 state_dir="${deployment_root}/state"
 current_runtime="${deployment_root}/runtime.env"
 current_images="${state_dir}/current.images.env"
@@ -74,7 +74,7 @@ verify_release() {
   compose_for "$runtime" "$images" "$compose_file" exec -T agentos python -m sematica.graphiti.readiness \
     || return 1
   if [ "$stage_only" = true ]; then
-    echo "PASS staged-agentos-health-auth-components-schedules-mcp"
+    echo "PASS internal-agentos-health-auth-components-schedules-mcp"
     return 0
   fi
   external_headers="$(curl --silent --show-error --connect-timeout 5 --max-time 20 \

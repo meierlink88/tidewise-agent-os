@@ -5,7 +5,7 @@
 DGX Spark is the AgentOS UAT host. It runs four isolated Compose services:
 
 ```text
-public HTTPS /agentos
+Internal access / SSH forwarding
         |
         v
 DGX Spark (Linux ARM64)
@@ -22,9 +22,15 @@ infrastructure credentials. Full Raw Evidence Markdown is stored in AgentOS-owne
 the stable `/{bucket}/{object_key}` path through its existing API. PostgreSQL, Neo4j and MinIO on DGX are dedicated
 AgentOS dependencies and use explicit named volumes.
 
-The current Compose binds AgentOS only to `127.0.0.1:9081`. Before cutover, provision a reviewed TLS route or tunnel
-from the public `AGENTOS_EXTERNAL_URL` to that loopback listener. A release is accepted only when public `/health`
-returns the candidate commit in `X-Tidewise-Release`; this prevents a successful check against an unintended backend.
+The current Compose binds AgentOS only to `127.0.0.1:9081`. DGX UAT has no public ingress requirement.
+Normal deployments default to `stage_only=true`: this is a complete internal release, including release-state
+recording and rollback, not a build-only stage. Internal `/health` must return the candidate commit in
+`X-Tidewise-Release`; authentication, components, schedules, MCP, storage, Graphiti and restart recovery are also verified.
+The configured `AGENTOS_EXTERNAL_URL` alone does not prove that a public route to DGX exists.
+
+Public verification is opt-in: provision a reviewed TLS route or tunnel to the loopback listener first, then
+explicitly set `stage_only=false`. Only that mode requires public health, candidate release identity and authentication.
+The public Data Service API remains an outbound dependency in both modes.
 
 ## Security and persistence
 
@@ -87,7 +93,7 @@ Agent model providers, model IDs and reasoning settings are owned by each enviro
 validate a fixed model assignment or require particular model registry entries. It still verifies that the
 configured assistant can complete an authenticated MCP request. Graphiti readiness remains a separate check.
 
-## Fresh initialization and cutover
+## Fresh initialization and normal deployment
 
 The DGX environment is a new UAT and never imports the legacy ECS database or Artifact directory. "Copy development"
 means promoting the Git-tracked Agent, Workflow, capability, manifest, and Schedule definitions after they have been
@@ -104,11 +110,12 @@ reviewed and merged into `main`; it never copies a developer database, `.env`, s
    The smoke check keeps workflow execution on a least-privilege temporary service account and uses a separate
    five-minute administrator probe only to verify the unowned system Schedules through the authenticated API;
    both accounts are deleted even when verification fails.
-4. Route public HTTPS `/agentos` to DGX and dispatch the same commit with `stage_only=false`. The candidate SHA header
-   must match before the release is accepted.
+4. Optional future public cutover: route public HTTPS `/agentos` to DGX, then explicitly dispatch with
+   `stage_only=false`. The public candidate SHA header must match. Skip this step for internal-only UAT.
 5. Observe the DGX release. Any legacy ECS cleanup is outside this deployment and requires separate authorization.
 
-Run **Deploy UAT** manually from `main`. It accepts only a commit already validated on `main`, builds ARM64 images on
+For subsequent releases, run **Deploy UAT** manually from `main` with the default `stage_only=true` and
+`dependencies_only=false`. It accepts only a commit already validated on `main`, builds ARM64 images on
 DGX without pushing to or pulling from an AgentOS registry, resolves the result to a local Docker image ID, starts
 dedicated PostgreSQL, Neo4j and MinIO, applies the additive Agno migration, and seeds default schedules only for the first DGX
 release. The deployment scripts come directly from the same checked-out release commit; there is no deployment-bundle

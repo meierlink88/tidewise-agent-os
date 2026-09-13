@@ -8,9 +8,9 @@ on:
         required: false
         type: string
       stage_only:
-        description: Start and verify DGX internally before the public ingress cutover.
+        description: Verify DGX internally only (normal UAT deployment). Set false only with a configured public ingress.
         required: false
-        default: false
+        default: true
         type: boolean
       dependencies_only:
         description: Deploy and verify only fresh DGX PostgreSQL, Neo4j and MinIO; do not start AgentOS.
