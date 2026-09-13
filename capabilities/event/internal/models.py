@@ -226,15 +226,7 @@ class EventDisposition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     evidence_id: EvidenceID
-    reason: str = Field(min_length=1, max_length=200)
-
-    @field_validator("reason")
-    @classmethod
-    def normalize_reason(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("Event disposition reason must not be blank")
-        return value
+    reason: str
 
 
 class EventExtractionDraft(BaseModel):
@@ -273,7 +265,7 @@ class EventIdentityDecision(BaseModel):
     atomic: bool
     matched_event_ids: list[str] = Field(max_length=30)
     reason_codes: list[str] = Field(min_length=1, max_length=24)
-    summary: str = Field(min_length=1, max_length=500)
+    summary: str
 
     @model_validator(mode="after")
     def decision_is_consistent(self) -> "EventIdentityDecision":
@@ -313,7 +305,7 @@ class EventResolutionRecord(BaseModel):
     atomic: bool
     matched_event_ids: list[str]
     reason_codes: list[str] = Field(min_length=1)
-    summary: str = Field(min_length=1)
+    summary: str
 
     @model_validator(mode="after")
     def decision_is_consistent(self) -> "EventResolutionRecord":
@@ -427,7 +419,7 @@ class EventSignalAnalysisDraft(BaseModel):
 
     classification: EventClassification
     proposals: list[DirectSignalDraft] = Field(max_length=12)
-    no_signal_reason: str | None = Field(default=None, max_length=1000)
+    no_signal_reason: str | None = None
     reason_codes: list[str] = Field(default_factory=list, max_length=24)
 
 

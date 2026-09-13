@@ -66,7 +66,7 @@ class EventClassification(BaseModel):
     anchor_type_hints: list[AnalysisAnchorType] = Field(max_length=6)
     variable_group_hints: list[VariableGroup] = Field(max_length=9)
     retrieval_queries: list[str] = Field(min_length=1, max_length=5)
-    rationale: str = Field(min_length=1, max_length=1000)
+    rationale: str
 
 
 class AnchorCandidate(BaseModel):
@@ -114,7 +114,7 @@ class SignalProposal(BaseModel):
 
     anchor_uuid: str = Field(min_length=1)
     variable_uuid: str = Field(min_length=1)
-    fact: str = Field(min_length=1, max_length=1000)
+    fact: str
     direction: SignalDirection
     magnitude: SignalMagnitude
     derivation_type: Literal["OBSERVED", "DERIVED"]
@@ -128,10 +128,10 @@ class SignalProposal(BaseModel):
     expected_end_earliest: datetime | None = None
     expected_end_latest: datetime | None = None
     horizon_tags: list[Literal["SHORT", "MEDIUM", "LONG"]] = Field(min_length=1)
-    mechanism: str = Field(min_length=1, max_length=2000)
-    duration_basis: str = Field(min_length=1, max_length=1000)
-    assumptions: list[str] = Field(max_length=12)
-    invalidation_conditions: list[str] = Field(min_length=1, max_length=12)
+    mechanism: str
+    duration_basis: str
+    assumptions: list[str]
+    invalidation_conditions: list[str]
     provenance_confidence: ConfidenceLevel
     mechanism_confidence: ConfidenceLevel
     temporal_confidence: ConfidenceLevel
@@ -188,10 +188,10 @@ class SignalFactAttributes(BaseModel):
     expected_end_earliest: datetime | None = None
     expected_end_latest: datetime | None = None
     horizon_tags: list[Literal["SHORT", "MEDIUM", "LONG"]] = Field(min_length=1)
-    mechanism: str = Field(min_length=1, max_length=2000)
-    duration_basis: str = Field(min_length=1, max_length=1000)
-    assumptions: list[str] = Field(max_length=12)
-    invalidation_conditions: list[str] = Field(min_length=1, max_length=12)
+    mechanism: str
+    duration_basis: str
+    assumptions: list[str]
+    invalidation_conditions: list[str]
     provenance_confidence: ConfidenceLevel
     mechanism_confidence: ConfidenceLevel
     temporal_confidence: ConfidenceLevel
@@ -209,16 +209,16 @@ class SignalDetailDraft(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    fact: str = Field(min_length=1, max_length=1000)
+    fact: str
     direction: SignalDirection
     magnitude: SignalMagnitude
     impact_onset_days: int = Field(ge=0)
     impact_peak_days: int = Field(ge=0)
     expected_duration_days: int = Field(ge=1)
-    mechanism: str = Field(min_length=1, max_length=2000)
-    duration_basis: str = Field(min_length=1, max_length=1000)
-    assumptions: list[str] = Field(max_length=4)
-    invalidation_conditions: list[str] = Field(min_length=1, max_length=4)
+    mechanism: str
+    duration_basis: str
+    assumptions: list[str]
+    invalidation_conditions: list[str]
     provenance_confidence: ConfidenceLevel
     mechanism_confidence: ConfidenceLevel
     temporal_confidence: ConfidenceLevel

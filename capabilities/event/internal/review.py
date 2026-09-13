@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sematica.analysis.event.contracts import (
     AnchorCandidate,
@@ -55,9 +55,7 @@ class ControlledSignalReviewer:
                 anchor.entity_type in variable.allowed_anchor_types,
                 proposal.valid_at == reference_time,
                 onset >= event_time,
-                onset <= event_time + timedelta(days=1095),
                 proposal.invalid_at is None,
                 proposal.assertion_modality == expected_modality,
-                latest_end <= onset + timedelta(days=1095),
             )
         )
