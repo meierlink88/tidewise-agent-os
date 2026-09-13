@@ -7,8 +7,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from capabilities.evidence import EvidenceMetric
-
 EventStage = Literal[
     "OCCURRED",
     "ANNOUNCED",
@@ -45,7 +43,19 @@ def event_time_anchor(value: EventTimeDTO) -> datetime | None:
     return value.occurred_at or value.announced_at or value.effective_at or value.observed_at
 
 
-def _metric_key(metric: EvidenceMetric) -> tuple[str, str, str, str, str]:
+class EventMetricDTO(BaseModel):
+    """Model-authored metric text; Evidence ingestion has its own contract."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    value: str | None
+    unit: str | None
+    change: str | None
+    period: str | None
+
+
+def _metric_key(metric: EventMetricDTO) -> tuple[str, str, str, str, str]:
     return (
         metric.name,
         metric.value or "",
@@ -58,63 +68,29 @@ def _metric_key(metric: EvidenceMetric) -> tuple[str, str, str, str, str]:
 class EventSemanticDTO(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    actors: list[str] = Field(min_length=1)
-    action: str = Field(min_length=1)
-    objects: list[str] = Field(min_length=1)
+    actors: list[str]
+    action: str
+    objects: list[str]
     stage: EventStage
     modality: Literal["FACT", "PLAN", "SPEC"]
     time: EventTimeDTO
     jurisdictions: list[str]
-    reason: str | None = Field(max_length=500)
-    method: str | None = Field(max_length=500)
-    metrics: list[EvidenceMetric]
-
-    @field_validator("actors", "objects", "jurisdictions")
-    @classmethod
-    def identity_terms_are_nonblank_and_unique(cls, values: list[str]) -> list[str]:
-        normalized = [value.strip() for value in values]
-        if any(not value for value in normalized) or len(set(normalized)) != len(normalized):
-            raise ValueError("semantic identity terms must be nonblank and unique")
-        return normalized
-
-    @field_validator("action")
-    @classmethod
-    def action_is_nonblank(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("action must not be blank")
-        return value
-
-    @field_validator("reason", "method")
-    @classmethod
-    def support_text_is_nonblank(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        value = value.strip()
-        if not value:
-            raise ValueError("reason and method must be nonblank or null")
-        return value
+    reason: str | None
+    method: str | None
+    metrics: list[EventMetricDTO]
 
     @field_validator("metrics")
     @classmethod
-    def metrics_are_deterministically_unique(cls, values: list[EvidenceMetric]) -> list[EvidenceMetric]:
+    def metrics_are_deterministically_unique(cls, values: list[EventMetricDTO]) -> list[EventMetricDTO]:
         return sorted({_metric_key(metric): metric for metric in values}.values(), key=_metric_key)
 
 
 class EventCandidateDTO(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    title: str = Field(min_length=1, max_length=200)
-    summary: str = Field(min_length=1)
+    title: str
+    summary: str
     semantic: EventSemanticDTO
-
-    @field_validator("title", "summary")
-    @classmethod
-    def narrative_text_is_nonblank(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("Event title and summary must not be blank")
-        return value
 
 
 class EventCandidateRequest(BaseModel):

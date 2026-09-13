@@ -68,14 +68,14 @@ class AssociationMatch(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     uuid: str = Field(min_length=1)
-    reason: str = Field(min_length=1, max_length=1000)
+    reason: str
 
 
 class AssociationDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     matches: list[AssociationMatch] = Field(max_length=64)
-    no_match_reason: str | None = Field(default=None, min_length=1, max_length=1000)
+    no_match_reason: str | None = None
 
     @model_validator(mode="after")
     def require_unambiguous_result(self):
@@ -88,7 +88,7 @@ class SignalDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     proposals: list[DirectSignalDraft] = Field(max_length=30)
-    no_signal_reason: str | None = Field(default=None, min_length=1, max_length=1000)
+    no_signal_reason: str | None = None
 
 
 class StorylineCandidateState(BaseModel):
