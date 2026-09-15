@@ -96,3 +96,6 @@ manifest:
     description: "检查 Tidewise AgentOS 的数据库、MCP、组件和调度配置。"
     quick_prompts:
       - "运行部署检查"
+
+  storyline-research-query:
+    description: "只读 MCP：query_story_events 按故事线和上海日期读取新增 Event 及变量信号；get_story_evidence 回查证据。不建立快照或扩展历史。"
