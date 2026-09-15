@@ -99,6 +99,12 @@ from capabilities.evidence.functions import (
     prepare_evidence,
     publish_evidence,
 )
+from capabilities.geopolitical_research import ResearchPlan, ResearchReceipt, ResearchRequest, ResearchStory
+from capabilities.geopolitical_research.functions import (
+    geopolitical_research_complete,
+    research_next_geopolitical_story,
+    select_geopolitical_stories,
+)
 from capabilities.investment import (
     AcceptedCrossLayerTransmission,
     AnalysisDraft,
@@ -196,6 +202,10 @@ registry = TidewiseRegistry(
     models=[default_model(), sol_low_model()],
     dbs=[get_postgres_db()],
     schemas=[
+        ResearchPlan,
+        ResearchReceipt,
+        ResearchRequest,
+        ResearchStory,
         BatchAssociationDecision,
         BatchIdentityDecision,
         BatchSignalDecision,
@@ -252,6 +262,9 @@ registry = TidewiseRegistry(
         InvestmentReportWorkflowOutput,
     ],
     functions=[
+        select_geopolitical_stories,
+        research_next_geopolitical_story,
+        geopolitical_research_complete,
         *BATCH_FUNCTIONS,
         *STORYLINE_FUNCTIONS,
         *LINEAR_EVENT_FUNCTIONS,

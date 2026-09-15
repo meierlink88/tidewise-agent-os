@@ -23,7 +23,7 @@ CI 保留格式、lint、类型、镜像构建和部署配置检查，不再运�
 - Workflow：`raw-collection`，由 Agno Studio/PostgreSQL 管理编排版本，执行文章版本去重、逐篇审阅提取、Evidence 去重和逐篇发布。
 - Workflow：`evidence-extraction`，保留为历史维护入口，不再默认独立调度。
 - Workflow：`event-extraction`，冻结本地 Evidence，发布去重后 Event，投影 Graphiti 并构建 Signal Fact。
-- Workflow：`investment-reasoning`，由 Schedule 命题直接触发，按地缘政治→宏观经济→产业链及节点逐层推导，仅从有效 Signal 根形成方向结论；生成固定报告后由独立幂等发布 Step 交付，当前本地默认使用文件 Mock Publisher。
+- Workflow：`investment-reasoning` 显示为「地缘冲突研究」，筛选近24小时新增Event关联的地缘政治故事线，逐条调用 Tidewise Research 的地缘冲突团队并保存完整报告，不在此工作流发布 Data Service。配置与恢复边界见 [设计说明](docs/design/geopolitical-conflict-research-workflow.md)。
 - Projection CLI：`sematica.projection.company_cli`，从 Data API 投影 canonical Company，并只对图中已有 Industry/ChainNode 做可恢复的受限模型映射；写入禁止使用 Graphiti Episode。
 - API/MCP：`http://localhost:8000`、`http://localhost:8000/mcp`。
 
