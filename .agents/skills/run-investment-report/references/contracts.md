@@ -6,7 +6,7 @@
 
 ## 暂未由本次改造解决的Provider约束
 
-Data的validateUnifiedAssessment仍调用validateAssessmentState，推理判断要求confidence、非not_applicable的forecast_window、conditions、follow_up和Evidence。地缘产品规则不要求置信度，预测期可缺省，不强制每资产Evidence。它们不是模型提炼错误，而是Data合同仍需适配。当前工作流会在Go验证处blocked，禁止补默认置信度、伪造时间、将整批Evidence复制进每项资产或降级observation_only绕过。
+地缘政治 assessment 的 confidence、forecast_window、follow_up 允许为空；宏观/产业现有约束不变。故事线 Evidence 必须由 Codex 按本批 story→Event→Evidence 关联组装到 summary.evidence_ids；来源审计留外部不代表发布数据可省略。通过绑定脚本校验分页、窗口、冻结 Event 和真实 Evidence 后再 pack，发布后沿 summary scope token 分页核对。部署版本仍须实查，不能用填默认值绕过旧校验。
 
 本次仅编排Codex工作流，不修改Data/Miniapp/Research/AgentOS运行时。要使符合现有地缘规则的数据实际发布，需后续由Data owner调整对应校验与API可空合同并部署。Macro/industry已有置信度与Evidence要求保持，不能为地缘的缺省规则全局关闭。
 

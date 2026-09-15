@@ -18,6 +18,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from bind_story_evidence import bind
+
 VERSION = "codex-investment-workflow/v1"
 WIRE = "report-publication/v6"
 LANES = {
@@ -418,7 +420,7 @@ def review_bound(path, file_path):
     return review
 
 
-def lane_pack(root, state, lane, report_path, review_path):
+def lane_pack(root, state, lane, report_path, review_path, evidence_pages=None):
     require(lane not in state["lanes"], "lane_already_frozen_new_batch_required_for_revision")
     research_complete(root, state)
     if lane != "geopolitics":
@@ -437,8 +439,23 @@ def lane_pack(root, state, lane, report_path, review_path):
             keys.add(unit["local_key"])
     if lane == "geopolitics":
         require(
+            all(u["summary"].get("evidence_ids") for u in report["geopolitical_stories"]),
+            "geopolitical_story_evidence_required",
+        )
+        require(
             {u["source_id"] for u in report["geopolitical_stories"]} == {s["story_id"] for s in chosen(root, state)},
             "selected_story_package_coverage",
+        )
+    if lane == "geopolitics" and report["geopolitical_stories"]:
+        require(evidence_pages is not None, "geopolitical_evidence_pages_required")
+        page_paths = sorted(Path(evidence_pages).glob("*.json"))
+        checked, mapping = bind(report, [read(p) for p in page_paths], artifact(root, state["snapshot"]))
+        require(checked == report, "geopolitical_evidence_binding_mismatch")
+        for page in page_paths:
+            archive(root, "lanes/geopolitics/evidence-pages/" + page.name, page)
+        write(
+            root / "lanes/geopolitics/evidence-binding.json",
+            {"report_sha256": sha(Path(report_path).read_bytes()), "stories": mapping},
         )
     review_bound(review_path, report_path)
     ref = archive(root, "lanes/" + lane + "/report.json", report_path)
@@ -666,6 +683,7 @@ def main():
     p.add_argument("--lane", choices=LANES, required=True)
     p.add_argument("--report", required=True)
     p.add_argument("--review", required=True)
+    p.add_argument("--evidence-pages", help="Complete story-events/v1 pages; required for nonempty geopolitical lane")
     commands.add_parser("assemble")
     commands.add_parser("status")
     p = commands.add_parser("validate")
@@ -687,7 +705,7 @@ def main():
                 elif args.command.startswith("research-"):
                     research(args.run, state, args.story_id, args.command == "research-poll")
                 elif args.command == "pack":
-                    lane_pack(args.run, state, args.lane, args.report, args.review)
+                    lane_pack(args.run, state, args.lane, args.report, args.review, args.evidence_pages)
                 elif args.command == "assemble":
                     assemble(args.run, state)
                 elif args.command == "validate":
