@@ -1,0 +1,4 @@
+interface:
+  display_name: "宏观经济与产业链分析"
+  short_description: "从冻结原始事件与事实信号独立完成宏观经济和产业链基本面分析"
+  default_prompt: "使用 $analyze-macro-industry 分析明确范围内的宏观经济和产业链原始数据。"

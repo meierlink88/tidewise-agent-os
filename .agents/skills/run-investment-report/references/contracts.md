@@ -1,0 +1,21 @@
+# 当前合同差异与所有权
+
+2026-09-15核对：Data仓库670729c7正式v6；旧reason-investment-report内部原件v6-draft，旧发布v5；compose当前只有展示渲染脚本，content.json不是发布请求。宏观/产业Skill现已改名analyze-macro-industry，发布出口通过显式投影统一v6。三层的正式发布单元都用detail.reasonings、affected_assets及reasoning_local_key引用；产业层仍包含concept_analyses与industry_chain_analyses两类数组。因此“3份包”对应4类数组，不是三份报告各发一次。
+
+阶段3的地缘展示模型要由Codex完成语义到v6字段编排；阶段5的宏观/产业旧内部字段由官方转换器做可追溯结构投影。两步完成后，阶段6只装配、不做版本兼容。不能声称当前原始产物拿来就能直接拼接。
+
+## 暂未由本次改造解决的Provider约束
+
+地缘政治 assessment 的 confidence、forecast_window、follow_up 允许为空；宏观/产业现有约束不变。故事线 Evidence 必须由 Codex 按本批 story→Event→Evidence 关联组装到 summary.evidence_ids；来源审计留外部不代表发布数据可省略。通过绑定脚本校验分页、窗口、冻结 Event 和真实 Evidence 后再 pack，发布后沿 summary scope token 分页核对。部署版本仍须实查，不能用填默认值绕过旧校验。
+
+本次仅编排Codex工作流，不修改Data/Miniapp/Research/AgentOS运行时。要使符合现有地缘规则的数据实际发布，需后续由Data owner调整对应校验与API可空合同并部署。Macro/industry已有置信度与Evidence要求保持，不能为地缘的缺省规则全局关闭。
+
+Research创建API未提供服务端idempotency key。客户端可防止已知run重复POST，但无法使“服务器已创建、客户端未持久化ID”的区间变成严格exactly-once。故unknown停止核实，不猜latest。内部同窗口工具查询也不等于读取主Codex的冻结snapshot；要事务快照一致需要未来Provider新增snapshot输入合同，本工作流不宣称支持。
+
+现有report-publications回执只含report_id、published_at、replayed。官方离线Go校验输出content_hash；它不是服务回执字段。验证/回执/HTTP成功/全部读回分开记录。
+
+## 可脚本化与保留Codex判断
+
+固定脚本：半开窗口、身份与去重、覆盖清单校验、阶段屏障、确切run恢复、源文/产物哈希、正式v6投影、引用闭包、纯合并、Go调用、同包发布、分页读回归档及数量。
+
+Codex判断：Event与故事线相关性、是否值得研究、Research正文质量、宏观及产业基本面推理、数值冲突选择、资产概念同义与范围、语义到字段映射、投影语义与Evidence内容对照。脚本不能用关键词命中或review.status代替这些工作。

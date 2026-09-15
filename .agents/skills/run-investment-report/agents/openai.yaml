@@ -1,0 +1,4 @@
+interface:
+  display_name: "完整投研报告工作流"
+  short_description: "由 Codex 编排地缘研究、宏观产业分析与统一数据包发布验收"
+  default_prompt: "使用 $run-investment-report 编排一次明确环境与窗口的完整投研报告任务。"
