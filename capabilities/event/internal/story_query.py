@@ -19,9 +19,29 @@ WHERE e.episode_kind='EVENT' AND e.created_at >= datetime($start)
 """
 
 
-def query_window(story_id: str, research_date: str) -> dict[str, str]:
+def query_window(
+    story_id: str, research_date: str = "", event_window_start: str = "", event_window_end: str = ""
+) -> dict[str, str]:
     if not story_id.startswith("GPR") or len(story_id) > 100:
         raise ValueError("story_id must be an authoritative GPR business ID")
+    if event_window_start or event_window_end:
+        if research_date or not event_window_start or not event_window_end:
+            raise ValueError("Supply either research_date or both event_window_start/end")
+        start = datetime.fromisoformat(event_window_start.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(event_window_end.replace("Z", "+00:00"))
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("Event window timestamps must include a timezone")
+        start, end = start.astimezone(UTC), end.astimezone(UTC)
+        if start >= end or end > datetime.now(UTC):
+            raise ValueError("Event window must be ordered and end no later than now")
+        return {
+            "story_id": story_id,
+            "research_date": "",
+            "timezone": "UTC",
+            "selection_time_field": "created_at",
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+        }
     day = date.fromisoformat(research_date)
     if day.isoformat() != research_date or day > datetime.now(ZoneInfo("Asia/Shanghai")).date():
         raise ValueError("research_date must be YYYY-MM-DD and not in the future")
@@ -45,8 +65,10 @@ def _read(query: str, params: dict[str, Any]) -> list[dict[str, Any]]:
     return json.loads(json.dumps(rows, default=str))
 
 
-def _params(story_id: str, research_date: str) -> dict[str, Any]:
-    return {**query_window(story_id, research_date), "group": GRAPHITI_GROUP_ID}
+def _params(
+    story_id: str, research_date: str, event_window_start: str = "", event_window_end: str = ""
+) -> dict[str, Any]:
+    return {**query_window(story_id, research_date, event_window_start, event_window_end), "group": GRAPHITI_GROUP_ID}
 
 
 def _story(params: dict[str, Any]) -> dict[str, Any]:
@@ -112,10 +134,18 @@ def _provenance(event_ids: set[str]) -> tuple[dict[str, Any], dict[str, Any]]:
     return refs, evidence
 
 
-def query_events(story_id: str, research_date: str, after_event_id: str = "", limit: int = 100) -> dict[str, Any]:
+def query_events(
+    story_id: str,
+    research_date: str = "",
+    after_event_id: str = "",
+    limit: int = 100,
+    *,
+    event_window_start: str = "",
+    event_window_end: str = "",
+) -> dict[str, Any]:
     if isinstance(limit, bool) or not 1 <= limit <= 100:
         raise ValueError("limit must be between 1 and 100")
-    params = _params(story_id, research_date)
+    params = _params(story_id, research_date, event_window_start, event_window_end)
     story = _story(params)
     counts = _read(MATCH_EVENTS + " RETURN count(DISTINCT e) AS total", params)
     rows = _read(
@@ -127,7 +157,7 @@ def query_events(story_id: str, research_date: str, after_event_id: str = "", li
     selected = rows[:limit]
     ids = {row["event"]["domain_object_id"] for row in selected}
     refs, _ = _provenance(ids) if ids else ({}, {})
-    # Source closure is tested against the entire current day/story set, not just this page.
+    # Source closure is tested against the entire current window/story set, not just this page.
     all_ids = {r["id"] for r in _read(MATCH_EVENTS + " RETURN DISTINCT e.domain_object_id AS id", params)}
     signals = (
         _read(
@@ -163,7 +193,7 @@ def query_events(story_id: str, research_date: str, after_event_id: str = "", li
         )
     result = {
         "schema_version": "story-events/v1",
-        "query": query_window(story_id, research_date),
+        "query": query_window(story_id, research_date, event_window_start, event_window_end),
         "retrieved_at": datetime.now(UTC).isoformat(),
         "consistency": "live_not_snapshot",
         "storyline": story,
@@ -192,14 +222,22 @@ def fit_event_page(result: dict[str, Any], budget: int = 28_000) -> dict[str, An
     return result
 
 
-def query_evidence(story_id: str, research_date: str, event_id: str, evidence_id: str) -> dict[str, Any]:
-    params = _params(story_id, research_date)
+def query_evidence(
+    story_id: str,
+    research_date: str = "",
+    event_id: str = "",
+    evidence_id: str = "",
+    *,
+    event_window_start: str = "",
+    event_window_end: str = "",
+) -> dict[str, Any]:
+    params = _params(story_id, research_date, event_window_start, event_window_end)
     rows = _read(
         MATCH_EVENTS + " AND e.domain_object_id=$event_id RETURN DISTINCT e.domain_object_id AS id",
         {**params, "event_id": event_id},
     )
     if len(rows) != 1:
-        raise ValueError("Event is outside the requested storyline/day")
+        raise ValueError("Event is outside the requested storyline/window")
     refs, evidence = _provenance({event_id})
     if evidence_id not in refs[event_id]["evidence_ids"] or evidence_id not in evidence:
         raise ValueError("Evidence is missing or is not linked to this Event")

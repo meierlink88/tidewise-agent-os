@@ -7,7 +7,7 @@ Tidewise Research 的 `geopolitical_war_room` 负责原有四角色研究和首�
 本 Workflow 不再执行原七阶段投研推理或 Data Service 发布；外部 Codex 后续按明确的
 Research run ID 获取全文，完成提取和发布。旧 Investment 能力和 Studio 历史版本保留。
 
-Workflow ID 仍为 `investment-reasoning`，显示名称改为 **地缘冲突研究**，合同版本由 12 升到 13。
+Workflow ID 仍为 `investment-reasoning`，显示名称改为 **地缘冲突研究**，合同版本由 13 升到 14。
 这保留 `/workflows/investment-reasoning/runs`、既有 Schedule endpoint 和历史审计身份。
 代码迁移发布新 Studio 版本一次；相同版本重启只校验并加载，不反复发布。
 
@@ -35,27 +35,22 @@ Workflow ID 仍为 `investment-reasoning`，显示名称改为 **地缘冲突研
 `market` 默认为 A股市场。原 Schedule 自然语言或 `question/event_window_hours/include_company`
 旧 envelope 仍接受，但这些旧控制项不改变固定 24 小时行为。未知字段拒绝。
 
-Research 现有可选 `story_id + research_date` MCP 查询按自然日取数，无法准确表达滚动 24 小时。
-本版本把完整故事线、全部命中 Event 内容及首尾时间嵌入 `user_vars.crisis`，因此四个原有角色
-通过既有 crisis 模板获得输入；`story_id` 仍是真实 GPR ID，`research_date` 留空以跳过不匹配的
-自然日 MCP 查询。另保存 `event_window_start/end` 和 `agentos_workflow_run_id` 供精确核对。
-不修改 Research 的提示词、Skills、工具或 DAG；外部来源研究仍由原团队负责。
-本次冻结输入只有 Event，不宣称包含完整 Variable Signal/Evidence 链；未来如需其完整闭包，
-应扩展独立的滚动窗口/快照查询合同，不伪造一个自然日或在后台重新运行研究。
+AgentOS固定滚动窗口并保存选择plan，但对外只传故事线名称、真实ID和窗口元数据。
+Research按这些参数使用工具自行查询Event与关联Signal，不使用嵌入crisis的数据包。
+查询沿用Signal来源闭包检查及完整Event分页，不伪造自然日，也不宣称是不可变数据快照。
 
-## Research HTTP 合同
+## Research API 交接
 
-配置 `TIDEWISE_RESEARCH_BASE_URL` 为 AgentOS 可达的 Research HTTP origin，
-`TIDEWISE_RESEARCH_API_KEY` 经 `Authorization: Bearer ...` 发送（不写入报告或日志）。
-不跟随重定向。Research 端需要可用模型/研究工具，并按自己的部署合同启用
-`VIBE_TRADING_ENABLE_SHELL_TOOLS=true`，因为现有研究团队依赖 bash/文件工具。
+POST /swarm/runs 使用 preset_name=geopolitical_war_room，user_vars 中 crisis 仅为故事线名称。
+传入真实 story_id、market、event_window_start/end、agentos_workflow_run_id；research_date 留空。
+不发送 Event 或 Signal 正文。Research 角色使用 AgentOS MCP 工具按同一半开窗口查询
+Event.created_at 和关联 variable_signals，并按需读取 Evidence，保持原角色、方法和报告结构。
+两工具同时支持旧 research_date 自然日模式，但拒绝混用、缺半边、无时区、倒序或未来窗口。
+配置 Research 的 VIBE_TRADING_SWARM_AGENT_CONFIG，以 agentos 为 MCP server key。
+工具必须在运行前注册可用，不能把“生成了报告”当成“成功查询了 Event/Signal”。
 
-- `POST /swarm/runs`：`{"preset_name":"geopolitical_war_room","user_vars":{...}}`。
-  返回 `id/status/preset_name`；仅调用一次，不对 POST 自动重试。
-- `GET /swarm/runs/{id}`：核对 id、preset、完整传入 user_vars，检查状态。
-  仅 completed 且非空 final_report 允许存为报告。failed/cancelled 有独立结果。
-- final_report 是 Markdown 字符串，不是 Data Service 发布 DTO；原样编码 UTF-8 存储，
-  不裁剪、摘要或 strip，保留末尾空白及 CRLF。收据记录 SHA-256 与字节数。
+GET /swarm/runs/{run_id} 按准确 run ID 与原 user_vars 校验；完成后归档完整 final_report，
+记录 SHA256 与字节数。查询为 live_not_snapshot，冻结窗口不保证数据内容不再变化。
 
 默认每 5 秒 GET 一次，每条最多等待 7,200 秒；HTTP 单次超时 30 秒。
 分别由 `TIDEWISE_RESEARCH_POLL_SECONDS`、`TIDEWISE_RESEARCH_WAIT_SECONDS` 配置。
@@ -73,8 +68,8 @@ jobs/<input_hash>/receipt.json      # origin、完整请求、远端run ID、状
 jobs/<input_hash>/report.md         # API final_report 的完整UTF-8内容
 ```
 
-job identity 由合同版本、preset、market、故事线和排序后的完整 Event 集合生成。
-重叠 Schedule 窗口命中相同输入复用同一报告；Event 集合或内容变化产生新 job。
+job identity 由交接合同v2、preset、market、窗口边界、故事线和排序后的完整 Event 集合生成。
+相同窗口和输入可复用；窗口或Event内容变化产生新job，避免复用v1未查询Signal的报告。
 返回原收据的 source_workflow_run_id，不能把旧报告伪装成本次新研究。
 本地非阻塞文件锁覆盖单 run 和单 job。并发命中同一 job 时记 `research_busy`，不二次提交。
 此保证要求所有实例共享支持 flock 的同一持久化目录；不声称支持独立磁盘多副本。
@@ -102,7 +97,7 @@ Agno 的 completed 只表示编排执行完毕，消费者必须同时检查业�
 
 本 PR 不部署环境、不启动真实付费研究、不操作 Data Service 发布。
 回滚使用旧代码及原 published Workflow 版本；不要删除研究收据或历史报告。
-若运行新代码启动，版本合同会再次迁移到13，故回滚需要同时回滚代码。
+若运行新代码启动，版本合同会再次迁移到14，故回滚需要同时回滚代码。
 
 ## 验证
 

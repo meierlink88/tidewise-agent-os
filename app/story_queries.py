@@ -17,24 +17,44 @@ def _invoke(fn, request: Request, **kwargs):
 
 
 @router.get("")
-def events(request: Request, story_id: str, research_date: str, after_event_id: str = "", limit: int = 100):
+def events(
+    request: Request,
+    story_id: str,
+    research_date: str = "",
+    after_event_id: str = "",
+    limit: int = 100,
+    event_window_start: str = "",
+    event_window_end: str = "",
+):
     return _invoke(
         query_story_events,
         request,
         story_id=story_id,
         research_date=research_date,
+        event_window_start=event_window_start,
+        event_window_end=event_window_end,
         after_event_id=after_event_id,
         limit=limit,
     )
 
 
 @router.get("/evidence")
-def evidence(request: Request, story_id: str, research_date: str, event_id: str, evidence_id: str):
+def evidence(
+    request: Request,
+    story_id: str,
+    event_id: str,
+    evidence_id: str,
+    research_date: str = "",
+    event_window_start: str = "",
+    event_window_end: str = "",
+):
     return _invoke(
         get_story_evidence,
         request,
         story_id=story_id,
         research_date=research_date,
+        event_window_start=event_window_start,
+        event_window_end=event_window_end,
         event_id=event_id,
         evidence_id=evidence_id,
     )
