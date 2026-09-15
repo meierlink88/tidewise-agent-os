@@ -129,15 +129,18 @@ class SelectionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             request({"cutoff_at": "2026-09-15T07:30:00"})
 
-    def test_full_event_context_crosses_midnight_and_job_identity_ignores_schedule_run(self):
+    def test_name_only_scope_crosses_midnight_and_job_identity_ignores_run_id(self):
         p = plan()
         variables = user_variables(p, p.stories[0])
-        self.assertIn(START.isoformat(), variables["crisis"])
-        self.assertIn(END.isoformat(), variables["crisis"])
-        self.assertIn("EVT-0", variables["crisis"])
+        self.assertEqual(START.isoformat(), variables["event_window_start"])
+        self.assertEqual(END.isoformat(), variables["event_window_end"])
+        self.assertEqual(p.stories[0].name, variables["crisis"])
+        self.assertNotIn("EVT-0", json.dumps(variables))
         self.assertEqual(variables["research_date"], "")
-        other = p.model_copy(update={"workflow_run_id": "next-run", "cutoff_at": END + timedelta(minutes=1)})
+        other = p.model_copy(update={"workflow_run_id": "next-run"})
         self.assertEqual(job_key(p, p.stories[0]), job_key(other, other.stories[0]))
+        shifted = p.model_copy(update={"cutoff_at": END + timedelta(minutes=1)})
+        self.assertNotEqual(job_key(p, p.stories[0]), job_key(shifted, shifted.stories[0]))
         added = ResearchStory.model_validate({**p.stories[0].model_dump(), "events": [{"id": "EVT-new"}]})
         self.assertNotEqual(job_key(p, p.stories[0]), job_key(p, added))
 

@@ -40,6 +40,48 @@ class StoryQueryTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 q.query_window(STORY, value)
 
+    def test_explicit_window_and_invalid_scopes(self):
+        w = q.query_window(
+            STORY, event_window_start="2026-09-11T15:00:00Z", event_window_end="2026-09-12T23:00:00+08:00"
+        )
+        self.assertEqual(w["start"], "2026-09-11T15:00:00+00:00")
+        self.assertEqual(w["end"], "2026-09-12T15:00:00+00:00")
+        for day, start, end in [
+            (DAY, w["start"], w["end"]),
+            ("", w["start"], ""),
+            ("", "", w["end"]),
+            ("", "2026-09-11T15:00:00", w["end"]),
+            ("", w["end"], w["start"]),
+            ("", w["start"], w["start"]),
+            ("", w["start"], "2999-01-01T00:00:00Z"),
+        ]:
+            with self.subTest(start=start, end=end), self.assertRaises(ValueError):
+                q.query_window(STORY, day, start, end)
+
+    def test_window_rest_passes_scope_and_rejects_invalid_window(self):
+        app = FastAPI()
+        app.include_router(router)
+        scope = {
+            "story_id": STORY,
+            "event_window_start": "2026-09-11T15:00:00Z",
+            "event_window_end": "2026-09-12T15:00:00Z",
+        }
+        with TestClient(app) as client, patch.dict(os.environ, {"RUNTIME_ENV": "dev"}):
+            with patch("capabilities.event.tools.story_query.query_events", return_value={"events": []}) as query:
+                self.assertEqual(client.get("/research/story-events", params=scope).status_code, 200)
+                self.assertEqual(query.call_args.kwargs["event_window_start"], scope["event_window_start"])
+            self.assertEqual(
+                client.get("/research/story-events", params={**scope, "research_date": DAY}).status_code, 422
+            )
+            with patch.object(q, "_read", return_value=[]) as read:
+                self.assertEqual(
+                    client.get(
+                        "/research/story-events/evidence", params={**scope, "event_id": "E1", "evidence_id": "V1"}
+                    ).status_code,
+                    422,
+                )
+                self.assertEqual(read.call_args.args[1]["end"], "2026-09-12T15:00:00+00:00")
+
     def test_keyset_pages_and_cross_page_signal_closure(self):
         signal = {"signal": {"uuid": "S1", "fact": "supported", "source_event_ids": ["E1", "E2"]}}
         reads = [
@@ -218,6 +260,15 @@ class StoryQueryTests(unittest.TestCase):
                     patch("capabilities.event.tools.story_query.query_events", return_value={"events": [], "total": 0}),
                 ):
                     result = await client.call_tool("query_story_events", {"story_id": STORY, "research_date": DAY})
+                    self.assertFalse(result.is_error)
+                    result = await client.call_tool(
+                        "query_story_events",
+                        {
+                            "story_id": STORY,
+                            "event_window_start": "2026-09-11T15:00:00Z",
+                            "event_window_end": "2026-09-12T15:00:00Z",
+                        },
+                    )
                     self.assertFalse(result.is_error)
 
         asyncio.run(run())

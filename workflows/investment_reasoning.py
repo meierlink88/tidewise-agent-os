@@ -13,7 +13,7 @@ from capabilities.geopolitical_research.functions import (
 from db import get_postgres_db
 
 INVESTMENT_REASONING_WORKFLOW_ID = "investment-reasoning"
-INVESTMENT_REASONING_CONTRACT_VERSION = 13
+INVESTMENT_REASONING_CONTRACT_VERSION = 14
 RETIRED_INVESTMENT_PLANNER_AGENT_ID = "investment-planner"
 INVESTMENT_REASONING_DESCRIPTION = (
     "筛选最近24小时新增Event关联的地缘政治故事线，逐条调用Tidewise Research地缘冲突团队，"
