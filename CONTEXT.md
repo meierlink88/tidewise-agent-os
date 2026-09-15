@@ -98,10 +98,20 @@ The auditable record that one reasoning stage executed its required Graphiti ret
 and completed actions, bounded queries, and retrieved Event, anchor, Fact and direct Signal identifiers. Finalization
 validates this execution contract and verifies that output references stay inside the retrieved context.
 
-### Investment Conclusion Artifact
+### Geopolitical Research Job
 
-One immutable, durable product result emitted after an `investment-reasoning` Workflow run has completed its required
-retrieval actions and passed output-schema and reference-boundary validation. Reviewer findings about weak individual
+One AgentOS-owned dispatch for an authoritative GeopoliticRivalry and a frozen set of new Events.
+The current `investment-reasoning` Workflow selects on Event.created_at in a fixed rolling 24-hour
+window and delegates one story to the external Tidewise Research geopolitical_war_room.
+The durable receipt binds input, remote origin/run ID and an exact UTF-8 report snapshot/hash.
+A Research Report is an unmodified external research result, not a Data Service publication DTO.
+Publication/extraction belongs to the subsequent external consumer. See
+docs/design/geopolitical-conflict-research-workflow.md for failure and idempotency boundaries.
+
+### Investment Conclusion Artifact (historical layered workflow)
+
+One immutable, durable product result emitted by the historical layered `investment-reasoning` Workflow after completing required
+retrieval actions and passing output-schema and reference-boundary validation. Reviewer findings about weak individual
 hypotheses remain semantic audit notes and do not erase unrelated direct-Signal assessments. The Artifact contains the
 proposition, final conclusion, layered and node-level assessments, support lineage, risks, limitations, and a context
 fingerprint. Its identity is the Agno `workflow_run_id`; an identical retry is allowed, while conflicting content must

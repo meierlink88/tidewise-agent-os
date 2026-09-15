@@ -88,9 +88,9 @@ manifest:
       - "处理所有已发布且尚未提炼 Event 的 Evidence"
 
   investment-reasoning:
-    description: "Schedule 直达的七阶段投研推理：冻结上下文，逐层分析并审核，生成报告后通过幂等发布适配器发布。"
+    description: "地缘冲突研究：筛选最近24小时新增Event关联故事线，逐条调用Tidewise Research并保存最终报告。"
     quick_prompts:
-      - "获取最近48小时全部Event，分析对相关产业链所有节点的投资价值变化。"
+      - "筛选最近24小时新增事件关联的地缘政治故事线，逐条研究并产出报告。"
 
   deployment-check:
     description: "检查 Tidewise AgentOS 的数据库、MCP、组件和调度配置。"

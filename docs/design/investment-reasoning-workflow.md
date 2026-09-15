@@ -1,4 +1,7 @@
-# Investment Reasoning Workflow
+# Investment Reasoning Workflow（历史 v12）
+
+当前 v13 已替换为[地缘冲突研究](geopolitical-conflict-research-workflow.md)。
+下述七阶段合同仅供历史版本审计与回滚，不是当前默认编排。
 
 ## 目标
 

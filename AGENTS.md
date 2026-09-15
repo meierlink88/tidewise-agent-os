@@ -22,7 +22,7 @@ AgentOS (app/main.py)
 ├── Raw Collection     (Agno Studio/PostgreSQL component; seeded by workflows/raw_collection.py)
 ├── Evidence Extraction (historical maintenance; no default Schedule; workflows/evidence_extraction.py)
 ├── Event Extraction    (Agno Studio/PostgreSQL component; seeded by workflows/event_extraction.py)
-└── Investment Reasoning (Agno Studio/PostgreSQL component; seeded by workflows/investment_reasoning.py)
+└── 地缘冲突研究 (ID investment-reasoning; Studio component seeded by workflows/investment_reasoning.py)
 ```
 
 共享能力：
@@ -35,10 +35,12 @@ AgentOS (app/main.py)
 - `capabilities/collection/`：Collection 领域能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
 - `capabilities/evidence/`：Evidence 领域能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
 - `capabilities/event/`：Event Candidate 提炼、去重、发布与 Signal 构建能力，仅以 `tools/`、`functions/`、`internal/` 三类目录组织。
+- `capabilities/geopolitical_research/`：近24小时Event故事线筛选、外部Research调用及报告快照。
 - `capabilities/investment/`：投研推理合同、Signal 根门禁、传导、结论综合与 Workflow Function。
 - `sematica/`：AgentOS 内部 Graphiti 适配层，承载 Graphiti、Ontology、Event 投影和图检索扩展；投研业务规则必须放在 `capabilities/investment/`。它不是独立服务，不得自行启动第二个 HTTP 进程。
 - `data/collector/`：本地原始采集 Artifact；目录受 Git 忽略。
 - `data/evidence/`、`data/event/`：本地 Evidence 与 Event 提炼 Artifact；目录受 Git 忽略。
+- `data/geopolitical_research/`：故事线选择、Research运行收据和完整报告快照；目录受 Git 忽略。
 - `data/investment/conclusions/`：投研 Workflow 最终结论 Artifact；与 Agno Workflow 执行审计记录分离，目录受 Git 忽略。
 
 ## 本地 Docker 约束
