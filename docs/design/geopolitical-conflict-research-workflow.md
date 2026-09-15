@@ -110,3 +110,14 @@ Agno 的 completed 只表示编排执行完毕，消费者必须同时检查业�
 覆盖窗口边界、重复关联、身份冲突、零命中、串行失败继续、报告全文/CRLF保真、
 不确定创建不重发、已知ID轮询恢复、输入幂等、Studio历史版本迁移以及真实本地 REST/MCP 传输。
 外部 Research 和图输入在测试中隔离；不把隔离合同测试当成已部署服务联通证明。
+
+### DGX 内网接入
+
+Research 与 AgentOS 加入 `tidewise-agentos-uat-private` Docker 网络，服务别名为
+`tidewise-research`，无需发布任何宿主机或公网端口。AgentOS 内部调用地址为
+`http://tidewise-research:8899`。Research 保留出站网络以访问模型和资料源。
+
+在 GitHub `uat` environment 配置 variable `TIDEWISE_RESEARCH_BASE_URL` 及 secret
+`TIDEWISE_RESEARCH_API_KEY`（与 Research 的 `API_AUTH_KEY` 相同）。部署脚本将这些值
+写入受保护的 runtime.env，再由 Compose 注入容器；不要只手动修改现有容器或 runtime.env，
+否则下次部署会丢失配置。等待/轮询参数也可用同名 environment variables 配置。
