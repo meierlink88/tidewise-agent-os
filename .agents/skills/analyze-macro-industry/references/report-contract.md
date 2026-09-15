@@ -1,25 +1,29 @@
+> 当前职责：只执行宏观与产业链两路；地缘产品工序已移至 Research + compose-geopolitical-report。产业链四类原始输入不变。下文旧分析字段属于内部 v6-draft；发布仅按 [publication-v6.md](publication-v6.md)，不执行旧 v5 发布或地缘工序。
+
 # 报告合同与文案
 
-字段名称、必填性、可空值、枚举和引用形状以 `capabilities/report_reasoning/internal/variable-report.schema.json` 为准；此文解释字段含义，不另创一份冲突 Schema。当前是 v6-draft，不能称现有 Data Service 可直接接收。
+字段名称、必填性、可空值、枚举和引用形状以 `capabilities/report_reasoning/internal/variable-report.schema.json` 为准；此文解释字段含义，不另创一份冲突 Schema。分析原件是 v6-draft，不能由现有 Data Service 直接接收。需要发布时，按 [publication-v6.md](publication-v6.md) 制作不含内部 variable_assessments 的正式 v6 包；原件及HTML仍保留变量综合判断。
 
 ## 结构与归属
 
 | 对象 | 所在结构 | 要求 |
 | --- | --- | --- |
-| 地缘总结 | geopolitical_stories[].summary | 根为真实地缘故事线；受影响引用为宏观或产业链 |
 | 宏观总结 | macroeconomic_stories[].summary | 根为真实宏观故事线；受影响引用为产业链 |
-| 产业总结 | industry_chain_analyses[].summary | 根为真实产业链；受影响引用为该链节点 |
+| 概念聚合总结 | concept_analyses[].summary / detail.industry_chains[] | 真实Concept为根，多条链独立详情；总结受影响锚点仍为带chain_local_key的产业链节点 |
+| 无概念归属的产业总结 | industry_chain_analyses[].summary | 根为真实产业链；受影响引用为该链节点 |
 | 故事线变量 | unit.detail.variable_signals / variable_assessments | 只放该根自己的信号及综合判断 |
 | 受影响宏观 | unit.detail.macro_impacts[] | 每个宏观实体分别拥有完整 assessment、变量、反证和来源 |
 | 受影响产业链 | unit.detail.industry_chains[] | 每条链分别拥有链级判断、reasoning_summary、graph、affected_nodes、变量及来源 |
 | 受影响节点 | chain.affected_nodes[] | 每个节点完整 assessment、reasoning_sources、变量及反证，不能少字段 |
-| 公司 | unit.detail.companies[] 或 company_analyses[] | 本公司变量和判断；解释业务挂接或不能挂接的原因，不创造第四类总结 |
+| 公司输入（内部） | audit 中的公司分析记录 | 保存公司原始信号、变量综合、直接判断及真实关系路径；报告在目标节点/链的推导逻辑、支持、反证和来源引用中体现其影响，不生成公司产品对象 |
+
+当前报告不输出独立公司层级：`company_analyses` 及所有 `detail.companies` 必填时保留空数组，可选时省略。Schema 允许公司对象不代表本流程应生成它；此规则同样适用于地缘和宏观工序范围内涉及的公司来源。公司来源按各路原有 Event 范围分析，不扩大取数范围。
 
 地缘、宏观详情中的链/节点与产业工序采用同一合同，不能因上层类型而省去判断、周期、条件、反证或来源。链级推导逻辑、支持、反证综合表达，不按地缘/宏观/产业/公司拆成多套层级。
 
 每个实体使用真实 source_id；local_key 只在报告内定位，可在不同工序为同一真实实体使用不同局部键。跨工序同实体方向不同不自动判错，因为输入范围不同，不能合并成统一结论。上下游引用需满足现有校验器的单元内闭包；产业内部上层审计不是可直接跨单元引用的产品对象。
 
-总结 affected_refs 的 target_type 枚举为 macroeconomic_story、industry_chain、industry_chain_node。类型应是独立字段/显示位置，不能拼入 name/title。详情按 macro_impacts、industry_chains、affected_nodes、companies 的结构位置识别类型，不给 Schema 不允许的对象强加 target_type。
+总结 affected_refs 的 target_type 枚举为 macroeconomic_story、industry_chain、industry_chain_node。类型应是独立字段/显示位置，不能拼入 name/title。详情按 macro_impacts、industry_chains、affected_nodes 的结构位置识别类型，不给 Schema 不允许的对象强加 target_type。
 
 图中节点与 affected_nodes 一一对应，节点必须真实属于该链，边及方向必须来自结构。去掉不可评估节点时不把两端重新连线。不展示“暂无评估”的占位节点，也不展示无节点的空链。
 
@@ -39,11 +43,15 @@
 
 ## 变量展示
 
-变量放在详情各自实体层级。默认展示“变量 / 综合方向 / 综合判断”，每个可比变量范围一行；同变量多个范围必须同时显示 scope/timeframe。展开支持、反向或冲突、不适用三类证据，每类原始表为“变量 / 原始方向 / 来源记载”，保留来源限定及 Event/Signal/Evidence 引用。
+报告所展示的故事线、链及节点变量放在详情各自实体层级。公司自身变量及判断只在内部审计保存；当前版本报告不展示公司的变量信号表、原始信号行或公司变量综合表，也不将这些表移动到节点/链详情。节点和链的推导逻辑、支持、反证可说明公司事实如何影响结果，保留合同允许的来源引用即可，不能为了展示公司原始信号新增公司层级。默认展示“变量 / 综合方向 / 综合判断”，每个可比变量范围一行；同变量多个范围必须同时显示 scope/timeframe。展开支持、反向或冲突、不适用三类证据，每类原始表为“变量 / 原始方向 / 来源记载”，保留来源限定及 Event/Signal/Evidence 引用。
 
 原始信号可以在不同独立工序的自身实体处重复出现；这是各自范围的结果，不是同一路变量重复判断。不能把节点或公司的信号上移成链的直接信号。所有有范围归属的信号需在产品或内部审计找到解释；内部覆盖审计不进入发布产品。
 
 HTML 渲染仅表达 JSON，不推理、不补字段、不临时重写结论。文案调整须先修改结构化报告，再验证和重渲染；保护旧文件，记录版本与哈希。
+
+## 概念聚合与无归属链兜底
+
+产业链工序必须读取并执行 [概念聚合规则](concept-aggregation.md)：有真实 Concept 关联时按概念综合；无关联时以产业链正式名称和真实 ICH 身份形成独立总结。不得伪造 Concept 或省略无关联链。
 
 ## 发布名称例外
 

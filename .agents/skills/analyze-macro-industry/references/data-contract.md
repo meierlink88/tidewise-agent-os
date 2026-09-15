@@ -11,19 +11,18 @@
 全量截至目前已入图事实应按 created_at 选择，以包含已知未来生效计划；当前仍无按采集时间或 Data Service 入库时间的筛选器。旧导出的最早/最晚生效时间不是报告分析窗口。
 用户未指定时间口径时先明确；可以并行核验环境及只读盘点，但不擅自冻结缩减后的正式范围。不能以减少报告篇幅为由缩小数据范围。
 
-## 三路 Event 和 Fact Signal 集合
+## 两路 Event 和 Fact Signal 集合
 
 设共同冻结 Event 集合为 E，每条 Event 可有多个分类。
 
 | 工序 | Event 集合 | 信号候选 |
 | --- | --- | --- |
-| 地缘 geopolitics | E 中 classes 含 GEOPOLITICAL | source_event_ids 与该集合有交集的全部 SIGNAL_ON |
 | 宏观 macroeconomics | E 中 classes 含 MACRO_ECONOMIC | source_event_ids 与该集合有交集的全部 SIGNAL_ON |
 | 产业 industry | E 中 classes 含 GEOPOLITICAL、MACRO_ECONOMIC、INDUSTRY_CHAIN、COMPANY 任一项 | source_event_ids 与该集合有交集的全部 SIGNAL_ON |
 
 规则：
 
-1. 先定 Event，再取关联 Signal；不能按信号锚点类型、变量方向或是否容易形成结论筛选。地缘 Event 自身关联到公司/宏观/节点的信号仍在地缘工序内。
+1. 先定 Event，再取关联 Signal；不能按信号锚点类型、变量方向或是否容易形成结论筛选。产业路中地缘 Event 关联到公司/宏观/节点的信号仍须阅读，不因取消独立地缘工序而排除。
 2. 同一 Event 多分类可进入多路，各路独立分析，不是跨路污染。同一路按 Event ID 去重，保留其分类与全部 Evidence。
 3. Signal 的所有来源 Event 必须在本路范围内，才可把其完整原文作为本路事实使用。当前 CLI 对跨窗口来源缺失报 `Signal source closure missing`，对跨工序混合来源报 `mixed-scope Signal requires source decomposition`。
 4. 多来源但均在本路范围内时，一条 Signal 保留全部来源，不复制成多条。跨范围混合信号需要来源级事实分解，当前 CLI 不支持自动完成；停止受影响工序，保留 ID 和缺口，不能删除越界 ID 后继续使用原文，也不能把其他类 Event 偷加进来。
@@ -46,6 +45,12 @@ CLI 提供 Evidence 的 title/summary/semantic，不承诺完整文章原文。`
 
 可查全目录中的实体身份与结构：ChainNodeBelongsToIndustryChain、CompanyParticipatesInChainNode、ChainNodeInputTo、ChainNodeIsComponentOf、ChainNodeDependsOn。节点可属于多条链，不能强制唯一归属。
 
+公司 Event/Signal 的取数范围保持不变，公司是产业推理的输入实体；公司来源须沿真实图谱业务关系定位节点及所属链，不因报告不输出公司层级而跳过公司数据。记录 Company→ChainNode→IndustryChain 的实际关系路径、产品敞口与停止原因，不按名称猜测挂接，不将公司信号改挂到节点或链。
+
 从自身信号锚点及无信号 Event 的真实相关候选开始，逐跳查相关上下游/公司业务/链成员；每一跳均需判断机制和业务敞口，不能只按拓扑漫游。已有事实不足、无新增机制、循环回到已判断对象或对象未能真实定位时停止该路径并记录原因。不同路径可对同一实体产生相反作用，要综合，不无穷展开。
 
-当前图结构不提供完备的地缘→宏观→产业因果边；这些是 Codex 条件性经济推理，必须写依据，不能伪装成图谱事实。市场 Concept 主数据及其关系不在当前 CLI 完整输出中，不据名称补造 Concept 分析。
+当前图结构不提供完备的地缘→宏观→产业因果边；这些是 Codex 条件性经济推理，必须写依据，不能伪装成图谱事实。Concept 主数据及其有效映射必须纳入冻结数据，不据名称补造 Concept 分析。
+
+## 概念聚合与无归属链兜底
+
+产业链工序必须读取并执行 [概念聚合规则](concept-aggregation.md)：有真实 Concept 关联时按概念综合；无关联时以产业链正式名称和真实 ICH 身份形成独立总结。不得伪造 Concept 或省略无关联链。
