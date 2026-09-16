@@ -46,9 +46,13 @@ class InterfaceTests(unittest.IsolatedAsyncioTestCase):
                 workflow.name = "Raw Collection V2"
                 workflow.description = "Operator description"
                 legacy_version = workflow.save(db=db, stage="published")
-                legacy_config = db.get_config(component_id="raw-collection-v2", version=legacy_version)["config"]
+                legacy_saved = db.get_config(component_id="raw-collection-v2", version=legacy_version)
+                assert legacy_saved is not None
+                legacy_config = legacy_saved["config"]
                 first = ensure_raw_collection_v2_workflow(registry)
-                renamed_config = db.get_config(component_id="raw-collection-v2", version=first)["config"]
+                renamed_saved = db.get_config(component_id="raw-collection-v2", version=first)
+                assert renamed_saved is not None
+                renamed_config = renamed_saved["config"]
                 self.assertEqual(renamed_config["name"], "数据采集")
                 legacy_config["name"] = "数据采集"
                 self.assertEqual(renamed_config, legacy_config)
