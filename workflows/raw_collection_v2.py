@@ -12,7 +12,7 @@ RAW_COLLECTION_V2_WORKFLOW_ID = "raw-collection-v2"
 
 raw_collection_v2 = Workflow(
     id=RAW_COLLECTION_V2_WORKFLOW_ID,
-    name="Raw Collection V2",
+    name="数据采集",
     description="Collect sources, deduplicate article versions and archive raw documents to MinIO without an LLM.",
     db=get_postgres_db(),
     steps=[
@@ -33,7 +33,7 @@ raw_collection_v2 = Workflow(
 
 
 def ensure_raw_collection_v2_workflow(registry: Registry) -> int:
-    """Seed Studio once and preserve every subsequent published configuration."""
+    """Seed Studio once; rename the legacy default without replacing operator steps."""
     db = get_postgres_db()
     component = db.get_component(RAW_COLLECTION_V2_WORKFLOW_ID, component_type=ComponentType.WORKFLOW)
     if component is None:
@@ -47,4 +47,10 @@ def ensure_raw_collection_v2_workflow(registry: Registry) -> int:
     loaded = Workflow.load(RAW_COLLECTION_V2_WORKFLOW_ID, db=db, registry=registry, version=version)
     if loaded is None or not isinstance(loaded.steps, list) or not loaded.steps:
         raise ValueError("Raw Collection V2 published Studio configuration cannot be loaded")
+    if loaded.name == "Raw Collection V2":
+        loaded.name = raw_collection_v2.name
+        renamed_version = loaded.save(db=db, stage="published", notes="Rename Raw Collection V2 to 数据采集")
+        if not isinstance(renamed_version, int):
+            raise ValueError("Raw Collection V2 display name update failed")
+        return renamed_version
     return version
