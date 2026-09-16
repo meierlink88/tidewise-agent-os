@@ -4,6 +4,7 @@ from agno.agent import Agent
 from agno.models.base import Model
 from agno.registry import Registry
 
+from agents.event_analyst import event_analyst
 from agents.event_association import EVENT_ASSOCIATION_AGENT_ID, load_event_association_agent
 from agents.event_extractor import EVENT_EXTRACTOR_AGENT_ID, load_event_extractor_agent
 from agents.event_identity import EVENT_IDENTITY_AGENT_ID, load_event_identity_agent
@@ -82,6 +83,8 @@ from capabilities.event.functions import (
 from capabilities.event.functions.batch import BATCH_FUNCTIONS
 from capabilities.event.functions.linear import LINEAR_EVENT_FUNCTIONS
 from capabilities.event.functions.storyline import STORYLINE_FUNCTIONS
+from capabilities.event_v2 import DocumentEventDraft, DuplicateDecision
+from capabilities.event_v2.functions import DOCUMENT_EVENT_FUNCTIONS
 from capabilities.evidence import (
     ArticleReviewDraft,
     ArticleReviewRequest,
@@ -202,6 +205,8 @@ registry = TidewiseRegistry(
     models=[default_model(), sol_low_model()],
     dbs=[get_postgres_db()],
     schemas=[
+        DocumentEventDraft,
+        DuplicateDecision,
         ResearchPlan,
         ResearchReceipt,
         ResearchRequest,
@@ -262,6 +267,7 @@ registry = TidewiseRegistry(
         InvestmentReportWorkflowOutput,
     ],
     functions=[
+        *DOCUMENT_EVENT_FUNCTIONS,
         select_geopolitical_stories,
         research_next_geopolitical_story,
         geopolitical_research_complete,
@@ -318,5 +324,5 @@ registry = TidewiseRegistry(
         generate_investment_report,
         publish_investment_report,
     ],
-    agents=[tidewise_assistant],
+    agents=[tidewise_assistant, event_analyst],
 )

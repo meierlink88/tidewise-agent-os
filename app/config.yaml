@@ -1,4 +1,16 @@
 manifest:
+  event-analyst:
+    description: "事件分析师：按步骤Skill执行事件提取、故事线关联、信号发现与发布；当前仅实现事件提取。"
+    quick_prompts:
+      - "读取事件提取Skill：2026年9月11日，甲国商务部宣布对乙国产品征收10%关税，将于10月1日生效。请提取事件。"
+      - "使用事件提取Skill，比较给定事件与候选是否重复"
+      - "说明当前已实现和待实现的能力"
+  event-extraction-v2:
+    description: "每批20篇Raw，逐篇四步框架；已实现事件提取与判重，故事线、信号、发布待完善。"
+    quick_prompts:
+      - "处理下一批20篇原始文章"
+      - '{"retry_failed":true}'
+
   tidewise-assistant:
     description: "观潮家本地 AgentOS 助手，用于验证模型、会话与接口链路。"
     quick_prompts:
