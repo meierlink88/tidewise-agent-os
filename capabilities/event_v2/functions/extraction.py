@@ -9,9 +9,8 @@ from agno.workflow import StepInput, StepOutput
 
 from capabilities.collection_v2 import RawDocumentV2, archived_article_keys, read_archived_article
 from capabilities.event_v2.internal.models import (
-    DocumentEventDraft,
+    DocumentEventAnalysis,
     DuplicateDecision,
-    EventRecallCandidate,
     StagedDocumentEvent,
 )
 from capabilities.event_v2.internal.runtime import document_event_runtime
@@ -81,11 +80,11 @@ async def _process(key: str, batch: dict) -> dict:
         if key in batch["preparation_errors"]:
             raise ValueError("Raw archive could not be prepared")
         raw = RawDocumentV2.model_validate(batch["sources"][key])
-        event_file = path("articles", key, "event")
-        event = read(event_file)
-        if event is None:
-            stage = "extract"
-            draft = await runtime.extract(
+        stage = "analyze"
+        analysis_file = path("articles", key, "analysis")
+        frozen = read(analysis_file)
+        if frozen is None:
+            execution = await runtime.analyze(
                 {
                     "article_key": key,
                     "title": raw.candidate.title,
@@ -96,46 +95,24 @@ async def _process(key: str, batch: dict) -> dict:
                 batch["agent_versions"],
                 f"{batch['run_id']}:{key}",
             )
-            draft = DocumentEventDraft.model_validate(draft)
+            analysis = DocumentEventAnalysis.model_validate(execution["analysis"])
             event = StagedDocumentEvent(
                 candidate_id=f"document-event:{key}",
                 article_key=key,
                 raw_path=raw.url_path,
                 collected_at=datetime.now(UTC),
                 published_at=raw.candidate.published_at,
-                event=draft,
+                event=analysis.event,
             ).model_dump(mode="json")
-            write(event_file, event)
-        stage = "embedding"
-        vector_file = path("articles", key, "vector")
-        vector = read(vector_file)
-        if vector is None:
-            vector = await runtime.embed(event["event"]["title"], event["event"]["summary"])
-            write(vector_file, vector)
-        stage = "recall"
-        decision_file = path("articles", key, "decision")
-        frozen = read(decision_file)
-        if frozen is None:
-            candidates = [
-                EventRecallCandidate.model_validate(c).model_dump(mode="json")
-                for c in await runtime.recall(vector, key)
-            ]
-            write(path("articles", key, "recall"), {"candidates": candidates})
-            stage = "identity"
-            decision = (
-                await runtime.decide(event["event"], candidates, batch["agent_versions"], f"{batch['run_id']}:{key}")
-                if candidates
-                else DuplicateDecision(duplicate=False, reason="No vector candidates")
-            )
-            decision = DuplicateDecision.model_validate(decision)
-            allowed = {c["candidate_id"] for c in candidates}
-            if (decision.duplicate and decision.matched_id not in allowed) or (
-                not decision.duplicate and decision.matched_id is not None
-            ):
-                raise ValueError("Identity selected a candidate outside recall or contradictory identity")
-            frozen = {"decision": decision.model_dump(mode="json"), "agent_versions": batch["agent_versions"]}
-            write(decision_file, frozen)
-        decision = DuplicateDecision.model_validate(frozen["decision"])
+            frozen = {**execution, "event": event, "agent_versions": batch["agent_versions"]}
+            # One checkpoint binds the model decision to its successful tool receipt.
+            write(analysis_file, frozen)
+        event = frozen["event"]
+        vector = frozen["search"]["vector"]
+        decision = DuplicateDecision.model_validate(frozen["analysis"]["deduplication"])
+        write(path("articles", key, "event"), event)
+        write(path("articles", key, "recall"), {"candidates": frozen["search"]["candidates"]})
+        write(path("articles", key, "decision"), {"decision": decision.model_dump(mode="json")})
         stage = "stage_candidate"
         if not decision.duplicate:
             await runtime.stage(event, vector)

@@ -39,6 +39,12 @@ class DuplicateDecision(BaseModel):
     reason: str
 
 
+class DocumentEventAnalysis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    event: DocumentEventDraft
+    deduplication: DuplicateDecision
+
+
 class EventRecallCandidate(BaseModel):
     candidate_id: str
     title: str

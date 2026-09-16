@@ -7,7 +7,7 @@ from agno.agent import Agent
 from agno.skills import LocalSkills, Skills
 
 ANALYST_ID = "event-analyst"
-ANALYST_REVISION = 1
+ANALYST_REVISION = 2
 EXTRACTION_SKILL = "document-event-extraction"
 
 
@@ -25,9 +25,7 @@ def extraction_skill_snapshot() -> dict:
     return {"name": EXTRACTION_SKILL, "sha256": hashlib.sha256(skill.instructions.encode()).hexdigest()}
 
 
-def bind_extraction_skill(agent: Agent, *, phase: str, schema=None) -> Agent:
-    if phase not in {"extract", "deduplicate"}:
-        raise ValueError("Unsupported extraction phase")
+def bind_extraction_skill(agent: Agent, *, tools: list, schema=None) -> Agent:
     agent.skills = extraction_skills()
     skill = agent.skills.get_skill(EXTRACTION_SKILL)
     if skill is None:
@@ -36,8 +34,8 @@ def bind_extraction_skill(agent: Agent, *, phase: str, schema=None) -> Agent:
     base = agent.instructions or ""
     if not isinstance(base, str):
         raise TypeError("Event analyst instructions must be text")
-    agent.instructions = base + f"\n当前Skill：{EXTRACTION_SKILL}；当前phase：{phase}。\n" + skill.instructions
-    agent.tools = []
+    agent.instructions = base + f"\n当前步骤：事件提取；当前Skill：{EXTRACTION_SKILL}。\n" + skill.instructions
+    agent.tools = tools
     agent.output_schema = schema
     agent.use_json_mode = schema is not None
     agent.add_history_to_context = False

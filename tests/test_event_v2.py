@@ -23,7 +23,9 @@ from capabilities.event_v2.functions import (
     publish_document_event,
     summarize_document_events,
 )
+from capabilities.event_v2.internal.models import DocumentEventAnalysis
 from capabilities.event_v2.internal.storage import path, read
+from capabilities.event_v2.tools.search import EventSearch
 from workflows.event_extraction_v2 import ensure_document_event_workflow
 
 
@@ -84,6 +86,18 @@ class Runtime:
         return DuplicateDecision(
             duplicate=bool(match), matched_id=match["candidate_id"] if match else None, reason="比较整篇事实"
         )
+
+    async def analyze(self, source, versions, session):
+        event = await self.extract(source, versions, session)
+        search = EventSearch(self, source["article_key"])
+        found = await search.search_similar_events(event.title, event.summary)
+        decision = (
+            await self.decide(event.model_dump(), found["candidates"], versions, session)
+            if found["candidates"]
+            else DuplicateDecision(duplicate=False, reason="No candidates")
+        )
+        analysis = DocumentEventAnalysis(event=event, deduplication=decision)
+        return {"analysis": analysis.model_dump(), "search": search.verify(analysis)}
 
     async def stage(self, event, vector):
         if self.fail_stage:
@@ -184,7 +198,7 @@ class EventV2Tests(unittest.IsolatedAsyncioTestCase):
         result = await self.execute()
         self.assertEqual(result["accepted"], 1)
         self.assertEqual(result["failed"], 1)
-        self.assertEqual(read(path("articles", keys[1], "result"))["stage"], "identity")
+        self.assertEqual(read(path("articles", keys[1], "result"))["stage"], "analyze")
 
     async def test_workflow_loop_and_studio_roundtrip(self):
         self.archive(3)
@@ -217,7 +231,7 @@ class EventV2Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual({o.content["status"] for o in outputs}, {"accepted", "already_processed"})
         self.assertEqual(len(self.runtime.inputs), 1)
 
-    async def test_single_analyst_skill_and_phase_isolation(self):
+    async def test_single_analyst_with_scoped_search_tool(self):
         from types import SimpleNamespace
 
         from agno.agent import Agent
@@ -229,31 +243,55 @@ class EventV2Tests(unittest.IsolatedAsyncioTestCase):
         original = analyst.instructions
         runtime = object.__new__(LocalDocumentEventRuntime)
         runtime.registry = Registry(agents=[analyst])
+        runtime.vectors = self.runtime
         calls = []
 
         async def run(agent, message, **kwargs):
             calls.append((agent, message, kwargs))
-            content = (
-                DocumentEventDraft(title="T", summary="S", semantic=[], keywords=[])
-                if agent.output_schema is DocumentEventDraft
-                else DuplicateDecision(duplicate=False, reason="new")
+            found = await agent.tools[0](title="T", summary="S")
+            self.assertEqual(found, {"status": "success", "candidates": []})
+            return SimpleNamespace(
+                content=DocumentEventAnalysis(
+                    event=DocumentEventDraft(title="T", summary="S", semantic=[]),
+                    deduplication=DuplicateDecision(duplicate=False, reason="new"),
+                )
             )
-            return SimpleNamespace(content=content)
 
         with patch.object(Agent, "arun", run):
-            await runtime.extract({"content": "raw"}, runtime.versions(), "article-a")
-            await runtime.decide({"title": "T"}, [], runtime.versions(), "article-a")
-        self.assertEqual([a.id for a, _, _ in calls], ["event-analyst", "event-analyst"])
-        self.assertIsNot(calls[0][0], calls[1][0])
+            for key in ("a", "b"):
+                await runtime.analyze({"article_key": key, "content": "raw"}, runtime.versions(), key)
+        self.assertEqual(len(calls), 2)  # One Agent invocation per article.
+        self.assertIsNot(calls[0][0].tools[0].__self__, calls[1][0].tools[0].__self__)
         self.assertNotEqual(calls[0][2]["session_id"], calls[1][2]["session_id"])
         for agent, _, _ in calls:
+            self.assertEqual(agent.id, "event-analyst")
             self.assertEqual(agent.skills.get_skill_names(), ["document-event-extraction"])
-            self.assertIn("只有整篇核心事实相同", agent.instructions)
             self.assertFalse(agent.add_history_to_context)
+            self.assertIs(agent.output_schema, DocumentEventAnalysis)
         self.assertEqual(analyst.instructions, original)
-        self.assertIsNone(analyst.output_schema)
+        self.assertEqual(analyst.tools, [])
         with self.assertRaisesRegex(ValueError, "changed during"):
-            await runtime.extract({}, {"event-analyst": 0}, "stale")
+            await runtime.analyze({}, {"event-analyst": 0}, "stale")
+
+    async def test_search_receipt_requires_success_and_exact_final_query(self):
+        analysis = DocumentEventAnalysis(
+            event=DocumentEventDraft(title="T", summary="S", semantic=[]),
+            deduplication=DuplicateDecision(duplicate=False, reason="new"),
+        )
+        search = EventSearch(self.runtime, "article-a")
+        with self.assertRaisesRegex(ValueError, "did not complete"):
+            search.verify(analysis)
+        await search.search_similar_events("T", "S")
+        self.assertEqual(search.verify(analysis)["candidates"], [])
+        analysis.event.summary = "Changed"
+        with self.assertRaisesRegex(ValueError, "differs"):
+            search.verify(analysis)
+        analysis.event.summary = "S"
+        with patch.object(self.runtime, "recall", side_effect=RuntimeError("offline")):
+            with self.assertRaises(RuntimeError):
+                await search.search_similar_events("T", "S")
+        with self.assertRaisesRegex(ValueError, "did not complete"):
+            search.verify(analysis)
 
     async def test_four_step_order_and_resume_current_article(self):
         self.archive(2)

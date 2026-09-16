@@ -8,7 +8,7 @@ Issue #266，Workflow `event-extraction-v2`，中文名“事件提取”。保�
 
 Loop 对每篇文章依次执行四个 Function Step：
 
-1. **事件提取**：同一个事件分析师分两次调用，先提炼，再根据向量候选判重。没有候选则不调用判重模型。
+1. **事件提取**：一次调用事件分析师，由其提炼、调用相似事件检索工具，再判断重复，统一返回 Event 和去重结论。
 2. **故事线关联**：未实现，占位返回 `not_implemented`。
 3. **变量信号发现**：未实现，因前序未完成返回 `blocked`。
 4. **数据发布**：未实现，因前序未完成返回 `blocked`；记录本篇框架结果，再推进下一篇。
@@ -23,11 +23,11 @@ Loop 对每篇文章依次执行四个 Function Step：
 
 角色职责描述覆盖事件提取、故事线关联入图、信号发现入图及 Data Service 发布；当前开放能力仅为 `skills/document-event-extraction/SKILL.md`。不创建后三个空 Skill，避免模型误以为能力已可执行。
 
-业务提炼和判重规则只在 Skill 管理。Function 每次从注册 Agent 创建独立执行实例，配置本步 Skill、输出结构和允许的工具；不修改共享 Agent。原文提炼 `phase=extract` 返回 `DocumentEventDraft`，判重 `phase=deduplicate` 返回 `DuplicateDecision`，身份均为事件分析师。
+业务提炼和判重规则只在 Skill 管理。Function 每次从注册 Agent 创建独立执行实例，配置本步 Skill、输出结构和允许的工具；不修改共享 Agent。返回 `DocumentEventAnalysis`，包含 `event: DocumentEventDraft` 与 `deduplication: DuplicateDecision`。不再由 Function 分别编排提炼和判重模型调用。
 
-使用 Agno `Skills/LocalSkills` 原生加载，同时将当前 Skill 完整正文注入本次指令，保证固定步骤无需依赖模型主动读取规则。单独聊天时 Agent 可以通过 `get_skill_instructions` 读取 Skill。Skill 不携带可执行脚本或数据库工具；向量召回和候选写入由 Function 执行。
+使用 Agno `Skills/LocalSkills` 原生加载，同时将当前 Skill 完整正文注入本次指令，保证固定步骤无需依赖模型主动读取规则。单独聊天时 Agent 可以通过 `get_skill_instructions` 读取 Skill。每篇配置一个只读 `search_similar_events(title, summary)` 工具（`capabilities/event_v2/tools/search.py`），封装向量化和候选召回；候选写入仍由 Function 执行。注册 Agent 不持有共享检索状态，独立聊天未绑定本步骤工具时不能完成去重。
 
-每次调用使用独立文章/阶段 session，不读取历史对话。批次记录 Agent 代码合同版本与 Skill 内容摘要，运行中规则变更须新开批次，避免同一批次规则漂移。
+每次调用使用独立文章 session，不读取历史对话。批次记录 Agent 代码合同版本与 Skill 内容摘要，运行中规则变更须新开批次，避免同一批次规则漂移。
 
 ## 提炼合同
 
@@ -49,7 +49,7 @@ Collection V2 公共接口列出成功归档 article_key，最多读取20篇，�
 
 ## 恢复与边界
 
-独立 `data/event_v2` 保存原文、Event、向量、候选、判断、单篇结果及框架结果。单篇模型错误记录后继续；不能安全保存进度的磁盘错误终止。显式 `{"retry_failed":true}` 可重试失败提取并复用检查点。
+独立 `data/event_v2` 保存批次原文及单篇原子 analysis 检查点，后者绑定 Event、判断、成功检索参数、向量、候选及版本；Event/recall/decision 是可重建审计文件。新调用不复用旧版零散提炼或判重缓存，已完成文章仍跳过。单篇模型错误记录后继续；不能安全保存进度的磁盘错误终止。显式 `{"retry_failed":true}` 可重试失败提取并复用检查点。
 
 共享数据卷文件锁协调并发判重和候选写入；不声称支持独立磁盘的多主机锁。后续启用后三步时，需要接入候选续处理、稳定正式ID、图谱写入和Data发布幂等回执；本轮不假装已实现。
 
@@ -59,6 +59,12 @@ Collection V2 公共接口列出成功归档 article_key，最多读取20篇，�
 
 ## 验证
 
-8项自动化测试覆盖批次上限、重复和失败跳过、检查点、并发、原生Workflow/Studio往返、隔离REST/MCP、单Agent多阶段Skill配置、上下文隔离及四步推进顺序；模型部分使用替身，不处理真实文章。
+9项自动化测试覆盖批次上限、重复和失败跳过、检查点、并发、原生Workflow/Studio往返、隔离REST/MCP、单Agent工具配置、检索失败与最终文本一致性、上下文隔离及四步推进顺序；模型部分使用替身，不处理真实文章。
 
 按用户要求，本轮真实模型工作流验证仅使用一篇隔离样例。验证日志与PR记录实际结果；不执行20篇真实批次。全库ruff、格式及新增模块mypy检查，旧测试脚本的本地MCP依赖兼容问题单列披露。
+
+## 工具执行保障
+
+工具使用每次 Agent 调用独有的实例，由代码绑定 article_key。成功调用才保存回执；再次调用前清除旧回执，失败不能沿用先前候选。返回后检查最终 title/summary 与成功检索参数相同，重复 matched_id 来自本次候选。未调用、检索失败、修改文本后未重查均记录本篇失败，不保存候选。空候选是成功结果，仍由 Agent 返回非重复结论。
+
+Agno 集成使用原生异步 Python 函数作为 Tool，无新增依赖或密钥：[官方工具文档](https://docs.agno.com/tools/creating-tools/overview)。
