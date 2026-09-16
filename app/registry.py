@@ -4,6 +4,7 @@ from agno.agent import Agent
 from agno.models.base import Model
 from agno.registry import Registry
 
+from agents.event_analyst import event_analyst
 from agents.event_association import EVENT_ASSOCIATION_AGENT_ID, load_event_association_agent
 from agents.event_extractor import EVENT_EXTRACTOR_AGENT_ID, load_event_extractor_agent
 from agents.event_identity import EVENT_IDENTITY_AGENT_ID, load_event_identity_agent
@@ -323,5 +324,5 @@ registry = TidewiseRegistry(
         generate_investment_report,
         publish_investment_report,
     ],
-    agents=[tidewise_assistant],
+    agents=[tidewise_assistant, event_analyst],
 )

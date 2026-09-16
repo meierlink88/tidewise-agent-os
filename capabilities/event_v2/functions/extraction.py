@@ -178,12 +178,60 @@ async def extract_next_document_event(step_input: StepInput, run_context: RunCon
         batch = _batch(run_context)
         if batch["cursor"] >= len(batch["article_keys"]):
             return StepOutput(content={"done": True})
-        key = batch["article_keys"][batch["cursor"]]
-        result = await _process(key, batch)
-        batch["items"].append(result)
-        batch["cursor"] += 1
+        if "current_item" not in batch:
+            key = batch["article_keys"][batch["cursor"]]
+            result = await _process(key, batch)
+            batch["current_item"] = {**result, "steps": {"extract": {"status": result["status"]}}}
+            write(path("runs", run_context.run_id, "batch"), batch)
+        return StepOutput(content={**batch["current_item"], "done": False})
+
+
+async def _pending_step(run_context: RunContext, name: str, previous: str, *, finish: bool = False) -> StepOutput:
+    async with decision_lock():
+        batch = _batch(run_context)
+        item = batch.get("current_item")
+        if item is None:
+            raise ValueError("No current article for the requested Workflow step")
+        steps = item["steps"]
+        if previous not in steps:
+            raise ValueError("Workflow steps must execute in order")
+        if item["status"] != "accepted":
+            result = {"status": "skipped", "reason": item["status"]}
+        elif previous != "extract" and steps[previous]["status"] != "completed":
+            result = {"status": "blocked", "reason": "previous_step_not_implemented"}
+        else:
+            result = {"status": "not_implemented", "reason": "skill_not_implemented"}
+        steps[name] = result
+        if finish:
+            item["pipeline_completed"] = False
+            write(path("articles", item["article_key"], "pipeline"), item)
+            batch["items"].append(item)
+            batch["cursor"] += 1
+            del batch["current_item"]
         write(path("runs", run_context.run_id, "batch"), batch)
-        return StepOutput(content={**result, "done": batch["cursor"] == len(batch["article_keys"])})
+        return StepOutput(
+            content={
+                "article_key": item["article_key"],
+                "step": name,
+                **result,
+                "done": finish and batch["cursor"] == len(batch["article_keys"]),
+            }
+        )
+
+
+async def associate_document_story(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    del step_input
+    return await _pending_step(run_context, "story_association", "extract")
+
+
+async def discover_document_signals(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    del step_input
+    return await _pending_step(run_context, "signal_discovery", "story_association")
+
+
+async def publish_document_event(step_input: StepInput, run_context: RunContext) -> StepOutput:
+    del step_input
+    return await _pending_step(run_context, "data_publication", "signal_discovery", finish=True)
 
 
 def document_events_complete(iteration_outputs: list[StepOutput]) -> bool:
@@ -197,7 +245,7 @@ def summarize_document_events(step_input: StepInput, run_context: RunContext) ->
         raise ValueError("Document Event loop stopped before completing selected articles")
     counts = Counter(i["status"] for i in batch["items"])
     result = {
-        "outcome": "partial"
+        "extraction_outcome": "partial"
         if counts["failed"] and counts["failed"] < len(batch["items"])
         else "failed"
         if counts["failed"]
@@ -209,6 +257,9 @@ def summarize_document_events(step_input: StepInput, run_context: RunContext) ->
         "already_processed": counts["already_processed"],
         "items": batch["items"],
         "published": False,
+        "pipeline_completed": False,
+        "pending_steps": ["story_association", "signal_discovery", "data_publication"],
     }
+    result["outcome"] = "incomplete" if counts["accepted"] else result["extraction_outcome"]
     write(path("runs", run_context.run_id, "result"), result)
     return StepOutput(content=result)

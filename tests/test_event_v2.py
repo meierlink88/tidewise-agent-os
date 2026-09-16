@@ -16,8 +16,11 @@ from capabilities.collection_v2.internal.storage import archive_candidate
 from capabilities.event_v2 import DocumentEventDraft, DuplicateDecision, configure_document_event_runtime
 from capabilities.event_v2.functions import (
     DOCUMENT_EVENT_FUNCTIONS,
+    associate_document_story,
+    discover_document_signals,
     extract_next_document_event,
     prepare_document_events,
+    publish_document_event,
     summarize_document_events,
 )
 from capabilities.event_v2.internal.storage import path, read
@@ -43,7 +46,7 @@ class Runtime:
         pass
 
     def versions(self):
-        return {"document-event-extractor": 1, "document-event-identity": 1}
+        return {"event-analyst": 1}
 
     async def extract(self, source, versions, session):
         self.inputs.append(source)
@@ -131,6 +134,9 @@ class EventV2Tests(unittest.IsolatedAsyncioTestCase):
             return prepared.content
         for _ in range(prepared.content["selected"]):
             await extract_next_document_event(StepInput(), ctx)
+            await associate_document_story(StepInput(), ctx)
+            await discover_document_signals(StepInput(), ctx)
+            await publish_document_event(StepInput(), ctx)
         return summarize_document_events(StepInput(), ctx).content
 
     async def test_twenty_cap_full_text_duplicate_and_next_batch(self):
@@ -147,6 +153,13 @@ class EventV2Tests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(staged["published_at"])
         self.assertEqual(staged["event"]["semantic"], [])
         self.assertFalse(result["published"])
+        self.assertEqual(result["outcome"], "incomplete")
+        for item in result["items"]:
+            if item["status"] == "accepted":
+                self.assertEqual(item["steps"]["story_association"]["status"], "not_implemented")
+                self.assertEqual(item["steps"]["data_publication"]["status"], "blocked")
+            else:
+                self.assertEqual(item["steps"]["story_association"]["status"], "skipped")
         next_result = await self.execute("next-run")
         self.assertEqual(next_result["selected"], 2)
         self.assertEqual((await self.execute("empty-run"))["selected"], 0)
@@ -183,6 +196,9 @@ class EventV2Tests(unittest.IsolatedAsyncioTestCase):
             workflow = Workflow.load("event-extraction-v2", db=db, registry=registry)
         self.assertIsNotNone(workflow)
         self.assertEqual(workflow.name, "事件提取")
+        self.assertEqual(
+            [s.name for s in workflow.steps[1].steps], ["事件提取", "故事线关联", "变量信号发现", "数据发布"]
+        )
         result = await workflow.arun("next", session_id="native-loop")
         self.assertEqual(result.content["accepted"], 3)
         self.assertEqual(len(self.runtime.inputs), 3)
@@ -200,6 +216,63 @@ class EventV2Tests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual({o.content["status"] for o in outputs}, {"accepted", "already_processed"})
         self.assertEqual(len(self.runtime.inputs), 1)
+
+    async def test_single_analyst_skill_and_phase_isolation(self):
+        from types import SimpleNamespace
+
+        from agno.agent import Agent
+
+        from agents.event_analyst import build_event_analyst
+        from capabilities.event_v2.internal.runtime import LocalDocumentEventRuntime
+
+        analyst = build_event_analyst()
+        original = analyst.instructions
+        runtime = object.__new__(LocalDocumentEventRuntime)
+        runtime.registry = Registry(agents=[analyst])
+        calls = []
+
+        async def run(agent, message, **kwargs):
+            calls.append((agent, message, kwargs))
+            content = (
+                DocumentEventDraft(title="T", summary="S", semantic=[], keywords=[])
+                if agent.output_schema is DocumentEventDraft
+                else DuplicateDecision(duplicate=False, reason="new")
+            )
+            return SimpleNamespace(content=content)
+
+        with patch.object(Agent, "arun", run):
+            await runtime.extract({"content": "raw"}, runtime.versions(), "article-a")
+            await runtime.decide({"title": "T"}, [], runtime.versions(), "article-a")
+        self.assertEqual([a.id for a, _, _ in calls], ["event-analyst", "event-analyst"])
+        self.assertIsNot(calls[0][0], calls[1][0])
+        self.assertNotEqual(calls[0][2]["session_id"], calls[1][2]["session_id"])
+        for agent, _, _ in calls:
+            self.assertEqual(agent.skills.get_skill_names(), ["document-event-extraction"])
+            self.assertIn("只有整篇核心事实相同", agent.instructions)
+            self.assertFalse(agent.add_history_to_context)
+        self.assertEqual(analyst.instructions, original)
+        self.assertIsNone(analyst.output_schema)
+        with self.assertRaisesRegex(ValueError, "changed during"):
+            await runtime.extract({}, {"event-analyst": 0}, "stale")
+
+    async def test_four_step_order_and_resume_current_article(self):
+        self.archive(2)
+        ctx = RunContext(run_id="order", session_id="order", session_state={})
+        await prepare_document_events(StepInput(input="next"), ctx)
+        with self.assertRaisesRegex(ValueError, "No current article"):
+            await publish_document_event(StepInput(), ctx)
+        first = await extract_next_document_event(StepInput(), ctx)
+        repeated = await extract_next_document_event(StepInput(), ctx)
+        self.assertEqual(first.content["article_key"], repeated.content["article_key"])
+        self.assertEqual(len(self.runtime.inputs), 1)
+        with self.assertRaisesRegex(ValueError, "in order"):
+            await discover_document_signals(StepInput(), ctx)
+        await associate_document_story(StepInput(), ctx)
+        await discover_document_signals(StepInput(), ctx)
+        last = await publish_document_event(StepInput(), ctx)
+        self.assertFalse(last.content["done"])
+        second = await extract_next_document_event(StepInput(), ctx)
+        self.assertNotEqual(first.content["article_key"], second.content["article_key"])
 
     async def test_rest_and_mcp_transport(self):
         import asyncio

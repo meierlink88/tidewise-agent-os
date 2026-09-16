@@ -5,27 +5,28 @@ import json
 import os
 from typing import Any, Protocol
 
-from agno.agent import Agent
-from agno.db.base import ComponentType
 from graphiti_core.embedder.openai import OpenAIEmbedder
 from pydantic import BaseModel
 
 from capabilities.event_v2.internal.models import DocumentEventDraft, DuplicateDecision
+from capabilities.event_v2.internal.skills import (
+    ANALYST_ID,
+    ANALYST_REVISION,
+    bind_extraction_skill,
+    extraction_skill_snapshot,
+)
 from sematica.graphiti.runtime import create_agentos_graphiti
 from sematica.ingestion.event_vectors import EventVectorStore
-
-EXTRACTOR = "document-event-extractor"
-IDENTITY = "document-event-identity"
 
 
 class DocumentEventRuntime(Protocol):
     async def ready(self) -> None: ...
-    def versions(self) -> dict[str, int]: ...
-    async def extract(self, source: dict, versions: dict[str, int], session: str) -> DocumentEventDraft: ...
+    def versions(self) -> dict[str, Any]: ...
+    async def extract(self, source: dict, versions: dict[str, Any], session: str) -> DocumentEventDraft: ...
     async def embed(self, title: str, summary: str) -> dict: ...
     async def recall(self, vector: dict, article_key: str) -> list[dict]: ...
     async def decide(
-        self, event: dict, candidates: list[dict], versions: dict[str, int], session: str
+        self, event: dict, candidates: list[dict], versions: dict[str, Any], session: str
     ) -> DuplicateDecision: ...
     async def stage(self, event: dict, vector: dict) -> None: ...
 
@@ -39,25 +40,25 @@ class LocalDocumentEventRuntime:
         config = self.graphiti.embedder.config
         self.vectors = EventVectorStore(self.graphiti, model=config.embedding_model, dimension=config.embedding_dim)
 
-    def versions(self) -> dict[str, int]:
-        versions = {}
-        for key in (EXTRACTOR, IDENTITY):
-            component = self.db.get_component(key, component_type=ComponentType.AGENT)
-            version = component.get("current_version") if component else None
-            if not isinstance(version, int):
-                raise ValueError("Document Event Agent has no published version")
-            versions[key] = version
-        return versions
+    def versions(self) -> dict[str, Any]:
+        return {ANALYST_ID: ANALYST_REVISION, "skill": extraction_skill_snapshot()}
 
-    async def _invoke(self, key: str, payload: dict, versions: dict[str, int], session: str, schema):
-        agent = Agent.load(key, db=self.db, registry=self.registry, version=versions[key])
-        if agent is None:
-            raise ValueError("Document Event Agent cannot be loaded")
+    async def _invoke(self, phase: str, payload: dict, versions: dict, session: str, schema):
+        if versions != self.versions():
+            raise ValueError("Event analyst or Skill changed during the batch; start a new batch")
+        registered = self.registry.get_agent(ANALYST_ID)
+        if registered is None:
+            raise ValueError("Event analyst is not registered")
+        agent = bind_extraction_skill(registered.deep_copy(), phase=phase, schema=schema)
         timeout = float(os.getenv("EVENT_V2_AGENT_TIMEOUT_SECONDS", "180"))
         if timeout <= 0:
             raise ValueError("EVENT_V2_AGENT_TIMEOUT_SECONDS must be positive")
         result = await asyncio.wait_for(
-            agent.arun(json.dumps(payload, ensure_ascii=False), session_id=f"{session}:{key}", stream=False),
+            agent.arun(
+                json.dumps({"phase": phase, **payload}, ensure_ascii=False),
+                session_id=f"{session}:{ANALYST_ID}:{phase}",
+                stream=False,
+            ),
             timeout=timeout,
         )
         content = result.content
@@ -68,11 +69,11 @@ class LocalDocumentEventRuntime:
         return schema.model_validate(content)
 
     async def extract(self, source, versions, session):
-        return await self._invoke(EXTRACTOR, source, versions, session, DocumentEventDraft)
+        return await self._invoke("extract", source, versions, session, DocumentEventDraft)
 
     async def decide(self, event, candidates, versions, session):
         return await self._invoke(
-            IDENTITY, {"event": event, "candidates": candidates}, versions, session, DuplicateDecision
+            "deduplicate", {"event": event, "candidates": candidates}, versions, session, DuplicateDecision
         )
 
     async def ready(self):

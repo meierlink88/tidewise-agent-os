@@ -1,18 +1,12 @@
 manifest:
-  document-event-extractor:
-    description: "逐篇提取文档级Event的title、summary、semantic及最多5条量化keywords。"
+  event-analyst:
+    description: "事件分析师：按步骤Skill执行事件提取、故事线关联、信号发现与发布；当前仅实现事件提取。"
     quick_prompts:
-      - "从给定原文提取一个完整事件"
-      - "保留原文数字、条件和计划状态"
-      - "没有明确事项时间时返回空semantic数组"
-  document-event-identity:
-    description: "在向量召回候选内判断整篇事件是否重复，不把新进展当重复。"
-    quick_prompts:
-      - "比较当前事件与给定候选是否重复"
-      - "区分计划与已执行事件"
-      - "识别同主题下不同统计期间的事件"
+      - "读取事件提取Skill：2026年9月11日，甲国商务部宣布对乙国产品征收10%关税，将于10月1日生效。请提取事件。"
+      - "使用事件提取Skill，比较给定事件与候选是否重复"
+      - "说明当前已实现和待实现的能力"
   event-extraction-v2:
-    description: "准备20篇Raw，Function内逐篇提取、向量召回和模型判重；仅保存候选，不发布。"
+    description: "每批20篇Raw，逐篇四步框架；已实现事件提取与判重，故事线、信号、发布待完善。"
     quick_prompts:
       - "处理下一批20篇原始文章"
       - '{"retry_failed":true}'

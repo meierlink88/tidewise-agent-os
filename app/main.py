@@ -12,8 +12,7 @@ from agno.os.config import MCPServerConfig
 from agno.utils.log import log_info
 from fastapi import FastAPI
 
-from agents.document_event_extractor import ensure_document_event_extractor
-from agents.document_event_identity import ensure_document_event_identity
+from agents.event_analyst import event_analyst
 from agents.event_association import ensure_event_association_agent
 from agents.event_extractor import ensure_event_extractor_agent
 from agents.event_identity import ensure_event_identity_agent
@@ -110,8 +109,6 @@ if MCP_CONNECT_SECRET:
 @asynccontextmanager
 async def lifespan(app):  # type: ignore[no-untyped-def]
     log_info("AgentOS lifespan: startup")
-    ensure_document_event_extractor(registry)
-    ensure_document_event_identity(registry)
     ensure_document_event_workflow(registry)
     ensure_title_curator_agent(registry)
     ensure_evidence_extractor_agent(registry)
@@ -199,7 +196,7 @@ agent_os = AgentOS(
     mcp_auth=mcp_auth,
     lifespan=lifespan,
     db=get_postgres_db(),
-    agents=[tidewise_assistant],
+    agents=[tidewise_assistant, event_analyst],
     workflows=[local_ping, deployment_check],
     interfaces=interfaces,
     registry=registry,

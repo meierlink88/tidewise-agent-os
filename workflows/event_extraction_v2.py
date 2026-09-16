@@ -6,9 +6,12 @@ from agno.workflow import Loop, Step, Workflow
 from agno.workflow.types import HumanReview, OnError
 
 from capabilities.event_v2.functions import (
+    associate_document_story,
+    discover_document_signals,
     document_events_complete,
     extract_next_document_event,
     prepare_document_events,
+    publish_document_event,
     summarize_document_events,
 )
 from db import get_postgres_db
@@ -24,12 +27,18 @@ def build_document_event_workflow() -> Workflow:
         id=DOCUMENT_EVENT_WORKFLOW_ID,
         name="事件提取",
         db=get_postgres_db(),
-        description="每批20篇原文，逐篇提取文档Event，向量召回后模型判重；仅保留待发布候选。",
+        description="每批20篇原文，单篇四步框架：事件提取、故事线关联、变量信号发现、数据发布。当前仅事件提取已实现。",
+        metadata={"document_event_contract_version": 2},
         steps=[
             step("准备数据", prepare_document_events),
             Loop(
                 name="逐篇处理原文",
-                steps=[step("Event 提取", extract_next_document_event)],
+                steps=[
+                    step("事件提取", extract_next_document_event),
+                    step("故事线关联", associate_document_story),
+                    step("变量信号发现", discover_document_signals),
+                    step("数据发布", publish_document_event),
+                ],
                 end_condition=document_events_complete,
                 max_iterations=20,
                 forward_iteration_output=False,
@@ -49,8 +58,13 @@ def ensure_document_event_workflow(registry: Registry) -> int:
         )
     else:
         version = component.get("current_version")
-        if Workflow.load(DOCUMENT_EVENT_WORKFLOW_ID, db=db, registry=registry, version=version) is None:
+        loaded = Workflow.load(DOCUMENT_EVENT_WORKFLOW_ID, db=db, registry=registry, version=version)
+        if loaded is None:
             raise ValueError("Document Event Workflow cannot be loaded")
+        if (loaded.metadata or {}).get("document_event_contract_version", 1) < 2:
+            version = build_document_event_workflow().save(
+                db=db, stage="published", notes="Upgrade document Workflow to four-step analyst framework"
+            )
     if not isinstance(version, int):
         raise ValueError("Document Event Workflow has no published version")
     return version

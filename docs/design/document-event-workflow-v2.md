@@ -1,54 +1,64 @@
-# 事件提取：文档级候选工作流
+# 事件提取：事件分析师与分步 Skill
 
-Issue #266。新增 `event-extraction-v2`，中文名“事件提取”；不改旧 `event-extraction`、采集工作流及 Schedule。无默认定时任务。本轮终点是判重后的候选，不是正式 Data Event 或故事线/Signal。
+Issue #266，Workflow `event-extraction-v2`，中文名“事件提取”。保留旧 `event-extraction`、其他 Agent、采集及 Schedule。本轮先搭建四步框架，只实现事件提取 Skill；后续三个 Skill 逐一完善。
 
-## 画布与执行
+## 编排
 
-准备数据（Function） → Loop（最多20轮，每轮一个 Event 提取 Function） → 汇总（Function）。
-条件、两个 Agent 调用、向量召回及副作用都在 Function 内封装。准备阶段选取最多20个尚未处理的 Raw article_key，读取并冻结完整已归档文档；不足20则处理实际数量，无数据直接结束。不读取旧 Evidence 表。
+准备数据（最多20篇已归档Raw）→ Loop → 汇总。
 
-原文来自 Collection V2 成功归档目录，经 collection_v2 公共接口校验正文/Markdown 哈希与归档回执。正文按归档实际内容完整传入，不截断、不额外抓网页，不把提供方摘要冒充全文。以 article_key 识别 Raw 版本，此阶段不伪造正式 RAW 或 EVT ID。
+Loop 对每篇文章依次执行四个 Function Step：
 
-每篇流程：
+1. **事件提取**：同一个事件分析师分两次调用，先提炼，再根据向量候选判重。没有候选则不调用判重模型。
+2. **故事线关联**：未实现，占位返回 `not_implemented`。
+3. **变量信号发现**：未实现，因前序未完成返回 `blocked`。
+4. **数据发布**：未实现，因前序未完成返回 `blocked`；记录本篇框架结果，再推进下一篇。
 
-1. 原文事件提取 Agent：一篇一个 title、summary、semantic 数组和0–5个量化keywords。
-2. 固定输入 `title.strip() + "\n\n" + summary.strip()`，复用 Graphiti embedder 生成向量。
-3. Neo4j 向量索引召回相近正式 Event 和之前保留的候选；过滤自身、业务分组、模型与输入版本，最多30条。
-4. 有候选时调用事件重复判断 Agent；无候选直接保留。重复必须指向本次召回中的候选ID；无法确定时保留，不用分数阈值自动删除。
-5. 重复仅记审计，不进入待发布区；非重复保存为独立 `EventExtractionCandidate` 节点及本地文档候选。两者都保存源 article_key、判定或错误阶段。
+重复、失败、已处理文章的后三步返回 `skipped`，不调用 Agent 或外部写入。只有最后一步才能推进文章游标，顺序错误拒绝执行；重复进入提取步骤复用当前文章状态。
 
-Agent 规则：summary忠实保留原文主体、动作、对象、量化指标、口径、条件、否定和不确定性。semantic对象包含actor/action/target、announced_time/effective_time/planned_execution_time/executed_time文本字段，以及POLICY/GENERAL、PLANNED/OCCURRED、CONFIRMED/UNCONFIRMED；无position。动作明确、主体/对象至少一个可识别、至少一类时间有原文依据才提取；没有符合条件的事项返回空数组。该成立规则由模型遵守，代码不做原文语义硬判断或任意文本长度校验。
+输出区分 `extraction_outcome` 和整体 `outcome`：存在保留候选时整体为 `incomplete`，且 `pipeline_completed=false`、`published=false`，列出三个 `pending_steps`。Agno 技术完成不表示业务发布完成。
 
-将“计划”写成“已执行”、不同财报期间、数字口径变化、传闻变确认、有新增重要事实等均不能因主题相似而丢弃。只合并整篇核心事实重复、无新重要信息的报道。最多5条keywords是用户明确的数据合同。
+## 单 Agent 与 Skill
 
-## 向量与历史
+本轮新流程只注册一个代码定义的 Agent：`event-analyst`，中文名“事件分析师”。统一使用 `default_model()`、`get_postgres_db()`；通过 AgentOS 和 Registry 注册，可通过 REST/MCP 调用。旧流程的 Agent 保持不变。
 
-不修改 Graphiti 库。`EventVector` 是向量检索标签，不代表正式Event；已有兼容向量的正式Episode可参与召回，待发布候选使用 `EventExtractionCandidate`，不会出现在旧 Episode/Signal 查询中。
+角色职责描述覆盖事件提取、故事线关联入图、信号发现入图及 Data Service 发布；当前开放能力仅为 `skills/document-event-extraction/SKILL.md`。不创建后三个空 Skill，避免模型误以为能力已可执行。
 
-`event_embedding` 存向量；hash保存输入文本SHA-256；model/version记录模型及 `title-summary.v1`。索引 `document_event_embedding_v1` 使用 cosine；维度来自既有embedding配置，不硬编码阈值。所有检索记录必须使用同一模型和输入规则。
+业务提炼和判重规则只在 Skill 管理。Function 每次从注册 Agent 创建独立执行实例，配置本步 Skill、输出结构和允许的工具；不修改共享 Agent。原文提炼 `phase=extract` 返回 `DocumentEventDraft`，判重 `phase=deduplicate` 返回 `DuplicateDecision`，身份均为事件分析师。
 
-历史Event不要求保留或迁移，本轮不提供历史向量补齐流程，也不以历史向量完整性作为运行前提。已有兼容向量的记录可以参与召回；无向量的旧Event不参与向量判重。新工作流自身产生的候选必须携带兼容向量，保障当前批次及后续批次之间的判重。不会主动删除历史业务数据。
+使用 Agno `Skills/LocalSkills` 原生加载，同时将当前 Skill 完整正文注入本次指令，保证固定步骤无需依赖模型主动读取规则。单独聊天时 Agent 可以通过 `get_skill_instructions` 读取 Skill。Skill 不携带可执行脚本或数据库工具；向量召回和候选写入由 Function 执行。
 
-向量是近似召回，模型仅比较被召回的候选，不能声称全历史零漏判。现阶段不接入全文召回，也不套用七天窗口。
+每次调用使用独立文章/阶段 session，不读取历史对话。批次记录 Agent 代码合同版本与 Skill 内容摘要，运行中规则变更须新开批次，避免同一批次规则漂移。
 
-## 失败、并发与恢复
+## 提炼合同
 
-使用独立 `data/event_v2`（可用 `EVENT_V2_ARTIFACT_ROOT` 指定），不污染旧 Event journal。
+一篇原文输出一个文档级 Event，包括事实 title、忠实 summary、semantic 数组及0–5条量化 keywords。不按原子事实拆分多条 Event，不做投资推理。
 
-- 按article_key冻结Event、向量、判重结果和终态。正式发布时间复制原文，可空；collected_at为首次成功提取完成时间，重试不变。
-- 同一共享数据卷上，以文件锁串行化单篇召回/判定/候选写入；多个运行选到同一原文时只有一个处理，后者记录already_processed。多主机必须共享同一协调存储，本实现不声称跨独立磁盘的分布式锁。
-- 普通单篇模型/向量/源文件问题记录失败并继续；磁盘读写等无法安全记录的故障终止，不报告完成。
-- 失败项默认不反复抢占下一批；手动输入 `{"retry_failed":true}` 可重试，复用已经冻结的提取与判断。候选入图回执丢失时按稳定ID/载荷重放。
-- 丢弃重复指退出待发布候选，不删除 Raw 或审计文件。
-- 输出区分completed/partial/failed/no_change，并给出accepted/duplicates/failed/already_processed。Agno技术COMPLETED不代替业务结果判断。
+semantic 对象包含 actor/action/target；announced_time/effective_time/planned_execution_time/executed_time 原文时间文本；statement_type(POLICY/GENERAL)、action_status(PLANNED/OCCURRED)、assertion_status(CONFIRMED/UNCONFIRMED)。无 position。对象成立条件由 Skill 指导，不额外增加原文语义或任意文本长度硬校验。
 
-## 交付与回滚
+summary 保留主体、动作、对象、数字、口径、期间、条件及不确定性。keywords 每条须为含明确数字指标的事实短语，不能是主题、主体名、日期或编号。原文没有合格量化事实时返回空列表。
 
-新增两个独立Studio Agent及工作流，代码仅seed缺失组件，保留人工发布配置。无新工具权限、Schedule或Data发布。回滚可停用新工作流、回退本PR；保留候选与审计待明确处置，不能删除共享Neo4j卷。后续正式发布必须另行设计 Raw正式登记、候选到Event映射及失败补偿。
+## 输入、判重与存储
 
-## 本地验证（2026-09-16）
+Collection V2 公共接口列出成功归档 article_key，最多读取20篇，冻结归档正文并校验原文/Markdown哈希及归档身份。不截断、不补抓网页、不把提供方摘要冒充完整网页。
 
-- 6项自动化场景测试通过，包含20篇上限、失败继续、重试、并发及隔离REST/MCP。
-- 实际模型、Embedding及Neo4j隔离样例：2篇同事件报道，accepted=1、duplicates=1、failed=0；测试候选随后清理。宣布时间与生效时间分列、keywords仅保留量化事实。
-- 本地health、Agent REST及平台MCP冒烟通过，新工作流可见；旧workflow发布版本仍为39/2/16/29/16。
-- 新增模块显式mypy检查通过；全库ruff检查和格式检查通过。全库mypy的既存依赖/API类型错误见PR验证说明。
+以 `title.strip() + "\n\n" + summary.strip()` 生成向量，复用 Graphiti embedder；Neo4j `document_event_embedding_v1` cosine 索引召回最多30条兼容候选。模型判断整篇核心事实重复且没有新增重要信息才丢弃；候选引用必须来自本次召回。无法确认则保留。
+
+非重复保存为 `EventExtractionCandidate:EventVector` 及本地候选，保存 Raw article_key，不伪造正式 EVT/RAW ID。采集完成时间在首次成功提取时冻结，新闻发布时间复制原文。此阶段不创建故事线关系、信号或正式 Data Event。
+
+历史 Event 可丢失，不补齐历史向量，不以历史完整性阻塞运行；已有兼容向量的记录可参与召回，无向量旧记录不参与。不主动删除历史业务数据。近似召回不保证全历史零漏判。
+
+## 恢复与边界
+
+独立 `data/event_v2` 保存原文、Event、向量、候选、判断、单篇结果及框架结果。单篇模型错误记录后继续；不能安全保存进度的磁盘错误终止。显式 `{"retry_failed":true}` 可重试失败提取并复用检查点。
+
+共享数据卷文件锁协调并发判重和候选写入；不声称支持独立磁盘的多主机锁。后续启用后三步时，需要接入候选续处理、稳定正式ID、图谱写入和Data发布幂等回执；本轮不假装已实现。
+
+现有 v1 文档提取框架自动升级为 v2 四步框架，之后启动不覆盖已发布 v2 配置。本地此前注册的 document-event-extractor/document-event-identity 已软归档，保留历史审计；仅事件分析师作为新流程入口。
+
+回滚：停用新工作流、回退代码。保留候选及审计，不删除共享Neo4j卷，不改变旧 Event 工作流。
+
+## 验证
+
+8项自动化测试覆盖批次上限、重复和失败跳过、检查点、并发、原生Workflow/Studio往返、隔离REST/MCP、单Agent多阶段Skill配置、上下文隔离及四步推进顺序；模型部分使用替身，不处理真实文章。
+
+按用户要求，本轮真实模型工作流验证仅使用一篇隔离样例。验证日志与PR记录实际结果；不执行20篇真实批次。全库ruff、格式及新增模块mypy检查，旧测试脚本的本地MCP依赖兼容问题单列披露。
