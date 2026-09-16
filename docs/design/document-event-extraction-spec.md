@@ -8,7 +8,7 @@
 
 Evidence 中间提炼层退出；最终移除 Data 的 evidences 表。Event 通过 event_evidence_links 直接关联 raw_evidences，而不是通过 Atomic Evidence。Raw 元数据和 MinIO 正文保留。
 
-本轮 Data 结构交付不自动部署、不清除历史数据、不启动重提取。AgentOS Workflow、图谱、报告消费者须协调升级后才能切换。
+用户已明确允许丢弃现有 Atomic Evidence 数据，不迁移其内容；Raw 原文保留。该授权不包含删除 Event、Report 历史。本轮 Data 结构交付不自动部署、不实际清库、不启动重提取。AgentOS Workflow、图谱、报告消费者须协调升级后才能切换。
 
 ## Event 字段
 
