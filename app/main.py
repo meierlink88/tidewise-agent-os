@@ -12,6 +12,8 @@ from agno.os.config import MCPServerConfig
 from agno.utils.log import log_info
 from fastapi import FastAPI
 
+from agents.document_event_extractor import ensure_document_event_extractor
+from agents.document_event_identity import ensure_document_event_identity
 from agents.event_association import ensure_event_association_agent
 from agents.event_extractor import ensure_event_extractor_agent
 from agents.event_identity import ensure_event_identity_agent
@@ -34,6 +36,7 @@ from capabilities.event import (
     get_story_evidence,
     query_story_events,
 )
+from capabilities.event_v2 import LocalDocumentEventRuntime, configure_document_event_runtime
 from capabilities.investment import (
     configure_investment_workflow_runtime,
     create_data_service_report_publisher,
@@ -42,6 +45,7 @@ from capabilities.investment import (
 from db import get_postgres_db
 from workflows.deployment_check import deployment_check
 from workflows.event_extraction import ensure_event_extraction_workflow
+from workflows.event_extraction_v2 import ensure_document_event_workflow
 from workflows.evidence_extraction import ensure_evidence_extraction_workflow
 from workflows.investment_reasoning import ensure_investment_reasoning_workflow, retire_investment_planner_agent
 from workflows.local_ping import local_ping
@@ -106,6 +110,9 @@ if MCP_CONNECT_SECRET:
 @asynccontextmanager
 async def lifespan(app):  # type: ignore[no-untyped-def]
     log_info("AgentOS lifespan: startup")
+    ensure_document_event_extractor(registry)
+    ensure_document_event_identity(registry)
+    ensure_document_event_workflow(registry)
     ensure_title_curator_agent(registry)
     ensure_evidence_extractor_agent(registry)
     ensure_event_extractor_agent(registry)
@@ -126,9 +133,12 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     model = registry.get_model(model_id)
     if model is None:
         raise RuntimeError(f"registered Event Workflow model is unavailable: {model_id}")
+    document_runtime = None
     event_runtime = None
     investment_runtime = None
     try:
+        document_runtime = LocalDocumentEventRuntime(model, get_postgres_db(), registry)
+        configure_document_event_runtime(document_runtime)
         event_runtime = create_local_event_workflow_runtime(model, registry)
         configure_event_workflow_runtime(event_runtime)
         report_publisher = create_data_service_report_publisher(
@@ -148,9 +158,15 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
         validate_schedules()
         yield
     finally:
+        configure_document_event_runtime(None)
         configure_event_workflow_runtime(None)
         configure_investment_workflow_runtime(None)
         close_errors: list[Exception] = []
+        if document_runtime is not None:
+            try:
+                await document_runtime.close()
+            except Exception as exc:
+                close_errors.append(exc)
         if investment_runtime is not None:
             try:
                 await investment_runtime.close()

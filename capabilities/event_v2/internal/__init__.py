@@ -1,0 +1,1 @@
+"""Document Event implementation details."""
