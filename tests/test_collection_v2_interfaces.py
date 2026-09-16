@@ -40,6 +40,18 @@ class InterfaceTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(raw_collection_v2, "db", db),
             ):
                 first = ensure_raw_collection_v2_workflow(registry)
+                seeded = Workflow.load("raw-collection-v2", db=db, registry=registry)
+                assert seeded is not None
+                self.assertEqual(seeded.name, "数据采集")
+                workflow.name = "Raw Collection V2"
+                workflow.description = "Operator description"
+                legacy_version = workflow.save(db=db, stage="published")
+                legacy_config = db.get_config(component_id="raw-collection-v2", version=legacy_version)["config"]
+                first = ensure_raw_collection_v2_workflow(registry)
+                renamed_config = db.get_config(component_id="raw-collection-v2", version=first)["config"]
+                self.assertEqual(renamed_config["name"], "数据采集")
+                legacy_config["name"] = "数据采集"
+                self.assertEqual(renamed_config, legacy_config)
                 self.assertEqual(ensure_raw_collection_v2_workflow(registry), first)
                 workflow.name = "Operator collection name"
                 edited_version = workflow.save(db=db, stage="published")
@@ -96,7 +108,7 @@ class InterfaceTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(payload["content"]["archived"], 1)
                         self.assertEqual(payload["content"]["outcome"], "completed")
                         self.assertEqual(len(payload["step_results"]), 2)
-                    async with streamable_http_client(f"http://127.0.0.1:{port}/mcp") as (read, write):
+                    async with streamable_http_client(f"http://127.0.0.1:{port}/mcp") as (read, write, *_):
                         async with ClientSession(read, write) as session:
                             await session.initialize()
                             config_result = await session.call_tool("get_agentos_config", {})
@@ -110,7 +122,7 @@ class InterfaceTests(unittest.IsolatedAsyncioTestCase):
                                     "message": "原查询",
                                 },
                             )
-                            self.assertFalse(result.is_error, result)
+                            self.assertFalse(result.isError, result)
                             assert isinstance(result.content[0], TextContent)
                             self.assertEqual(json.loads(result.content[0].text)["duplicates"], 1)
                     self.assertEqual(len(store.calls), 1)
