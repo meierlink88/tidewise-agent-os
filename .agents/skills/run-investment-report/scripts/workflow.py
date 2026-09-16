@@ -29,6 +29,7 @@ LANES = {
 }
 KINDS = [k for ks in LANES.values() for k in ks]
 PRESET = "geopolitical_war_room"
+GEOPOLITICAL_MARKET = "中国A股市场"
 
 
 def require(ok, message):
@@ -288,7 +289,7 @@ def research(root, state, sid, poll=False, transport=http):
         require(receipt is None, "do_not_repeat_research_post_use_saved_run_or_reconcile_unknown")
         user_vars = {
             "crisis": stories[sid]["name"],
-            "market": scope["market"],
+            "market": GEOPOLITICAL_MARKET,
             "story_id": sid,
             "research_date": "",
             "event_window_start": scope["start"],

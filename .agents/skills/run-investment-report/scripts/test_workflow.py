@@ -22,7 +22,7 @@ class WorkflowTest(unittest.TestCase):
             "start": "2020-01-01T00:00:00Z",
             "end": "2020-01-02T00:00:00Z",
             "timezone": "Asia/Shanghai",
-            "market": "A股市场",
+            "market": "中国A股、港股及全球相关资产",
             "research_base_url": "http://research.invalid",
             "data_base_url": "http://data.invalid",
             "source_identity": {"hostname": "fake"},
@@ -156,6 +156,11 @@ class WorkflowTest(unittest.TestCase):
 
         w.research(self.root, self.state, "GPR1", transport=submit)
         self.assertEqual(bodies[0]["user_vars"]["crisis"], "测试故事线")
+        self.assertEqual(bodies[0]["user_vars"]["market"], "中国A股市场")
+        self.assertEqual(w.artifact(self.root, self.state["scope"])["market"], self.scope["market"])
+        self.assertEqual(bodies[0]["user_vars"]["story_id"], "GPR1")
+        self.assertEqual(bodies[0]["user_vars"]["event_window_start"], self.scope["start"])
+        self.assertEqual(bodies[0]["user_vars"]["event_window_end"], self.scope["end"])
         self.assertNotIn("events", bodies[0]["user_vars"])
         detail = {
             "id": "run1",

@@ -104,3 +104,7 @@ python scripts/workflow.py --run /absolute/RUN complete --review /absolute/readb
 使用 Python 3.12+ 执行 `scripts/bind_story_evidence.py --report <geo-v6.json> --pages <story-query目录> --snapshot <冻结snapshot.json> --output <新修订geo-v6.json> --audit <外部映射审计.json>`。输入 pages 是按 story_id 和顺序编号命名的完整 `story-events/v1` JSON 页。输出只更新 summary.evidence_ids，不更改正文、判断或资产专属引用。记录输入/输出哈希，使用新输出重新审阅并绑定 review，再 pack；不能覆盖已冻结包。脚本失败必须核对取数，不降级为空集。发布前仍须查询目标 Data Service Evidence 存在性，发布后读回 summary Evidence 范围核对全部 ID。
 
 非空地缘包必须执行 `pack --lane geopolitics --report <绑定后报告> --review <重新绑定审阅> --evidence-pages <完整页目录>`。pack 会以本批冻结 snapshot 重新核对实际 Event→Evidence 并集与报告一致，归档查询页和映射；仅填非空 ID 或伪造 review 不能替代此检查。
+
+## 地缘研究市场范围
+
+`research-submit` 向地缘冲突团队发送的 `user_vars.market` 固定为 `中国A股市场`。`scope.market` 继续记录批次市场范围，不能覆盖该地缘调用限制。该规则作用于新提交的 Research 请求，不修改既有回执和历史报告；poll/reconcile 仍按原 run 的实际 user_vars 验证身份。已冻结批次的方法哈希改变时按既有规则新建批次，不改写哈希继续运行。
